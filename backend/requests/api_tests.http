@@ -1,0 +1,91 @@
+@baseUrl = http://seu-dominio-do-tenant/api/v1
+@token = PASTE_YOUR_SANCTUM_TOKEN_HERE
+
+### Health check (fallback)
+GET {{baseUrl}}/teste
+
+### Login (opcional, para obter token)
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "seu.email@dominio.com",
+  "password": "sua-senha"
+}
+
+### Tipos de Conteúdo - Listar
+GET {{baseUrl}}/tipos-conteudo
+Authorization: Bearer {{token}}
+
+### Tipos de Conteúdo - Exibir por ID
+GET {{baseUrl}}/tipos-conteudo/1
+Authorization: Bearer {{token}}
+
+### Tipos de Conteúdo - Criar
+POST {{baseUrl}}/tipos-conteudo
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "nome": "Contrato",
+  "slug": "contrato",
+  "ativo": "s"
+}
+
+### Tipos de Conteúdo - Atualizar
+PUT {{baseUrl}}/tipos-conteudo/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "nome": "Contratos",
+  "slug": "contratos",
+  "ativo": "s"
+}
+
+### Tipos de Conteúdo - Remover logicamente
+DELETE {{baseUrl}}/tipos-conteudo/20
+Authorization: Bearer {{token}}
+
+### Componentes - Listar (com paginação e busca)
+GET {{baseUrl}}/componentes?per_page=10&search=Banner
+Authorization: Bearer {{token}}
+
+### Componentes - Exibir por ID
+GET {{baseUrl}}/componentes/563
+Authorization: Bearer {{token}}
+
+### Componentes - Criar
+POST {{baseUrl}}/componentes
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "nome": "Banner Home",
+  "tipo_conteudo": "2",
+  "ordenar": 10,
+  "slug": "banner-home",
+  "id_curso": "64",
+  "ativo": "s",
+  "obs": "<p>HTML opcional do componente</p>",
+  "token": "OPCIONAL_SE_VOCÊ_QUISER_FIXAR"
+}
+
+### Componentes - Atualizar
+PUT {{baseUrl}}/componentes/563
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "nome": "Banner Home (atualizado)",
+  "tipo_conteudo": "2",
+  "ordenar": 67,
+  "slug": "banner-home",
+  "id_curso": "64",
+  "ativo": "s",
+  "obs": "<h1>Conteúdo atualizado</h1>"
+}
+
+### Componentes - Remover logicamente
+DELETE {{baseUrl}}/componentes/563
+Authorization: Bearer {{token}}
