@@ -61,6 +61,12 @@ class OptionController extends Controller
 
         $options = $query->paginate($perPage);
         if($this->sec=='all'){
+            //se o campo valor for json, converter para array
+            foreach($options as $key => $value){
+                if(isset($value['value']) && !empty($value['value']) && ($value['value'] = json_decode($value['value'], true))){
+                    $options[$key]['value'] = $value['value'];
+                }
+            }
             $ret = $options;
         }else{
             $ret = $this->AdvancedInputSettings($options);
@@ -199,6 +205,9 @@ class OptionController extends Controller
                 if(is_bool($value)){
                     $value = (string)$value;
                 }
+                if(is_array($value)){
+                    $value = json_encode($value);
+                }
                 $data_salv = [
                     'name' => ucwords(str_replace('_',' ',$key)),
                     'url' => $key,
@@ -210,13 +219,13 @@ class OptionController extends Controller
                     'updated_at'      => now(),
                 ];
                 // dd($data_salv);
-                // $option[$key] = Option::updateOrInsert(
-                //     [
-                //         'value' => $value,
-                //     ],
-                //     $data_salv
-                // );
-                $option[$key] = Qlib::update_tab('options', $data_salv, "WHERE url = '$key'");
+                $option[$key] = Option::updateOrInsert(
+                    [
+                        'url' => $key,
+                    ],
+                    $data_salv
+                );
+                // $option[$key] = Qlib::update_tab('options', $data_salv, "WHERE url = '$key'");
             }
         }
         // dd($option);

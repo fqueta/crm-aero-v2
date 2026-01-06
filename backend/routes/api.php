@@ -58,6 +58,10 @@ Route::name('api.')->prefix('v1')->middleware([
     Route::get('user/validate-token/{token}', [UserController::class, 'validateToken'])
         ->name('user.validate-token');
 
+    // Public routes for Proposal Signature
+    Route::get('proposal/{client_id}/{matricula_id}', [\App\Http\Controllers\api\MatriculaController::class, 'publicShow']);
+    Route::post('proposal/{client_id}/{matricula_id}/sign', [\App\Http\Controllers\api\MatriculaController::class, 'publicSign']);
+
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
     Route::post('register', [RegisterController::class, 'store']);

@@ -19,6 +19,7 @@ class User extends Authenticatable
         'email',
         'password',
         'status',
+        'celular',
         'genero',
         'verificado',
         'permission_id',

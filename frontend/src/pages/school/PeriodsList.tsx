@@ -254,6 +254,27 @@ export default function PeriodsList() {
   }
 
   /**
+   * handleBackToPrevious
+   * pt-BR: Se houver curso selecionado, volta para edição do curso na aba
+   *        "Módulos". Caso contrário, tenta voltar no histórico e, na falta,
+   *        permanece na listagem preservando o filtro.
+   * en-US: If a course is selected, navigates to course edit page on
+   *        "Modules" tab. Otherwise, tries history back; if unavailable,
+   *        stays on the listing preserving the filter.
+   */
+  const handleBackToPrevious = () => {
+    if (selectedCourseId) {
+      navigate(`/admin/school/courses/${encodeURIComponent(String(selectedCourseId))}/edit?tab=modules`);
+      return;
+    }
+    if (typeof window !== 'undefined' && window.history && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(`/admin/school/periods${getQuerySuffixWithCourse()}`);
+  };
+
+  /**
    * handleCreate
    * pt-BR: Navega para criação preservando filtro de curso na URL.
    * en-US: Navigates to creation preserving course filter in URL.
@@ -310,7 +331,13 @@ export default function PeriodsList() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Períodos</h1>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={handleBackToPrevious}>
+            <ChevronLeft className="w-4 h-4 mr-2" />
+            Voltar
+          </Button>
+          <h1 className="text-xl font-semibold">Períodos</h1>
+        </div>
         <Button onClick={handleCreate}>
           <Plus className="w-4 h-4 mr-2" />
           Novo período

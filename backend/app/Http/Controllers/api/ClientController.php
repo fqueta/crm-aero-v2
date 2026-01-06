@@ -157,6 +157,10 @@ class ClientController extends Controller
             }
         }
 
+        // PT-BR: Segundo normalizador: promover campos de config para o nível raiz sem sobrescrever valores já definidos.
+        // EN: Second normalizer: promote config fields to the root level without overwriting already-defined values.
+        $data = $this->normalizeConfigToRoot($data);
+
         // Garantir estrutura de preferencias
         if (!isset($data['preferencias']) || !is_array($data['preferencias'])) {
             $data['preferencias'] = [];
@@ -214,6 +218,54 @@ class ClientController extends Controller
         $data['points'] = $data['points'] ?? null;
         $data['is_alloyal'] = $data['is_alloyal'] ?? null;
 
+        return $data;
+    }
+
+    /**
+     * PT-BR: Verifica se um valor é "vazio" para fins de promoção de campos.
+     * - Considera null, string vazia (após trim) e arrays vazios como vazio.
+     * EN: Check if a value is "empty" for field promotion purposes.
+     * - Considers null, empty string (after trim), and empty arrays as empty.
+     */
+    private function isEmptyValue($value): bool
+    {
+        if ($value === null) {
+            return true;
+        }
+        if (is_string($value)) {
+            return trim($value) === '';
+        }
+        if (is_array($value)) {
+            return count($value) === 0;
+        }
+        return false;
+    }
+
+    /**
+     * PT-BR: Segundo normalizador — promove as chaves simples de `config` para o nível raiz (top-level).
+     * - Não sobrescreve valores existentes não vazios no nível raiz.
+     * - Apenas chaves de primeiro nível são promovidas; objetos/arrays permanecem em `config`.
+     * - Mantém o array original em `config` para compatibilidade.
+     * EN: Second normalizer — promote simple keys from `config` to the root level (top-level).
+     * - Does not overwrite existing non-empty values at the root.
+     * - Only first-level scalar keys are promoted; objects/arrays remain in `config`.
+     * - Keeps the original array in `config` for compatibility.
+     */
+    private function normalizeConfigToRoot(array $data): array
+    {
+        if (!isset($data['config']) || !is_array($data['config'])) {
+            return $data;
+        }
+        foreach ($data['config'] as $key => $val) {
+            // Somente promove valores escalares (string, int, bool, float), evitando arrays/objetos.
+            if (is_array($val) || is_object($val)) {
+                continue;
+            }
+            $rootVal = $data[$key] ?? null;
+            if ($this->isEmptyValue($rootVal)) {
+                $data[$key] = $val;
+            }
+        }
         return $data;
     }
 
@@ -410,8 +462,11 @@ class ClientController extends Controller
         if (is_string($client->config)) {
             $client->config = json_decode($client->config, true) ?? [];
         }
+        // PT-BR: Padroniza a saída do show com os mesmos aliases/camelCase usados no index.
+        // EN: Standardize show output with the same aliases/camelCase used in index.
+        $mapped = $this->mapIndexItemOutput($client);
 
-        return response()->json($client);
+        return response()->json($mapped);
     }
 
     /**
@@ -840,8 +895,11 @@ class ClientController extends Controller
         if (is_string($client->config)) {
             $client->config = json_decode($client->config, true) ?? [];
         }
+        // PT-BR: Padroniza a saída com mapeamento semelhante ao index, incluindo aliases e normalizações.
+        // EN: Standardize the output with index-like mapping, including aliases and normalizations.
+        $mapped = $this->mapIndexItemOutput($client);
 
-        return response()->json($client);
+        return response()->json($mapped);
     }
 
     /**

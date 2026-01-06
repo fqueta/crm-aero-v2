@@ -104,6 +104,12 @@ Route::name('api.')->prefix('api/v1')->middleware([
 
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
         ->name('password.email');
+
+    // Public routes for Proposal Signature
+    Route::get('proposal/{client_id}/{matricula_id}', [\App\Http\Controllers\api\MatriculaController::class, 'publicShow']);
+    Route::post('proposal/{client_id}/{matricula_id}/sign', [\App\Http\Controllers\api\MatriculaController::class, 'publicSign']);
+    Route::post('proposal/{client_id}/{matricula_id}/approve', [\App\Http\Controllers\api\MatriculaController::class, 'publicApprove']);
+
     Route::fallback(function () {
         return response()->json(['message' => 'Rota não encontrada'], 404);
     });

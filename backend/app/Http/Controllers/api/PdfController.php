@@ -649,4 +649,119 @@ class PdfController extends Controller
             ]
         ], 201);
     }
+    /**
+     * Converte HTML em PDF e salva no disco público.
+     *
+     * - Quando `f_exibe = 'pdf'`: faz streaming inline sem salvar.
+     * - Quando `f_exibe = 'server'` e há `id_matricula`: salva em
+     *   `storage/app/public/{pasta}/{id_matricula}/{slug}.pdf` via `disk('public')`
+     *   e grava a URL pública no meta `{short_code}_pdf` da matrícula.
+     *
+     * Parâmetros em `$config`:
+     * - `f_exibe`: 'pdf' | 'server'
+     * - `html`: HTML a ser renderizado
+     * - `nome_aquivo_savo`: nome base do arquivo
+     * - `titulo`: título no template
+     * - `pasta`: subpasta base para o armazenamento
+     * - `id_matricula`: ID da matrícula
+     * - `short_code`: prefixo para gravar meta da matrícula
+     */
+    public function convert_html($config=[]){
+        $f_exibe = isset($config['f_exibe']) ? $config['f_exibe'] : 'pdf';
+        $html = isset($config['html']) ? $config['html'] : '';
+        $nome_aquivo_savo = isset($config['nome_aquivo_savo']) ? $config['nome_aquivo_savo'] : '';
+        $titulo = isset($config['titulo']) ? $config['titulo'] : '';
+        // $token = isset($config['id_matricula']) ? $config['id_matricula'] : '';
+        $pasta = isset($config['pasta']) ? $config['pasta'] : '';
+        $id_matricula = isset($config['id_matricula']) ? $config['id_matricula'] : null;
+        $short_code = isset($config['short_code']) ? $config['short_code'] : false;
+        // $nome_aquivo_savo='arquivo',$titulo='Arquivo'
+        // dd($config);
+        $ret['exec'] = '';
+        $html = view('pdf.template_default', ['titulo'=>$titulo,'conteudo'=>trim($html)])->render();
+        $headerHtml = View::make('pdf.header')->render();
+        $footerHtml = View::make('pdf.footer')->render();
+        if(isset($_GET['tes'])){
+            return $headerHtml.$html.$footerHtml;
+        }
+        $pdf = SnappyPdf::loadHTML($html)
+                ->setPaper('a4')
+                ->setOption('header-html', $headerHtml)
+                ->setOption('margin-top', 25)
+                ->setOption('margin-bottom', 13)
+                ->setOption('margin-left', 0)
+                ->setOption('margin-right', 0)
+                ->setOption('disable-smart-shrinking', true)
+                ->setOption('footer-spacing', '0')
+                ->setOption('print-media-type', true)
+                ->setOption('background', true)
+                ->setOption('replace', [
+                    '{PAGE_NUM}' => '{PAGE_NUM}',
+                    '{PAGE_COUNT}' => '{PAGE_COUNT}'
+                ])
+                ->setOption('footer-html', $footerHtml);
+        if($f_exibe=='pdf'){
+            return $pdf->stream($nome_aquivo_savo.'.pdf');
+        }elseif($f_exibe=='server' && $id_matricula){
+            try {
+                // Function-level comment: Align disk config with matrícula method (public disk + relative path under uploads).
+                // PT: Usa o mesmo disco e padrão de caminho do método matrícula: disco 'public', caminho relativo sob 'uploads/'.
+                // EN: Use the same disk and path pattern as matrícula: 'public' disk, relative path under 'uploads/'.
+                $disk = Storage::disk('public');
+                $baseFolder = trim($pasta,'/');
+                $slug = Qlib::createSlug($nome_aquivo_savo);
+                $filename = $slug.'.pdf';
+                // Caminho relativo compatível com matrícula (armazenado sob uploads/...)
+                $relative = 'uploads/'.$baseFolder.'/'.$id_matricula.'/'.$filename;
+                // Caminho absoluto seguindo a convenção storage_path('app/public/'.relative)
+                $absolute = storage_path('app/public/'.$relative);
+                // Garantir diretório (mesma estratégia do método matrícula)
+                if (!is_dir(dirname($absolute))) {
+                    @mkdir(dirname($absolute), 0775, true);
+                }
+                // Gera binário e grava via disco público com caminho relativo
+                $pdfbin = $pdf->output();
+                $ret['ger_arquivo'] = $disk->put($relative, $pdfbin);
+                if ($disk->exists($relative) && $short_code && $id_matricula) {
+                    // URL pública compatível (tenant_asset/asset do caminho relativo), igual ao método matrícula
+                    $url = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
+                    $campo_meta = $config['titulo'];
+                    // busca dados meta enteriormente salvo
+                    $meta = Qlib::get_matriculameta($id_matricula, $campo_meta);
+                    $nomoarquivo = ucfirst(str_replace(['_','-',' '],[' ',' ',' '],$nome_aquivo_savo));
+                    // dd($nomoarquivo);
+                    // se não existir, cria
+                    if(!$meta){
+                        $data_salv = [
+                            ['nome_arquivo'=>$filename,'url'=>$url,'nome_contrato'=>$nomoarquivo]
+                        ];
+                        $ret['salvo'] = Qlib::update_matriculameta($id_matricula, $campo_meta, json_encode($data_salv));
+                        $ret['url'] = $url;
+                        if($ret['salvo']){
+                            $ret['exec'] = true;
+                        }
+                        return $ret;
+                    }
+                    // se existir, atualiza
+                    if($meta){
+                        // decodifica meta
+                        $meta = json_decode($meta, true);
+                        // adiciona novo registro
+                        $meta[] = ['nome_arquivo'=>$filename,'url'=>$url,'nome_contrato'=>$nomoarquivo];
+                        $ret['salvo'] = Qlib::update_matriculameta($id_matricula, $campo_meta, json_encode($meta));
+                        $ret['url'] = $url;
+                        if($ret['salvo']){
+                            $ret['exec'] = true;
+                        }
+                    }
+                }
+            } catch (\Throwable $th) {
+                $ret['error'] = $th->getMessage();
+            }
+        }
+        if(!$id_matricula){
+            $ret['mens'] = 'ID de matrícula inválido';
+        }
+        return $ret;
+    }
 }

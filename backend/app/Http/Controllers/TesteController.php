@@ -6,14 +6,17 @@ use App\Services\Escola;
 use App\Services\Qlib;
 use Illuminate\Http\Request;
 use App\Helpers\StringHelper;
+use App\Http\Controllers\api\MatriculaController;
+use App\Http\Controllers\api\OrcamentoController;
 use Database\Seeders\MenuSeeder;
 
 class TesteController extends Controller
 {
     public function index(Request $request){
-        $d = $request->all();
-
-        $helper = new StringHelper();
+        // $d = $request->all();
+        $ret = [];
+        $id = $request->get('id');
+        // $helper = new StringHelper();
         // $ret = $helper->formatarCpf('12345678900');
         // $ret = $helper->formatarCpf('12345678900');
         // $ret = Escola::campo_emissiao_certificado();
@@ -26,7 +29,7 @@ class TesteController extends Controller
         //     // $ret = Escola::adiciona_presenca_atividades_cronograma($id_turma);
         //     // dd($ret);
         // }
-        $ret = Qlib::get_post_by_shortcode('fundo_proposta_plano');
+        // $ret = Qlib::get_post_by_shortcode('fundo_proposta_plano');
         // dd($ret);
         // $pid = $request->get('id');
         // if($pid){
@@ -34,6 +37,9 @@ class TesteController extends Controller
         //     // dd($ret);
         //     return response()->json($ret);
         // }
+        // $ret = (new OrcamentoController)->resumo_proposta_periodos($id??'');
+        // $ret = (new MatriculaController)->contratos_periodos($id??'');
+        $ret = (new MatriculaController)->contratos_periodos_pdf($id??'');
         // $ret = (new MenuController)->getMenus(1);
         // $ret = Qlib::token();
         return $ret;

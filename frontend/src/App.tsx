@@ -52,6 +52,8 @@ import QuickCreateServiceOrder from "./pages/QuickCreateServiceOrder";
 import Financial from "./pages/financial/Financial";
 import FinancialCategories from "./pages/FinancialCategories";
 import PublicClientForm from "@/pages/PublicClientForm";
+import ProposalSignature from "@/pages/ProposalSignature";
+import ProposalApproval from "@/pages/ProposalApproval";
 import PointsStore from "@/pages/loja/PointsStore";
 import ProductDetails from "./pages/loja/ProductDetails";
 import MyRedemptions from "./pages/loja/MyRedemptions";
@@ -170,6 +172,8 @@ const App = () => {
               } />
               <Route path="/form-client-active/:cpf" element={<PublicClientForm />} />
               <Route path="/public-client-form" element={<PublicClientForm />} />
+              <Route path="/aluno/matricula/:compositeId/1" element={<ProposalSignature />} />
+              <Route path="/aluno/matricula/:compositeId/2" element={<ProposalApproval />} />
               
               {/* Rotas da loja - protegidas */}
               <Route path={link_loja} element={

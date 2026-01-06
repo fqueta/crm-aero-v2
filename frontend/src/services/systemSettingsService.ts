@@ -25,6 +25,7 @@ export interface AdvancedSystemSettings {
   backupRetention: string;
   url_api_aeroclube: string;
   token_api_aeroclube: string;
+  credenciais_zapsign?: { url_api: string; id_api: string } | string;
 }
 
 /**

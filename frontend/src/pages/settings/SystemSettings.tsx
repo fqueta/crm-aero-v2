@@ -131,6 +131,8 @@ export default function SystemSettings() {
     backupRetention: "",
     url_api_aeroclube: "",
     token_api_aeroclube: "",
+    zapsign_url: "",
+    zapsign_id: "",
   });
 
   /**
@@ -389,6 +391,10 @@ export default function SystemSettings() {
         backupRetention: advancedInputSettings.backupRetention,
         url_api_aeroclube: advancedInputSettings.url_api_aeroclube,
         token_api_aeroclube: advancedInputSettings.token_api_aeroclube,
+        credenciais_zapsign: {
+          url_api: advancedInputSettings.zapsign_url,
+          id_api: advancedInputSettings.zapsign_id
+        }
       };
 
       // Envia as configurações avançadas para a API na rota /options
@@ -416,6 +422,17 @@ export default function SystemSettings() {
       const data = await systemSettingsService.getAdvancedSettings('/options');
       console.log('data',data);
       
+      let zapsignData: any = {};
+      try {
+        if (typeof data.credenciais_zapsign === 'string') {
+          zapsignData = JSON.parse(data.credenciais_zapsign);
+        } else if (typeof data.credenciais_zapsign === 'object') {
+          zapsignData = data.credenciais_zapsign;
+        }
+      } catch (e) {
+        console.error("Erro ao fazer parse de credenciais_zapsign", e);
+      }
+
       // Atualiza o estado com os dados da API
       setAdvancedInputSettings({
         maxFileSize: data.maxFileSize || "",
@@ -425,6 +442,8 @@ export default function SystemSettings() {
         backupRetention: data.backupRetention || "",
         url_api_aeroclube: data.url_api_aeroclube || "",
         token_api_aeroclube: data.token_api_aeroclube || "",
+        zapsign_url: zapsignData?.url_api || "",
+        zapsign_id: zapsignData?.id_api || "",
       });
       
       // Também atualiza as outras configurações se necessário
@@ -1111,6 +1130,50 @@ export default function SystemSettings() {
                )}
            </CardContent>
           </Card>
+
+          {/* Card 4 - Integração ZapSign */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Integração ZapSign</CardTitle>
+              <CardDescription>
+                Configure as credenciais para integração com a API do ZapSign.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="zapsign_url">URL da API</Label>
+                <Input
+                  id="zapsign_url"
+                  type="text"
+                  value={advancedInputSettings.zapsign_url}
+                  onChange={(e) => handleAdvancedInputChange('zapsign_url', e.target.value)}
+                  placeholder="https://api.zapsign.com.br/api/v1"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="zapsign_id">Token/ID da API</Label>
+                <Input
+                  id="zapsign_id"
+                  type="text"
+                  value={advancedInputSettings.zapsign_id}
+                  onChange={(e) => handleAdvancedInputChange('zapsign_id', e.target.value)}
+                  placeholder="Seu token ou ID de integração"
+                />
+              </div>
+
+               <div className="flex justify-end pt-4 border-t">
+                 <Button 
+                   onClick={handleSaveSettings}
+                   className="flex items-center space-x-2"
+                 >
+                   <Save className="h-4 w-4" />
+                   <span>Salvar Integração</span>
+                 </Button>
+               </div>
+            </CardContent>
+          </Card>
+
 
           {/* Card - Configurações de Funcionalidade */}
           <Card>

@@ -55,6 +55,14 @@ class OptionsTableSeeder extends Seeder
                     'value' => 'https://crm-v2.aeroclubejf.com.br',
                     'url'   => 'front_url',
                 ],
+                [
+                    'name'  => 'Credenciais da Api Zapsing',
+                    'value' => json_encode([ 
+                        "url_api" => "https://api.zapsign.com.br/api/v1", 
+                        "id_api" => "" 
+                    ]),
+                    'url'   => 'credencias_zapsing',
+                ],
             ];
         }else{
             $data = [

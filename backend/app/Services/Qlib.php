@@ -415,7 +415,7 @@ class Qlib
     }
     static function sql_array($sql, $ind, $ind_2, $ind_3 = '', $leg = '',$type=false,$debug=false){
         if($debug){
-            dump($sql);
+            \Log::debug('[Qlib] sql_array debug', ['sql' => $sql]);
         }
         $table = DB::select($sql);
         $userinfo = array();
@@ -630,7 +630,7 @@ class Qlib
      */
     static function buscaValoresDb($sql,$debug=false){
         if($debug){
-            dump($sql);
+            \Log::debug('[Qlib] buscaValoresDb debug', ['sql' => $sql]);
         }
         if($sql){
             $dados = DB::select($sql);
@@ -648,7 +648,7 @@ class Qlib
         if($tab && $campo_bus && $valor && $select){
             $sql = "SELECT $select FROM $tab WHERE $campo_bus='$valor' $compleSql";
             if(isset($debug)&&$debug){
-                dump($sql);
+                \Log::debug('[Qlib] buscaValorDb_SERVER debug', ['sql' => $sql]);
             }
             $d = DB::connection($conx)->select($sql);
             if($d)
@@ -661,7 +661,7 @@ class Qlib
      */
     static function buscaValoresDb_SERVER($sql='',$debug=false,$conx='mysql2'){
         if($debug){
-            dump($sql);
+            \Log::debug('[Qlib] buscaValoresDb_SERVER debug', ['sql' => $sql, 'conn' => $conx]);
         }
         if($sql){
             $dados = DB::connection($conx)->select($sql);
@@ -678,8 +678,9 @@ class Qlib
      */
     static function dados_tab($tab=false,$campos='nome,id',$comple=false,$debug=false){
         $sql = "SELECT $campos FROM $tab $comple";
-        if($debug)
-            echo $sql;
+        if($debug){
+            \Log::debug('[Qlib] dados_tab debug', ['sql' => $sql]);
+        }
         return Qlib::buscaValoresDb($sql);
     }
     static public function dados_tab2($tab = null,$config=[],$debug=false)
@@ -699,10 +700,10 @@ class Qlib
         }
         if($sql){
             if($debug){
-                if($debug=='dd'){
+                if($debug==='dd'){
                     return $sql;
-                }else{
-                    dump($sql);
+                } else {
+                    \Log::debug('[Qlib] dados_tab2 debug', ['sql' => $sql]);
                 }
             }
             $d = DB::select($sql);
@@ -746,7 +747,7 @@ class Qlib
         if($tab && $campo_bus && $valor && $select){
             $sql = "SELECT $select FROM $tab WHERE $campo_bus='$valor' $compleSql";
             if(isset($debug)&&$debug){
-                dump($sql);
+                \Log::debug('[Qlib] buscaValorDb debug', ['sql' => $sql]);
             }
             $d = DB::select($sql);
             if($d)
@@ -2961,5 +2962,127 @@ class Qlib
     static function getFrontUrl(){
         $front_url = self::buscaValorDb('options','url','front_url','value');
         return $front_url;
+    }
+    /**
+     * Substitui shortcodes no conteúdo com valores vindos de $config.
+     *
+     * Esta função percorre o array de configuração e faz replace de
+     * placeholders no formato `{chave}` e `{chave_subchave}` encontrados em
+     * `$conteudo`. Para evitar o TypeError do PHP 8 em `str_replace` quando o
+     * primeiro argumento ($search) é string, garantimos que o segundo
+     * argumento ($replace) também seja string. Valores não-escalares (arrays
+     * e objetos) são serializados via `json_encode`, valores booleanos são
+     * convertidos para `'1'`/`'0'`, e `null` vira string vazia.
+     *
+     * @param string|array $conteudo Conteúdo que contém shortcodes
+     * @param array $config          Dados para substituição dos shortcodes
+     * @return string|array          Conteúdo com shortcodes resolvidos
+     */
+    static function apply_shortcodes($conteudo,$config){
+        $ret = '';
+        if($conteudo && $config){
+            // Coleta todos os placeholders recursivamente (com prefixos)
+            $placeholders = self::collectShortcodeReplacements($config);
+            // Também adiciona placeholders sem prefixo para folhas únicas
+            $uniqueLeafs = self::collectUniqueLeafReplacements($config);
+            foreach($uniqueLeafs as $k => $v){
+                if(!array_key_exists($k, $placeholders)){
+                    $placeholders[$k] = $v;
+                }
+            }
+            // Substitui primeiro os mais específicos
+            uksort($placeholders, function($a, $b){ return strlen($b) <=> strlen($a); });
+            foreach($placeholders as $ph => $val){
+                $conteudo = str_replace('{'.$ph.'}', self::stringifyReplacement($val), $conteudo);
+            }
+            $ret = $conteudo;
+        }
+        return $ret;
+    }
+
+    /**
+     * Constrói, recursivamente, o mapa de placeholders para o conteúdo.
+     * Usa `_` como separador entre níveis: `{pai_filho_neto}`.
+     * Inclui também o placeholder do nível atual (ex.: `{pai}`).
+     *
+     * @param array|object $config Dados de entrada para shortcodes
+     * @param string $prefix       Caminho atual sem chaves
+     * @return array               Mapa caminho => valor original
+     */
+    protected static function collectShortcodeReplacements($config, $prefix = ''){
+        $map = [];
+        if(is_array($config) || is_object($config)){
+            foreach((array)$config as $key => $val){
+                $path = $prefix === '' ? (string)$key : $key;
+                // Adiciona placeholder do nível atual
+                $map[$path] = $val;
+                // Recurse para níveis mais profundos
+                if(is_array($val) || is_object($val)){
+                    $children = self::collectShortcodeReplacements($val, $path);
+                    foreach($children as $ck => $cv){
+                        $map[$ck] = $cv;
+                    }
+                }
+            }
+        }
+        // dump($map);
+        return $map;
+    }
+
+    /**
+     * Converte um valor arbitrário para string segura usada no `str_replace`.
+     *
+     * @param mixed $value Valor a converter
+     * @return string      Valor convertido em string
+     */
+    protected static function stringifyReplacement($value){
+        if(is_null($value)) return '';
+        if(is_bool($value)) return $value ? '1' : '0';
+        if(is_array($value) || is_object($value)){
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        return (string) $value;
+    }
+
+    /**
+     * Coleta placeholders sem prefixo para chaves folha únicas.
+     * Ignora chaves numéricas (índices) e só inclui quando o nome não se repete
+     * em múltiplos ramos.
+     *
+     * @param array|object $config
+     * @return array Mapa: `chaveFolha` => valor
+     */
+    protected static function collectUniqueLeafReplacements($config){
+        $counts = [];
+        $values = [];
+        self::collectLeafStats($config, $counts, $values);
+        $result = [];
+        foreach($values as $key => $val){
+            if(($counts[$key] ?? 0) === 1 && !is_numeric($key)){
+                $result[$key] = $val;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Percorre recursivamente e acumula estatísticas de folhas (chaves e contagens).
+     *
+     * @param array|object $data
+     * @param array $counts Referência: chave => quantidade de ocorrências
+     * @param array $values Referência: chave => último valor escalar
+     * @return void
+     */
+    protected static function collectLeafStats($data, &$counts, &$values){
+        if(is_array($data) || is_object($data)){
+            foreach((array)$data as $key => $val){
+                if(is_array($val) || is_object($val)){
+                    self::collectLeafStats($val, $counts, $values);
+                } else {
+                    $counts[$key] = ($counts[$key] ?? 0) + 1;
+                    $values[$key] = $val;
+                }
+            }
+        }
     }
 }

@@ -19,7 +19,7 @@ import { turmasService } from '@/services/turmasService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Save, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Pencil } from 'lucide-react';
 import EditFooterBar from '@/components/ui/edit-footer-bar';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
@@ -981,6 +981,27 @@ export default function ProposalsEdit() {
     form.handleSubmit(onSubmit)();
   }
 
+  /**
+   * handleEditClient
+   * pt-BR: Navega para a edição do cliente selecionado e preserva o estado de retorno
+   *        para que o usuário possa voltar a esta página após concluir a edição.
+   * en-US: Navigates to the selected client's edit page and preserves a return
+   *        state so the user can come back to this page after finishing the edit.
+   */
+  function handleEditClient(clientId: string | undefined) {
+    const idToEdit = String(clientId || '').trim();
+    if (!idToEdit) return;
+    navigate(`/admin/clients/${idToEdit}/edit`, {
+      state: {
+        returnTo: {
+          pathname: location.pathname,
+          search: location.search,
+          hash: location.hash,
+        },
+      },
+    });
+  }
+
   // Hidratação de parcelamento_id a partir da proposta carregada
   // Hydrate parcelamento_id from loaded proposal metadata
   useEffect(() => {
@@ -1039,23 +1060,48 @@ export default function ProposalsEdit() {
                     <FormItem>
                       <FormLabel>Cliente *</FormLabel>
                       {idClienteFromUrl ? (
-                        <div className="text-sm py-2 px-3 border rounded-md bg-muted/30">
-                          {clientDetailData?.name ? String(clientDetailData.name) : `Cliente ${idClienteFromUrl}`}
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 text-sm py-2 px-3 border rounded-md bg-muted/30">
+                            {clientDetailData?.name ? String(clientDetailData.name) : `Cliente ${idClienteFromUrl}`}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => handleEditClient(idClienteFromUrl)}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" /> Editar Cliente
+                          </Button>
                         </div>
                       ) : (
-                        <Combobox
-                          options={clientOptions}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          placeholder="Selecione o cliente"
-                          searchPlaceholder="Pesquisar cliente pelo nome..."
-                          emptyText={clientOptions.length === 0 ? 'Nenhum cliente encontrado' : 'Digite para filtrar'}
-                          disabled={isLoadingClients || isLoadingEnrollment}
-                          loading={isLoadingClients || isLoadingEnrollment}
-                          onSearch={setClientSearch}
-                          searchTerm={clientSearch}
-                          debounceMs={250}
-                        />
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1">
+                            <Combobox
+                              options={clientOptions}
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              placeholder="Selecione o cliente"
+                              searchPlaceholder="Pesquisar cliente pelo nome..."
+                              emptyText={clientOptions.length === 0 ? 'Nenhum cliente encontrado' : 'Digite para filtrar'}
+                              disabled={isLoadingClients || isLoadingEnrollment}
+                              loading={isLoadingClients || isLoadingEnrollment}
+                              onSearch={setClientSearch}
+                              searchTerm={clientSearch}
+                              debounceMs={250}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => handleEditClient(String(field.value || ''))}
+                            disabled={!field.value}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" /> Editar Cliente
+                          </Button>
+                        </div>
                       )}
                       <FormMessage />
                     </FormItem>

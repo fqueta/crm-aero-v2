@@ -213,6 +213,49 @@ export default function ClientEdit() {
   const [isLoading, setIsLoading] = useState(false);
   const finishAfterSaveRef = useRef<boolean>(false);
 
+  /**
+   * navigateToReturnOrFallback
+   * pt-BR: Retorna para a página de origem quando `location.state.returnTo` ou `from` existir.
+   *        Caso contrário, segue o fluxo padrão (Leads do funil ou lista de clientes).
+   * en-US: Returns to the origin page when `location.state.returnTo` or `from` exists.
+   *        Otherwise, follows the default flow (Leads funnel or clients list).
+   */
+  function navigateToReturnOrFallback() {
+    const state: any = location.state || {};
+    const returnTo = state?.returnTo;
+    const from = state?.from;
+
+    // Suporta tanto string quanto objeto com pathname/search/hash
+    if (typeof returnTo === 'string' && returnTo.trim().length > 0) {
+      navigate(returnTo);
+      return;
+    }
+    if (returnTo && typeof returnTo === 'object') {
+      const path = String(returnTo.pathname || '/');
+      const search = String(returnTo.search || '');
+      const hash = String(returnTo.hash || '');
+      navigate(`${path}${search}${hash}`);
+      return;
+    }
+    if (from && typeof from === 'object') {
+      const path = String(from.pathname || '/');
+      const search = String(from.search || '');
+      const hash = String(from.hash || '');
+      navigate(`${path}${search}${hash}`);
+      return;
+    }
+
+    // Fallback padrão quando não há estado de retorno
+    const funnelFromQuery = searchParams.get('funnel') || '';
+    const fallbackFunnel = detectFunnelIdFromClient(client) || '';
+    const targetFunnel = funnelFromQuery || fallbackFunnel;
+    if (targetFunnel) {
+      navigate(`/admin/customers/leads?funnel=${encodeURIComponent(String(targetFunnel))}`);
+    } else {
+      navigate(`/admin/clients`);
+    }
+  }
+
   // Hooks para buscar e atualizar cliente
   const { data: clientResponse, isLoading: isLoadingClient, error } = useClientById(id!);
   const updateClientMutation = useUpdateClient();
@@ -391,25 +434,10 @@ export default function ClientEdit() {
           });
           setIsLoading(false);
           // navigateAfterSuccess
-          // pt-BR: Navega após salvar somente quando finalizar.
-          // en-US: Navigate after save only when finishing.
+          // pt-BR: Navega após salvar somente quando finalizar (respeita returnTo).
+          // en-US: Navigate after save only when finishing (honors returnTo).
           if (finishAfterSaveRef.current) {
-            const from = (location.state as any)?.from;
-            if (from && typeof from === 'object') {
-              const path = String(from.pathname || '/');
-              const search = String(from.search || '');
-              const hash = String(from.hash || '');
-              navigate(`${path}${search}${hash}`);
-            } else {
-              const funnelFromQuery = searchParams.get('funnel') || '';
-              const fallbackFunnel = detectFunnelIdFromClient(client) || '';
-              const targetFunnel = funnelFromQuery || fallbackFunnel;
-              if (targetFunnel) {
-                navigate(`/admin/customers/leads?funnel=${encodeURIComponent(String(targetFunnel))}`);
-              } else {
-                navigate(`/admin/clients`);
-              }
-            }
+            navigateToReturnOrFallback();
           }
         },
         onError: (error: any) => {
@@ -513,25 +541,13 @@ export default function ClientEdit() {
   /**
    * Função para cancelar a edição e voltar para a lista
    */
+  /**
+   * handleCancel
+   * pt-BR: Cancela a edição e retorna para a página de origem (prioriza `returnTo`).
+   * en-US: Cancels editing and returns to the origin page (prioritizes `returnTo`).
+   */
   const handleCancel = () => {
-    // pt-BR: Cancela edição e volta para a página de origem, se disponível
-    // en-US: Cancels editing and returns to the origin page, if available
-    const from = (location.state as any)?.from;
-    if (from && typeof from === 'object') {
-      const path = String(from.pathname || '/');
-      const search = String(from.search || '');
-      const hash = String(from.hash || '');
-      navigate(`${path}${search}${hash}`);
-    } else {
-      const funnelFromQuery = searchParams.get('funnel') || '';
-      const fallbackFunnel = detectFunnelIdFromClient(client) || '';
-      const targetFunnel = funnelFromQuery || fallbackFunnel;
-      if (targetFunnel) {
-        navigate(`/admin/customers/leads?funnel=${encodeURIComponent(String(targetFunnel))}`);
-      } else {
-        navigate(`/admin/clients`);
-      }
-    }
+    navigateToReturnOrFallback();
   };
 
   // Estados de carregamento e erro

@@ -14,6 +14,25 @@ use Illuminate\Support\Facades\Response;
  */
 class WebhookController extends Controller
 {
+    public function index(Request $request){
+        $seg1 = request()->segment(1);
+        $seg2 = request()->segment(2);
+        $seg3 = request()->segment(3);
+        $ret = false;
+        if($seg3=='asaas'){
+            $ret = (new AsaasController)->webhook($request->all());
+        }elseif($seg3=='zenvia'){
+            $ret = (new ZenviaController)->salvar_eventos($request);
+        }elseif($seg3=='rd'){
+            $ret = (new RdstationController)->webhook($request->all());
+        }elseif($seg3=='zapguru'){
+            $ret = (new ZapguruController)->webhook($request->all());
+        }elseif($seg3=='zapsing'){
+            $ret = (new ApiZapsingController)->webhook($request->all());
+        }
+        return $ret;
+    }
+
     /**
      * Processar webhook com um endpoint
      *

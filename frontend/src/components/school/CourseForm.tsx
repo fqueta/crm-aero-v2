@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm, FormProvider } from 'react-hook-form';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -91,6 +91,17 @@ export function CourseForm({
    */
   onSubmitRef?: React.MutableRefObject<(() => void) | null>;
 }) {
+  /**
+   * resolveInitialTab
+   * pt-BR: Lê `tab` da URL e valida contra as abas disponíveis. Retorna 'info'
+   *        quando o parâmetro estiver ausente ou inválido.
+   * en-US: Reads `tab` from URL and validates against available tabs. Returns
+   *        'info' when the parameter is missing or invalid.
+   */
+  const [searchParams] = useSearchParams();
+  const allowedTabs = ['info', 'pricing', 'config', 'aircrafts', 'modules'];
+  const tabParam = (searchParams.get('tab') || '').trim();
+  const initialTab = allowedTabs.includes(tabParam) ? tabParam : 'info';
   /**
    * navigation
    * pt-BR: Navegação SPA para abrir a página de períodos com filtro.
@@ -437,7 +448,7 @@ export function CourseForm({
   return (
     <FormProvider {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit, onInvalid)} className="space-y-6">
-        <Tabs defaultValue="info" className="w-full">
+      <Tabs defaultValue={initialTab} className="w-full">
           <TabsList>
             <TabsTrigger value="info">Informações</TabsTrigger>
             <TabsTrigger value="pricing">Valores</TabsTrigger>
@@ -757,9 +768,7 @@ export function CourseForm({
         </Tabs>
 
         <Separator />
-        <div className="flex items-center justify-end gap-2">
-          <Button type="submit" disabled={isSubmitting}>Salvar</Button>
-        </div>
+        
       </form>
     </FormProvider>
   );
