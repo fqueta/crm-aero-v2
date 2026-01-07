@@ -85,6 +85,7 @@ class ZapsingController extends Controller
             // dd($body,$endpoint);
             try {
                 $urlEndpoint = $this->url_api.'/'.$endpoint;
+                // dd($urlEndpoint,$body,$this->api_id);
                 $response = Http::withHeaders([
                     'Content-Type' => 'application/json',
                     'Authorization' => $this->api_id,
@@ -355,8 +356,8 @@ class ZapsingController extends Controller
         }
 
         try {
-            $matricula = \App\Models\Matricula::findOrFail($id_matricula);
-            $cliente = \App\Models\User::find($matricula->id_cliente);
+            $matricula = (new MatriculaController())->dm($id_matricula);
+            $cliente = \App\Models\User::find($matricula['id_cliente']);
 
             if (!$cliente) {
                 throw new \Exception("Client not found for Matricula ID: $id_matricula");
@@ -416,14 +417,13 @@ class ZapsingController extends Controller
             $signers = $this->signers_matricula($signer);
             // Prepare Envelope Payload 
             $body = [
-                'name' => 'Matrícula #' . $id_matricula . ' - ' . $cliente->name,
+                'name' => $cliente->name . ' * '.$matricula['curso_nome'].' #'.$id_matricula,
+                'url_pdf' => $propostaPdfUrl,
                 'folder_path' => '/' . config('app.id_app', 'CRM'),
                 'signers' => $signers,
                 'docs' => $docs,
                 'lang' => 'pt-br',
             ];
-
-
             $response = $this->post([
                 'endpoint' => 'docs', 
                 'body' => $body

@@ -13,22 +13,18 @@ import { CoursePayload, CourseRecord } from '@/types/courses';
  * pt-BR: Página para editar curso existente com formulário em abas.
  * en-US: Page to edit an existing course with tabbed form.
  */
+import { useToast } from '@/hooks/use-toast';
+
 export default function CourseEdit() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const submitRef = useRef<(() => void) | null>(null);
   const finishAfterSaveRef = useRef<boolean>(false);
+  const { toast } = useToast();
 
   const { data: course, isLoading } = useQuery<CourseRecord | null>({
     queryKey: ['courses', 'detail', id],
-    /**
-     * queryFn
-     * pt-BR: Garante retorno não-`undefined`. Caso API não encontre o registro,
-     *        retorna `null` para evitar erro do React Query.
-     * en-US: Ensures non-`undefined` return. If API doesn't find the record,
-     *        returns `null` to avoid React Query error.
-     */
     queryFn: async () => {
       const res = await coursesService.getById(String(id));
       return res ?? null;
@@ -38,47 +34,40 @@ export default function CourseEdit() {
 
   const updateMutation = useMutation({
     mutationFn: async (payload: CoursePayload) => coursesService.updateCourse(String(id), payload),
-  });
-
-  /**
-   * handleSubmit
-   * pt-BR: Submete atualização do curso e volta à listagem.
-   * en-US: Submits course update and navigates back to listing.
-   */
-  const handleSubmit = async (data: CoursePayload) => {
-    updateMutation.mutate(data, {
-      onSuccess: () => {
+    onSuccess: () => {
+        toast({
+            title: "Sucesso",
+            description: "Curso atualizado com sucesso.",
+            variant: "default", // or just omit variant for default success style if configured
+            className: "bg-green-500 text-white border-none"
+        });
         queryClient.invalidateQueries({ queryKey: ['courses', 'list'] });
         queryClient.invalidateQueries({ queryKey: ['courses', 'detail', id] });
         if (finishAfterSaveRef.current) {
           navigate('/admin/school/courses');
         }
-      },
-    });
+    },
+    onError: (err) => {
+        console.error("Erro na mutação updateCourse:", err);
+        toast({
+            title: "Erro",
+            description: "Erro ao atualizar curso. Verifique os dados.",
+            variant: "destructive",
+        });
+    }
+  });
+
+  const handleSubmit = async (data: CoursePayload) => {
+    updateMutation.mutate(data);
   };
 
-  /**
-   * handleBack
-   * pt-BR: Volta para a listagem de cursos.
-   * en-US: Navigates back to courses listing.
-   */
   const handleBack = () => navigate('/admin/school/courses');
 
-  /**
-   * handleSaveContinue
-   * pt-BR: Salva e permanece na página.
-   * en-US: Saves and stays on the page.
-   */
   const handleSaveContinue = () => {
     finishAfterSaveRef.current = false;
     submitRef.current?.();
   };
 
-  /**
-   * handleSaveFinish
-   * pt-BR: Salva e finaliza (volta para listagem).
-   * en-US: Saves and finishes (navigates back to list).
-   */
   const handleSaveFinish = () => {
     finishAfterSaveRef.current = true;
     submitRef.current?.();

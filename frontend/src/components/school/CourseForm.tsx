@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useForm, FormProvider } from 'react-hook-form';
+import { useForm, FormProvider, useFieldArray } from 'react-hook-form';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Plus, X, Trash2, GripVertical } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { aircraftSettingsService } from '@/services/aircraftSettingsService';
 import { periodsService } from '@/services/periodsService';
@@ -22,6 +23,24 @@ import * as z from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
 import { currencyApplyMask, currencyRemoveMaskToNumber } from '@/lib/masks/currency';
+
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 /**
  * formatCurrencyBRLDisplay
@@ -66,6 +85,46 @@ function getPeriodsFilterUrl(id?: string | number): string {
   const cid = id ? String(id) : '';
   const base = '/admin/school/periods';
   return cid ? `${base}?id_curso=${cid}` : base;
+}
+
+/**
+ * SortableModuleItem
+ * pt-BR: Componente wrapper para tornar o módulo ordenável.
+ * en-US: Wrapper component to make the module sortable.
+ */
+function SortableModuleItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    position: 'relative' as const,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex gap-2">
+      <div 
+        {...attributes} 
+        {...listeners} 
+        className="flex items-center justify-center p-2 cursor-grab text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md self-start mt-6"
+        title="Arraste para reordenar"
+      >
+        <GripVertical className="h-5 w-5" />
+      </div>
+      <div className="flex-1 min-w-0">
+        {children}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -139,8 +198,8 @@ export function CourseForm({
     unidade_duracao: z.enum(['Hrs', 'Min']).optional(),
     // pt-BR: Remove obrigatoriedade; aceita vazio.
     // en-US: Not required; accepts empty.
-    tipo: z.string().optional(),
-    categoria: z.string().optional(),
+    tipo: z.coerce.string().optional(),
+    categoria: z.coerce.string().optional(),
 
     // pt-BR: Valores opcionais; validam somente quando presentes.
     // en-US: Optional values; validate only when provided.
@@ -163,6 +222,19 @@ export function CourseForm({
 
     aeronaves: z.array(z.string()).optional(),
     modulos: z.array(moduleSchema),
+    config: z.object({
+        proximo_curso: z.string().optional(),
+        gratis: z.any().optional(),
+        comissao: z.string().optional(),
+        tx2: z.array(z.object({ name_label: z.string().optional(), name_valor: z.string().optional() })).optional(),
+        tipo_desconto_taxa: z.any().optional(),
+        desconto_taxa: z.string().optional(),
+        pagina_divulgacao: z.string().optional(),
+        video: z.string().optional(),
+        pagina_venda: z.object({ link: z.string().optional(), label: z.string().optional() }).optional(),
+        adc: z.object({ recheck: z.any().optional(), recorrente: z.any().optional(), cor: z.string().optional() }).optional(),
+        ead: z.object({ id_eadcontrol: z.string().optional() }).optional(),
+    }).optional(),
   });
 
   const { toast } = useToast();
@@ -202,6 +274,67 @@ export function CourseForm({
     },
   });
 
+  const { fields, append, remove, move } = useFieldArray({
+    control: form.control,
+    name: "modulos",
+  });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = fields.findIndex((item) => item.id === active.id);
+      const newIndex = fields.findIndex((item) => item.id === over.id);
+      move(oldIndex, newIndex);
+    }
+  }
+
+  /**
+   * onInvalid
+   * pt-BR: Exibe mensagem amigável quando validação falha (ex.: módulo sem título).
+   * en-US: Shows a friendly message when validation fails (e.g., module without title).
+   */
+  const onInvalid = () => {
+    const errors = form.formState.errors as any;
+    
+    // Função recursiva para extrair mensagens de erro
+    const getErrorMessages = (errObj: any): string[] => {
+      let messages: string[] = [];
+      if (!errObj) return messages;
+
+      if (typeof errObj.message === 'string') {
+        messages.push(errObj.message);
+      }
+
+      // Se for objeto, percorre chaves
+      if (typeof errObj === 'object') {
+        Object.values(errObj).forEach((val) => {
+          if (val) {
+             messages = [...messages, ...getErrorMessages(val)];
+          }
+        });
+      }
+      return messages;
+    };
+
+    const allMsgs = getErrorMessages(errors);
+    // Dedup messages
+    const uniqueMsgs = Array.from(new Set(allMsgs));
+
+    toast({
+      title: 'Erro de validação',
+      description: uniqueMsgs.length > 0 ? uniqueMsgs.join('\n') : 'Verifique os campos obrigatórios.',
+      variant: 'destructive',
+    });
+  };
+
   /**
    * exposeSubmitRef
    * pt-BR: Expõe o handleSubmit via referência opcional.
@@ -224,9 +357,9 @@ export function CourseForm({
         if (normalized.valor) normalized.valor = normalizeCurrencyToBRString(normalized.valor) ?? '';
         if (normalized.valor_parcela) normalized.valor_parcela = normalizeCurrencyToBRString(normalized.valor_parcela) ?? '';
         return onSubmit(normalized);
-      });
+      }, onInvalid);
     }
-  }, [onSubmitRef, form, onSubmit]);
+  }, [onSubmitRef, form, onSubmit, onInvalid]);
 
   /**
    * applyInitialData
@@ -330,10 +463,9 @@ export function CourseForm({
    * pt-BR: Adiciona um módulo ao curso.
    * en-US: Adds a module to the course.
    */
+
   const addModule = () => {
-    const current = form.getValues('modulos') ?? [];
-    const next: CourseModule = { etapa: 'etapa1', titulo: '', limite: '1', valor: '' };
-    form.setValue('modulos', [...current, next]);
+    append({ etapa: 'etapa1', nome: '', titulo: '', limite: '1', valor: '' });
   };
 
   /**
@@ -342,9 +474,7 @@ export function CourseForm({
    * en-US: Removes a module by index.
    */
   const removeModule = (index: number) => {
-    const current = [...(form.getValues('modulos') ?? [])];
-    current.splice(index, 1);
-    form.setValue('modulos', current);
+    remove(index);
   };
 
   /**
@@ -423,20 +553,6 @@ export function CourseForm({
     return onSubmit(data);
   };
 
-  /**
-   * onInvalid
-   * pt-BR: Exibe mensagem amigável quando validação falha (ex.: módulo sem título).
-   * en-US: Shows a friendly message when validation fails (e.g., module without title).
-   */
-  const onInvalid = () => {
-    const errors = form.formState.errors as any;
-    const hasModuleTitleError = Array.isArray(errors?.modulos) && errors.modulos.some((e: any) => e?.titulo);
-    toast({
-      title: 'Erro de validação',
-      description: hasModuleTitleError ? 'Preencha o título em todos os módulos.' : 'Verifique os campos obrigatórios.',
-      variant: 'destructive',
-    });
-  };
 
   /**
    * RequiredMark
@@ -459,72 +575,83 @@ export function CourseForm({
           <p className="text-xs text-muted-foreground mt-2">Campos marcados com <span className="text-red-600">*</span> são obrigatórios.</p>
 
           {/* Informações */}
+          {/* Informações */}
           <TabsContent value="info" className="space-y-4 pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nome interno<RequiredMark /></Label>
-                <Input placeholder="Nome interno (admin)" {...form.register('nome')} className={form.formState.errors?.nome ? 'border-red-500' : ''} />
-                {form.formState.errors?.nome && (
-                  <p className="text-xs text-red-600">{String(form.formState.errors.nome.message)}</p>
-                )}
-              </div>
-              {/* Campo oculto para Título (aluno) */}
-              <input type="hidden" {...form.register('titulo')} />
+            <Card>
+              <CardHeader>
+                <CardTitle>Informações Gerais</CardTitle>
+                <CardDescription>Dados principais do curso.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Nome interno<RequiredMark /></Label>
+                    <Input placeholder="Nome interno (admin)" {...form.register('nome')} className={form.formState.errors?.nome ? 'border-red-500' : ''} />
+                    {form.formState.errors?.nome && (
+                      <p className="text-xs text-red-600">{String(form.formState.errors.nome.message)}</p>
+                    )}
+                  </div>
+                  {/* Campo oculto para Título (aluno) */}
+                  <input type="hidden" {...form.register('titulo')} />
 
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div className="space-y-0.5">
-                  <Label>Ativar</Label>
-                  <p className="text-xs text-muted-foreground">Disponibiliza o curso</p>
+                  <div className="space-y-2">
+                    <Label>Tipo</Label>
+                    <Input placeholder="2" {...form.register('tipo')} className={form.formState.errors?.tipo ? 'border-red-500' : ''} />
+                    {form.formState.errors?.tipo && (
+                      <p className="text-xs text-red-600">{String(form.formState.errors.tipo.message)}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Categoria</Label>
+                    <Input placeholder="cursos_online" {...form.register('categoria')} className={form.formState.errors?.categoria ? 'border-red-500' : ''} />
+                    {form.formState.errors?.categoria && (
+                      <p className="text-xs text-red-600">{String(form.formState.errors.categoria.message)}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Duração</Label>
+                    <div className="flex gap-2">
+                      <Input placeholder="0" {...form.register('duracao')} className={form.formState.errors?.duracao ? 'border-red-500 w-24' : 'w-24'} />
+                      <Select value={form.watch('unidade_duracao')} onValueChange={(v) => form.setValue('unidade_duracao', v)}>
+                        <SelectTrigger className="w-[120px]"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Hrs">Hora(s)</SelectItem>
+                          <SelectItem value="Min">Minuto(s)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {form.formState.errors?.duracao && (
+                        <p className="text-xs text-red-600">{String(form.formState.errors.duracao.message)}</p>
+                    )}
+                    {form.formState.errors?.unidade_duracao && (
+                        <p className="text-xs text-red-600">{String((form.formState.errors as any).unidade_duracao?.message)}</p>
+                    )}
+                  </div>
                 </div>
-                <Switch checked={form.watch('ativo') === 's'} onCheckedChange={(checked) => form.setValue('ativo', checked ? 's' : 'n')} />
-              </div>
 
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div className="space-y-0.5"><Label>Destaque</Label></div>
-                <Switch checked={form.watch('destaque') === 's'} onCheckedChange={(checked) => form.setValue('destaque', checked ? 's' : 'n')} />
-              </div>
+                <Separator className="my-4" />
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <Label>Ativar</Label>
+                      <p className="text-xs text-muted-foreground">Disponibiliza o curso</p>
+                    </div>
+                    <Switch checked={form.watch('ativo') === 's'} onCheckedChange={(checked) => form.setValue('ativo', checked ? 's' : 'n')} />
+                  </div>
 
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div className="space-y-0.5"><Label>Publicar</Label></div>
-                <Switch checked={form.watch('publicar') === 's'} onCheckedChange={(checked) => form.setValue('publicar', checked ? 's' : 'n')} />
-              </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5"><Label>Destaque</Label></div>
+                    <Switch checked={form.watch('destaque') === 's'} onCheckedChange={(checked) => form.setValue('destaque', checked ? 's' : 'n')} />
+                  </div>
 
-              <div className="space-y-2">
-                <Label>Duração</Label>
-                <Input placeholder="0" {...form.register('duracao')} className={form.formState.errors?.duracao ? 'border-red-500' : ''} />
-                {form.formState.errors?.duracao && (
-                  <p className="text-xs text-red-600">{String(form.formState.errors.duracao.message)}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Unidade de duração</Label>
-                <Select value={form.watch('unidade_duracao')} onValueChange={(v) => form.setValue('unidade_duracao', v)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Hrs">Hora(s)</SelectItem>
-                    <SelectItem value="Min">Minuto(s)</SelectItem>
-                  </SelectContent>
-                </Select>
-                {form.formState.errors?.unidade_duracao && (
-                  <p className="text-xs text-red-600">{String((form.formState.errors as any).unidade_duracao?.message)}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Input placeholder="2" {...form.register('tipo')} className={form.formState.errors?.tipo ? 'border-red-500' : ''} />
-                {form.formState.errors?.tipo && (
-                  <p className="text-xs text-red-600">{String(form.formState.errors.tipo.message)}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Categoria</Label>
-                <Input placeholder="cursos_online" {...form.register('categoria')} className={form.formState.errors?.categoria ? 'border-red-500' : ''} />
-                {form.formState.errors?.categoria && (
-                  <p className="text-xs text-red-600">{String(form.formState.errors.categoria.message)}</p>
-                )}
-              </div>
-            </div>
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5"><Label>Publicar</Label></div>
+                    <Switch checked={form.watch('publicar') === 's'} onCheckedChange={(checked) => form.setValue('publicar', checked ? 's' : 'n')} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Valores */}
@@ -607,43 +734,74 @@ export function CourseForm({
           </TabsContent>
 
           {/* Configurações */}
-          <TabsContent value="config" className="space-y-4 pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2"><Label>Próximo curso</Label><Input {...form.register('config.proximo_curso')} /></div>
-              <div className="space-y-2">
-                <Label>Grátis</Label>
-                <Select value={form.watch('config.gratis')} onValueChange={(v) => form.setValue('config.gratis', v as any)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent><SelectItem value="s">Sim</SelectItem><SelectItem value="n">Não</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2"><Label>Comissão</Label><Input placeholder="3,00" {...form.register('config.comissao')} /></div>
-              <div className="space-y-2"><Label>Tipo desconto taxa</Label>
-                <Select value={form.watch('config.tipo_desconto_taxa')} onValueChange={(v) => form.setValue('config.tipo_desconto_taxa', v as any)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent><SelectItem value="v">Valor</SelectItem><SelectItem value="p">Percentual</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2"><Label>Desconto taxa</Label><Input {...form.register('config.desconto_taxa')} /></div>
-              <div className="space-y-2 md:col-span-3"><Label>Página de divulgação</Label><Input {...form.register('config.pagina_divulgacao')} /></div>
-              <div className="space-y-2 md:col-span-3"><Label>Vídeo (YouTube)</Label><Input placeholder="https://..." {...form.register('config.video')} /></div>
-              <div className="space-y-2"><Label>Página de venda (link)</Label><Input {...form.register('config.pagina_venda.link')} /></div>
-              <div className="space-y-2"><Label>Página de venda (label)</Label><Input {...form.register('config.pagina_venda.label')} /></div>
-              <div className="space-y-2"><Label>ADC: Recheck</Label>
-                <Select value={form.watch('config.adc.recheck')} onValueChange={(v) => form.setValue('config.adc.recheck', v as any)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent><SelectItem value="s">Sim</SelectItem><SelectItem value="n">Não</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2"><Label>ADC: Recorrente</Label>
-                <Select value={form.watch('config.adc.recorrente')} onValueChange={(v) => form.setValue('config.adc.recorrente', v as any)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent><SelectItem value="s">Sim</SelectItem><SelectItem value="n">Não</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2"><Label>ADC: Cor (hex)</Label><Input placeholder="FFFFFF" {...form.register('config.adc.cor')} /></div>
-              <div className="space-y-2"><Label>EAD: ID EADControl</Label><Input {...form.register('config.ead.id_eadcontrol')} /></div>
-            </div>
+          {/* Configurações */}
+          <TabsContent value="config" className="space-y-6 pt-4">
+            
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Geral</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2"><Label>Próximo curso</Label><Input {...form.register('config.proximo_curso')} /></div>
+                <div className="space-y-2">
+                  <Label>Grátis</Label>
+                  <Select value={form.watch('config.gratis')} onValueChange={(v) => form.setValue('config.gratis', v as any)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent><SelectItem value="s">Sim</SelectItem><SelectItem value="n">Não</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>Comissão</Label><Input placeholder="3,00" {...form.register('config.comissao')} /></div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Taxas e Descontos</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Tipo desconto taxa</Label>
+                  <Select value={form.watch('config.tipo_desconto_taxa')} onValueChange={(v) => form.setValue('config.tipo_desconto_taxa', v as any)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent><SelectItem value="v">Valor</SelectItem><SelectItem value="p">Percentual</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>Desconto taxa</Label><Input {...form.register('config.desconto_taxa')} /></div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Marketing e Divulgação</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2 md:col-span-2"><Label>Página de divulgação</Label><Input {...form.register('config.pagina_divulgacao')} /></div>
+                <div className="space-y-2 md:col-span-2"><Label>Vídeo (YouTube)</Label><Input placeholder="https://..." {...form.register('config.video')} /></div>
+                <div className="space-y-2"><Label>Página de venda (link)</Label><Input {...form.register('config.pagina_venda.link')} /></div>
+                <div className="space-y-2"><Label>Página de venda (label)</Label><Input {...form.register('config.pagina_venda.label')} /></div>
+              </CardContent>
+            </Card>
+
+            <Card>
+               <CardHeader className="pb-3">
+                <CardTitle className="text-base">Integrações (ADC / EAD)</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 <div className="space-y-2"><Label>ADC: Recheck</Label>
+                  <Select value={form.watch('config.adc.recheck')} onValueChange={(v) => form.setValue('config.adc.recheck', v as any)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent><SelectItem value="s">Sim</SelectItem><SelectItem value="n">Não</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>ADC: Recorrente</Label>
+                  <Select value={form.watch('config.adc.recorrente')} onValueChange={(v) => form.setValue('config.adc.recorrente', v as any)}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent><SelectItem value="s">Sim</SelectItem><SelectItem value="n">Não</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>ADC: Cor (hex)</Label><Input placeholder="FFFFFF" {...form.register('config.adc.cor')} /></div>
+                <div className="space-y-2 md:col-span-3"><Label>EAD: ID EADControl</Label><Input {...form.register('config.ead.id_eadcontrol')} /></div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Aeronaves */}
@@ -694,74 +852,99 @@ export function CourseForm({
             ) : (
               <>
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium">Módulos</h3>
+                  <div>
+                    <h3 className="text-lg font-medium">Módulos do Curso</h3>
+                    <p className="text-sm text-muted-foreground">Gerencie as etapas e conteúdos.</p>
+                  </div>
                   <Button type="button" variant="outline" onClick={addModule}><Plus className="h-4 w-4 mr-2" />Adicionar módulo</Button>
                 </div>
-                {(form.watch('modulos') ?? []).map((m, idx) => (
-                  <div key={idx} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end border rounded-md p-3">
-                    <div className="space-y-2">
-                      <Label>Etapa</Label>
-                      <Select value={m.etapa} onValueChange={(v) => {
-                        const curr = [...(form.getValues('modulos') ?? [])];
-                        curr[idx] = { ...curr[idx], etapa: v };
-                        form.setValue('modulos', curr);
-                      }}>
-                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="etapa1">Etapa 1</SelectItem>
-                          <SelectItem value="etapa2">Etapa 2</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {((form.formState.errors.modulos as any)?.[idx]?.etapa?.message) && (
-                        <p className="text-xs text-red-600">{(form.formState.errors.modulos as any)[idx].etapa.message}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Título</Label>
-                      <Input value={m.titulo} onChange={(e) => {
-                        const curr = [...(form.getValues('modulos') ?? [])];
-                        curr[idx] = { ...curr[idx], titulo: e.target.value };
-                        form.setValue('modulos', curr);
-                      }} />
-                      {((form.formState.errors.modulos as any)?.[idx]?.titulo?.message) && (
-                        <p className="text-xs text-red-600">{(form.formState.errors.modulos as any)[idx].titulo.message}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Limite</Label>
-                      <Input value={m.limite} onChange={(e) => {
-                        const curr = [...(form.getValues('modulos') ?? [])];
-                        curr[idx] = { ...curr[idx], limite: e.target.value };
-                        form.setValue('modulos', curr);
-                      }} />
-                      {((form.formState.errors.modulos as any)?.[idx]?.limite?.message) && (
-                        <p className="text-xs text-red-600">{(form.formState.errors.modulos as any)[idx].limite.message}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Valor</Label>
-                        <Input value={m.valor || ''} onChange={(e) => {
-                          const curr = [...(form.getValues('modulos') ?? [])];
-                          curr[idx] = { ...curr[idx], valor: e.target.value };
-                          form.setValue('modulos', curr);
-                        }} />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Aeronaves</Label>
-                      <ModuleAircraftSelect
-                        value={m.aviao || []}
-                        onChange={(next) => {
-                          const curr = [...(form.getValues('modulos') ?? [])];
-                          curr[idx] = { ...curr[idx], aviao: next };
-                          form.setValue('modulos', curr);
-                        }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-end">
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeModule(idx)}><X className="h-4 w-4" /></Button>
-                    </div>
-                  </div>
-                ))}
+                
+                <div className="space-y-4">
+                  <DndContext 
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext 
+                        items={fields}
+                        strategy={verticalListSortingStrategy}
+                    >
+                      {fields.map((m, idx) => (
+                        <SortableModuleItem key={m.id} id={m.id}>
+                            <Card className="relative">
+                            <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="icon" 
+                                className="absolute right-2 top-2 text-muted-foreground hover:text-red-500"
+                                onClick={() => removeModule(idx)}
+                                >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                            <CardContent className="pt-6">
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                                <div className="md:col-span-2 space-y-2">
+                                    <Label>Etapa</Label>
+                                    <Select 
+                                        value={form.getValues(`modulos.${idx}.etapa`)} 
+                                        onValueChange={(v) => form.setValue(`modulos.${idx}.etapa`, v, { shouldValidate: true })}
+                                    >
+                                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="etapa1">Etapa 1</SelectItem>
+                                        <SelectItem value="etapa2">Etapa 2</SelectItem>
+                                    </SelectContent>
+                                    </Select>
+                                    {((form.formState.errors.modulos as any)?.[idx]?.etapa?.message) && (
+                                    <p className="text-xs text-red-600">{(form.formState.errors.modulos as any)[idx].etapa.message}</p>
+                                    )}
+                                </div>
+                                
+                                <div className="md:col-span-4 space-y-2">
+                                    <Label>Título</Label>
+                                    <Input {...form.register(`modulos.${idx}.titulo` as const)} />
+                                    {((form.formState.errors.modulos as any)?.[idx]?.titulo?.message) && (
+                                    <p className="text-xs text-red-600">{(form.formState.errors.modulos as any)[idx].titulo.message}</p>
+                                    )}
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <Label>Limite</Label>
+                                    <Input {...form.register(`modulos.${idx}.limite` as const)} />
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <Label>Valor</Label>
+                                    <Input 
+                                        value={form.watch(`modulos.${idx}.valor`) || ''} 
+                                        onChange={(e) => {
+                                            form.setValue(`modulos.${idx}.valor`, e.target.value);
+                                        }} 
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <Label>Aeronaves</Label>
+                                    <ModuleAircraftSelect
+                                        value={form.watch(`modulos.${idx}.aviao`) || []}
+                                        onChange={(next) => {
+                                            form.setValue(`modulos.${idx}.aviao`, next);
+                                        }}
+                                    />
+                                </div>
+                                </div>
+                            </CardContent>
+                            </Card>
+                        </SortableModuleItem>
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                  {fields.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                          Nenhum módulo adicionado.
+                      </div>
+                  )}
+                </div>
               </>
             )}
           </TabsContent>
