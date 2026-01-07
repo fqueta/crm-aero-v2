@@ -173,10 +173,10 @@ export function CourseForm({
    * en-US: Validates core fields and monetary values ("Valores" tab).
    */
   const moduleSchema = z.object({
-    etapa: z.string().optional(),
-    titulo: z.string().optional(),
+    etapa: z.coerce.string().optional(),
+    titulo: z.coerce.string().optional(),
     limite: z.coerce.string().optional(),
-    valor: z.string().optional(),
+    valor: z.coerce.string().optional(),
     aviao: z.array(z.string()).optional(),
   });
   const courseSchema = z.object({
@@ -204,11 +204,11 @@ export function CourseForm({
     // pt-BR: Valores opcionais; validam somente quando presentes.
     // en-US: Optional values; validate only when provided.
     inscricao: z
-      .string()
+      .coerce.string()
       .optional()
       .refine((v) => (v === undefined || currencyRemoveMaskToNumber(v) >= 0), 'Inscrição inválida'),
     valor: z
-      .string()
+      .coerce.string()
       .optional()
       .refine((v) => (v === undefined || currencyRemoveMaskToNumber(v) >= 0), 'Valor inválido'),
     parcelas: z
@@ -216,24 +216,24 @@ export function CourseForm({
       .optional()
       .refine((v) => (v === undefined || v === '' || (/^\d+$/.test(String(v).trim()) && parseInt(String(v).trim(), 10) >= 1)), 'Parcelas deve ser inteiro >= 1'),
     valor_parcela: z
-      .string()
+      .coerce.string()
       .optional()
       .refine((v) => (v === undefined || v === '' || currencyRemoveMaskToNumber(v) >= 0), 'Valor da parcela inválido'),
 
     aeronaves: z.array(z.string()).optional(),
     modulos: z.array(moduleSchema),
     config: z.object({
-        proximo_curso: z.string().optional(),
+        proximo_curso: z.coerce.string().optional(),
         gratis: z.any().optional(),
-        comissao: z.string().optional(),
-        tx2: z.array(z.object({ name_label: z.string().optional(), name_valor: z.string().optional() })).optional(),
+        comissao: z.coerce.string().optional(),
+        tx2: z.array(z.object({ name_label: z.coerce.string().optional(), name_valor: z.coerce.string().optional() })).optional(),
         tipo_desconto_taxa: z.any().optional(),
-        desconto_taxa: z.string().optional(),
-        pagina_divulgacao: z.string().optional(),
-        video: z.string().optional(),
-        pagina_venda: z.object({ link: z.string().optional(), label: z.string().optional() }).optional(),
-        adc: z.object({ recheck: z.any().optional(), recorrente: z.any().optional(), cor: z.string().optional() }).optional(),
-        ead: z.object({ id_eadcontrol: z.string().optional() }).optional(),
+        desconto_taxa: z.coerce.string().optional(),
+        pagina_divulgacao: z.coerce.string().optional(),
+        video: z.coerce.string().optional(),
+        pagina_venda: z.object({ link: z.coerce.string().optional(), label: z.coerce.string().optional() }).optional(),
+        adc: z.object({ recheck: z.any().optional(), recorrente: z.any().optional(), cor: z.coerce.string().optional() }).optional(),
+        ead: z.object({ id_eadcontrol: z.coerce.string().optional() }).optional(),
     }).optional(),
   });
 

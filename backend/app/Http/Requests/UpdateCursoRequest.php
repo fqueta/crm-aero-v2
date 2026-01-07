@@ -49,8 +49,8 @@ class UpdateCursoRequest extends FormRequest
             // Campos dos módulos agora opcionais: validam somente quando presentes
             'modulos.*.etapa' => ['sometimes','nullable','string','max:50'],
             'modulos.*.titulo' => ['sometimes','nullable','string','max:300'],
-            'modulos.*.limite' => ['required','integer','min:0'],
-            'modulos.*.valor' => ['nullable','string','max:50'],
+            'modulos.*.limite' => ['sometimes','nullable','integer','min:0'],
+            'modulos.*.valor' => ['sometimes','nullable','string','max:50'],
             'modulos.*.aviao' => ['nullable','array'],
             'modulos.*.aviao.*' => ['string','max:50'],
         ];
