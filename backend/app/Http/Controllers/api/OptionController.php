@@ -60,6 +60,7 @@ class OptionController extends Controller
         }
 
         $options = $query->paginate($perPage);
+        // dd($options->toArray());
         if($this->sec=='all'){
             //se o campo valor for json, converter para array
             foreach($options as $key => $value){
@@ -218,7 +219,7 @@ class OptionController extends Controller
                     'created_at'      => now(),
                     'updated_at'      => now(),
                 ];
-                // dd($data_salv);
+                // dump($data_salv);
                 $option[$key] = Option::updateOrInsert(
                     [
                         'url' => $key,
@@ -234,7 +235,7 @@ class OptionController extends Controller
         $ret['data'] = $option;
         $ret['message'] = 'Opções atualizadas com sucesso';
         $ret['status'] = 201;
-
+        // dd($ret);
         return response()->json($ret, 201);
     }
 

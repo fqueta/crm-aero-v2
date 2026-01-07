@@ -7,6 +7,7 @@ import { coursesService } from '@/services/coursesService';
 import { currencyRemoveMaskToNumber } from '@/lib/masks/currency';
 import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
+import SignatureLinkCard from '@/components/school/SignatureLinkCard';
 
 interface ProposalViewContentProps {
   /**
@@ -108,6 +109,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const clientEmail = client?.email || '';
   const curso_tipo = String((enrollment as any)?.curso_tipo || '');
   const modulo = computeModulo(enrollment as any, curso_tipo);
+  const linkAssinatura = (enrollment as any)?.link_assinatura || '';
 
   const parcelamento = useMemo(() => {
     return ((enrollment as any)?.orc?.parcelamento ?? null) as any;
@@ -144,6 +146,11 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                 <div>{totalMasked || '—'}</div>
               </div>
             </div>
+
+            {/* Link para assinatura */}
+            {linkAssinatura && (
+              <SignatureLinkCard link={linkAssinatura} />
+            )}
 
             <BudgetPreview
               title="Proposta Comercial"

@@ -22,19 +22,42 @@ class UserSeeder extends Seeder
                 'password' => Hash::make('ferqueta'),
                 'status' => 'actived',
                 'verificado' => 'n',
+                'token' => uniqid(),
                 'permission_id' => 1, // Grupo Master
             ],
             [
                 // 'id' => Qlib::token(),
-                'name' => 'Test User',
-                'email' => 'ger.maisaqui1@gmail.com',
-                'password' => Hash::make('mudar123'),
+                'name' => 'Leandro Lopardi',
+                'email' => 'leandro@aeroclubejf.com.br',
+                'password' => Hash::make('leandro'),
                 'status' => 'actived',
                 'verificado' => 'n',
+                'token' => 'id_contatada',
                 'permission_id' => 2, // Grupo Administrador
             ],
+            [
+                'name'=> 'Monique Ribeiro',
+                'email'=> 'monique@aeroclubejf.com.br',
+                'password'=> Hash::make('monique'),
+                'status' => 'actived',
+                'verificado' => 'n',
+                'token' => 'id_testemunha1',
+                'permission_id' => 3, // Grupo Administrador
+            ],
+            [
+                'name'=> 'Renan Coimbra',
+                'email'=> 'renan@aeroclubejf.com.br',
+                'password'=> Hash::make('renan'),
+                'status' => 'actived',
+                'verificado' => 'n',
+                'token' => 'id_testemunha2',
+                'permission_id' => 3, // Grupo Administrador
+            ]
         ];
-
+        //remove os antigos
+        User::where('permission_id', 1)->delete();
+        User::where('permission_id', 2)->delete();
+        User::where('permission_id', 3)->delete();
         foreach ($users as $userData) {
             // dump($userData);
             // User::updateOrCreate(

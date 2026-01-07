@@ -31,17 +31,17 @@ const formSchema = z.object({
   cpf: z.string().min(11, 'CPF inválido'),
   celular: z.string().min(10, 'Celular inválido'),
   nascimento: z.string().min(10, 'Data de nascimento inválida'),
-  pais_origem: z.string().optional(),
+  pais_origem: z.string().min(1, 'País de origem é obrigatório'),
   canac: z.string().optional(),
-  identidade: z.string().optional(),
-  cep: z.string().optional(),
-  endereco: z.string().optional(),
-  numero: z.string().optional(),
+  identidade: z.string().min(1, 'RG/Identidade é obrigatório'),
+  cep: z.string().min(8, 'CEP obrigatório'),
+  endereco: z.string().min(1, 'Endereço é obrigatório'),
+  numero: z.string().min(1, 'Número é obrigatório'),
   complemento: z.string().optional(),
-  bairro: z.string().optional(),
-  cidade: z.string().optional(),
-  estado: z.string().optional(),
-  nacionalidade: z.string().optional(),
+  bairro: z.string().min(1, 'Bairro é obrigatório'),
+  cidade: z.string().min(1, 'Cidade é obrigatória'),
+  estado: z.string().min(2, 'Estado é obrigatório'),
+  nacionalidade: z.string().min(1, 'Nacionalidade é obrigatória'),
   profissao: z.string().min(1, 'Profissão é obrigatória'),
   sexo: z.string().min(1, 'Sexo é obrigatório'),
   altura: z.string().min(1, 'Altura é obrigatória').refine((val) => !isNaN(Number(val)) && Number(val) > 0, 'Altura inválida'),
@@ -129,7 +129,14 @@ export default function ProposalSignature() {
             canac: data.cliente.config?.canac || '',
             altura: data.cliente.config?.altura ? String(data.cliente.config.altura) : '',
             peso: data.cliente.config?.peso ? String(data.cliente.config.peso) : '',
-            sexo: data.cliente.sexo || data.cliente.genero || '',
+            sexo: (() => {
+              const val = data.cliente.sexo || data.cliente.genero || '';
+              if (['m', 'masculino'].includes(val.toLowerCase())) return 'M';
+              if (['f', 'feminino'].includes(val.toLowerCase())) return 'F';
+              // If 'ni', return empty to force selection (show placeholder 'Selecionar')
+              if (['ni', 'nao informar', 'não informar'].includes(val.toLowerCase())) return ''; 
+              return val;
+            })(),
           });
         }
       } catch (error) {
@@ -370,10 +377,10 @@ export default function ProposalSignature() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Sexo</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
+                              <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || ""}>
                               <FormControl>
                                 <SelectTrigger>
-                                  <SelectValue placeholder="Selecione..." />
+                                  <SelectValue placeholder="Selecionar" />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>

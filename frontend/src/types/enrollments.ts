@@ -53,6 +53,12 @@ export interface EnrollmentRecord {
    */
   config?: { funnelId?: string | number | null; stage_id?: string | number | null; [key: string]: any };
   /**
+   * Signature link
+   * pt-BR: Link público para assinatura do contrato.
+   * en-US: Public link for contract signature.
+   */
+  link_assinatura?: string;
+  /**
    * Generic index signature
    * pt-BR: Permite campos adicionais sem quebrar o TypeScript.
    * en-US: Allows additional fields without breaking TypeScript.

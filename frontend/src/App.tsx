@@ -173,6 +173,7 @@ const App = () => {
               <Route path="/form-client-active/:cpf" element={<PublicClientForm />} />
               <Route path="/public-client-form" element={<PublicClientForm />} />
               <Route path="/aluno/matricula/:compositeId/1" element={<ProposalSignature />} />
+              <Route path="/aluno/assinatura/:compositeId/1" element={<ProposalSignature />} />
               <Route path="/aluno/matricula/:compositeId/2" element={<ProposalApproval />} />
               
               {/* Rotas da loja - protegidas */}

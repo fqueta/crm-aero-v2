@@ -56,13 +56,28 @@ class OptionsTableSeeder extends Seeder
                     'url'   => 'front_url',
                 ],
                 [
-                    'name'  => 'Credenciais da Api Zapsing',
+                    'name'  => 'Credenciais da Api Zapsign',
                     'value' => json_encode([ 
                         "url_api" => "https://api.zapsign.com.br/api/v1", 
                         "id_api" => "" 
                     ]),
-                    'url'   => 'credencias_zapsing',
+                    'url'   => 'credenciais_zapsign',
                 ],
+                // [
+                //     'name'  => 'Id do contatada',
+                //     'value' => 'id_contatada',
+                //     'url'   => 'id_contatada',
+                // ],
+                // [
+                //     'name'  => 'Id do testemunha 1',
+                //     'value' => 'id_testemunha1',
+                //     'url'   => 'id_testemunha1',
+                // ],
+                // [
+                //     'name'  => 'Id do testemunha 2',
+                //     'value' => 'id_testemunha2',
+                //     'url'   => 'id_testemunha2',
+                // ],
             ];
         }else{
             $data = [

@@ -19,17 +19,17 @@ class WebhookController extends Controller
         $seg2 = request()->segment(2);
         $seg3 = request()->segment(3);
         $ret = false;
-        if($seg3=='asaas'){
-            $ret = (new AsaasController)->webhook($request->all());
-        }elseif($seg3=='zenvia'){
-            $ret = (new ZenviaController)->salvar_eventos($request);
-        }elseif($seg3=='rd'){
-            $ret = (new RdstationController)->webhook($request->all());
-        }elseif($seg3=='zapguru'){
-            $ret = (new ZapguruController)->webhook($request->all());
-        }elseif($seg3=='zapsing'){
-            $ret = (new ApiZapsingController)->webhook($request->all());
-        }
+        // if($seg3=='asaas'){
+        //     $ret = (new AsaasController)->webhook($request->all());
+        // }elseif($seg3=='zenvia'){
+        //     $ret = (new ZenviaController)->salvar_eventos($request);
+        // }elseif($seg3=='rd'){
+        //     $ret = (new RdstationController)->webhook($request->all());
+        // }elseif($seg3=='zapguru'){
+            $ret = $this->handleDoubleEndpoint($request, $seg1, $seg2);
+        // }elseif($seg3=='zapsing'){
+        //     $ret = (new ApiZapsingController)->webhook($request->all());
+        // }
         return $ret;
     }
 
@@ -157,6 +157,8 @@ class WebhookController extends Controller
             case 'metrics':
                 return $this->processMetricsWebhook($endp2, $payload, $headers);
 
+            case 'zapsing':
+                return $this->processZapsingWebhook($endp2, $payload, $headers);
             default:
                 return $this->processGenericWebhook($endp1, $endp2, $payload, $headers);
         }
@@ -339,4 +341,24 @@ class WebhookController extends Controller
         // Exemplo básico de verificação
         return !empty($authToken) || !empty($webhookToken);
     }
+    private function processZapsingWebhook(string $endp1, ?string $endp2, array $payload, array $headers): array
+    {
+        Log::info('Processando webhook de zapsing', [
+            'endpoint1' => $endp1,
+            'endpoint2' => $endp2,
+            'payload_keys' => array_keys($payload)
+        ]);
+
+        // Lógica genérica para webhooks não específicos
+        $proccess = (new ZapsingController())->webhook($payload);
+        return [
+            'type' => 'zapsing',
+            'endpoint1' => $endp1,
+            'endpoint2' => $endp2,
+            'processed_at' => now()->toISOString(),
+            'payload_received' => !empty($payload),
+            'data' => $proccess
+        ];
+    }
+    
 }

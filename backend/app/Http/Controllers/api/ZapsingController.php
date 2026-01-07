@@ -6,7 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\MatriculasController;
 use App\Jobs\GeraPdfContratoJoub;
 use App\Jobs\SendZapsingJoub;
-use App\Qlib\Qlib;
+use App\Models\User;
+use App\Services\Qlib;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -33,7 +34,8 @@ class ZapsingController extends Controller
         // dd($this->url_api);
     }
     private function credenciais(){
-        $d = Qlib::qoption('credencias_zapsing');
+        $d = Qlib::qoption('credenciais_zapsign');
+        // dd($d);
         if($d){
             return Qlib::lib_json_array($d);
         }else{
@@ -80,14 +82,15 @@ class ZapsingController extends Controller
             // $body["reminder_every_n_days"] = isset($body["reminder_every_n_days"]) ? $body["reminder_every_n_days"] : 0;
             // $body["allow_refuse_signature"] = isset($body["allow_refuse_signature"]) ? $body["allow_refuse_signature"] : false;
             // $body["disable_signers_get_original_file"] = isset($body["disable_signers_get_original_file"]) ? $body["disable_signers_get_original_file"] : false;
+            // dd($body,$endpoint);
             try {
-                //code...
                 $urlEndpoint = $this->url_api.'/'.$endpoint;
                 $response = Http::withHeaders([
                     'Content-Type' => 'application/json',
                     'Authorization' => $this->api_id,
                 ])->post($urlEndpoint, $body);
-                if($response){
+                // dd($response);
+                if($response){  
                     $ret['exec'] = true;
                     $ret['mens'] = 'Documento enviado com sucesso';
                     $ret['color'] = 'success';
@@ -256,21 +259,23 @@ class ZapsingController extends Controller
     /**
      * Cria um array com os dados de todos quan são os signatarios.
      */
-    public function signers_matricula($sing=[],$type=1){
-        $id_contatada = Qlib::qoption('id_contatada') ? Qlib::qoption('id_contatada') : 14;
-        $id_testemunha1 = Qlib::qoption('id_testemunha1') ? Qlib::qoption('id_testemunha1') : 137;
-        $id_testemunha2 = Qlib::qoption('id_testemunha2') ? Qlib::qoption('id_testemunha2') : 95;
-        $dcont = Qlib::dados_tab_SERVER('usuarios_sistemas','*',"WHERE id='".$id_contatada."'");
-        $dtes1 = Qlib::dados_tab_SERVER('usuarios_sistemas','*',"WHERE id='".$id_testemunha1."' AND ".Qlib::compleDelete());
-        $dtes2 = Qlib::dados_tab_SERVER('usuarios_sistemas','*',"WHERE id='".$id_testemunha2."' AND ".Qlib::compleDelete());
+    public function signers_matricula($sing=[],$type=1){  
+        $id_contatada = 'id_contatada';
+        $id_testemunha1 = 'id_testemunha1';
+        $id_testemunha2 = 'id_testemunha2';
+        // dump($id_contatada,$id_testemunha1,$id_testemunha2);
+        $dcont = User::where('token',$id_contatada)->first();
+        $dtes1 = User::where('token',$id_testemunha1)->first();
+        $dtes2 = User::where('token',$id_testemunha2)->first();
+        // dd($dcont,$dtes1,$dtes2);
         if($type==1){
             //para assinaturas dos documentos a serem enviados no zapsing
             $ret[0]=$sing;
             if($dcont){
                 $arr_dcont = [
-                    "name" => $dcont[0]['nome'],
-                    "email" => $dcont[0]['email'],
-                    "cpf" => $dcont[0]['cpf'],
+                    "name" => $dcont->name,
+                    "email" => $dcont->email,
+                    "cpf" => $dcont->cpf,
                     "send_automatic_email" => true,
                     "send_automatic_whatsapp" => false,
                     "auth_mode" => "CPF", //tokenEmail,assinaturaTela-tokenEmail,tokenSms,assinaturaTela-tokenSms,tokenWhatsapp,assinaturaTela-tokenWhatsapp,CPF,assinaturaTela-cpf,assinaturaTela
@@ -280,9 +285,9 @@ class ZapsingController extends Controller
             }
             if($dtes1){
                 $arr_dtes1 = [
-                    "name" => $dtes1[0]['nome'],
-                    "email" => $dtes1[0]['email'],
-                    "cpf" => $dtes1[0]['cpf'],
+                    "name" => $dtes1->name,
+                    "email" => $dtes1->email,
+                    "cpf" => $dtes1->cpf,
                     "send_automatic_email" => true,
                     "send_automatic_whatsapp" => false,
                     "auth_mode" => "CPF", //tokenEmail,assinaturaTela-tokenEmail,tokenSms,assinaturaTela-tokenSms,tokenWhatsapp,assinaturaTela-tokenWhatsapp,CPF,assinaturaTela-cpf,assinaturaTela
@@ -292,9 +297,9 @@ class ZapsingController extends Controller
             }
             if($dtes2){
                 $arr_dtes2 = [
-                    "name" => $dtes2[0]['nome'],
-                    "email" => $dtes2[0]['email'],
-                    "cpf" => $dtes2[0]['cpf'],
+                    "name" => $dtes2->name,
+                    "email" => $dtes2->email,
+                    "cpf" => $dtes2->cpf,
                     "send_automatic_email" => true,
                     "send_automatic_whatsapp" => false,
                     "auth_mode" => "CPF", //tokenEmail,assinaturaTela-tokenEmail,tokenSms,assinaturaTela-tokenSms,tokenWhatsapp,assinaturaTela-tokenWhatsapp,CPF,assinaturaTela-cpf,assinaturaTela
@@ -330,5 +335,120 @@ class ZapsingController extends Controller
         return $ret;
     }
 
+    /**
+     * Envia o envelope para o ZapSign
+     * @param int $id_matricula
+     * @return array
+     */
+    public function enviar_envelope($id_matricula)
+    {
+        $ret['exec'] = false;
+        //converte id_matricula em int
+        $id_matricula = (int)$id_matricula;
+        // Verify if envelope was already sent
+        $verificar = Qlib::get_matriculameta($id_matricula, 'enviar_envelope');
+        if ($verificar) {
+            if($verificar!='false'){
+                $ret['mens'] = 'Envelope já enviado anteriormente.';
+                return $ret;
+            }
+        }
+
+        try {
+            $matricula = \App\Models\Matricula::findOrFail($id_matricula);
+            $cliente = \App\Models\User::find($matricula->id_cliente);
+
+            if (!$cliente) {
+                throw new \Exception("Client not found for Matricula ID: $id_matricula");
+            }
+            
+            // Fetch PDF URLs from metadata
+            $propostaPdfUrl = Qlib::get_matriculameta($id_matricula, 'proposta_pdf');
+            $contratosMeta = Qlib::get_matriculameta($id_matricula, 'contrato_pdf');
+            $docs = [];
+
+            // Add Proposal PDF
+            if ($propostaPdfUrl) {
+                $docs[] = [
+                    'name' => 'Proposta de Matrícula',
+                    'url_pdf' => $propostaPdfUrl,
+                ];
+            }
+
+            // Add Contract PDFs
+            if ($contratosMeta) {
+                $decoded = json_decode($contratosMeta, true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $contrato) {
+                        if (isset($contrato['url_pdf'])) {
+                             $docs[] = [
+                                'name' => isset($contrato['nome_contrato']) ? $contrato['nome_contrato'] : 'Contrato',
+                                'url_pdf' => $contrato['url_pdf'],
+                            ];
+                        } elseif (isset($contrato['url'])) {
+                             $docs[] = [
+                                'name' => isset($contrato['nome_contrato']) ? $contrato['nome_contrato'] : 'Contrato',
+                                'url_pdf' => $contrato['url'],
+                            ];
+                        }
+                    }
+                } else {
+                    $docs[] = [
+                        'name' => 'Contrato de Prestação de Serviços',
+                        'url_pdf' => $contratosMeta,
+                    ];
+                }
+            }
+
+            if (empty($docs)) {
+                throw new \Exception("No documents found for sending to ZapSign (Matricula ID: $id_matricula)");
+            }
+
+            // Prepare Signer
+            $signer = [
+                'name' => $cliente->name,
+                'email' => $cliente->email,
+                'cpf' => $cliente->cpf,
+                'send_automatic_email' => true,
+                'send_automatic_whatsapp' => false,
+            ];
+
+            $signers = $this->signers_matricula($signer);
+            // Prepare Envelope Payload 
+            $body = [
+                'name' => 'Matrícula #' . $id_matricula . ' - ' . $cliente->name,
+                'folder_path' => '/' . config('app.id_app', 'CRM'),
+                'signers' => $signers,
+                'docs' => $docs,
+                'lang' => 'pt-br',
+            ];
+
+
+            $response = $this->post([
+                'endpoint' => 'docs', 
+                'body' => $body
+            ]);
+
+            if (isset($response['exec']) && $response['exec']) {
+                $responseData = $response['response'] ?? [];
+                
+                // Save metadata
+                Qlib::update_matriculameta($id_matricula, 'enviar_envelope', json_encode($responseData));
+                
+                if (isset($responseData['external_id'])) {
+                     Qlib::update_matriculameta($id_matricula, 'processo_assinatura', json_encode($responseData));
+                }
+                $ret['exec'] = true;
+                $ret['mens'] = 'Enviado com sucesso!';
+                $ret['response'] = $responseData;
+            } else {
+                $ret['mens'] = isset($response['mens']) ? $response['mens'] : 'Erro desconhecido ao enviar.';
+            }
+
+        } catch (\Throwable $e) {
+            $ret['mens'] = $e->getMessage();
+        }
+        return $ret;
+    }
 
 }

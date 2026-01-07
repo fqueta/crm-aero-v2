@@ -15,6 +15,7 @@ import { proposalService } from "@/services/proposalService";
 
 import { cpfApplyMask } from "@/lib/masks/cpf-apply-mask";
 import { phoneApplyMask } from "@/lib/masks/phone-apply-mask";
+import { cepApplyMask } from "@/lib/masks/cep-apply-mask";
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return 'N/A';
@@ -144,14 +145,14 @@ export default function ProposalApproval() {
                         <div className="mx-auto bg-green-100 text-green-600 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
                             <CheckCircle className="w-8 h-8" />
                         </div>
-                        <CardTitle className="text-2xl text-green-800">Proposta Aprovada!</CardTitle>
+                        <CardTitle className="text-2xl text-green-800">Proposta Aguardado Assinatura Digital!</CardTitle>
                         <CardDescription>
-                            Sua matrícula foi confirmada com sucesso.
+                            A proposta foi aprovada e está aguardando assinatura digital.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="text-center space-y-4">
                         <p className="text-gray-600">
-                           Obrigado, {proposal.cliente?.name}. Todos os passos foram concluídos.
+                           Obrigado, <strong>{proposal.cliente?.name}</strong>. Em breve voce receberá uma mensagem com o link para assinar a proposta.
                         </p>
                         <Button variant="outline" onClick={() => window.open('https://aeroclubejf.com.br', '_blank')}>
                             Voltar ao site
@@ -209,6 +210,16 @@ export default function ProposalApproval() {
                                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Turma</label>
                                 <div className="text-base text-slate-700">{proposal.turma_nome || 'N/A'}</div>
                             </div>
+                            
+                            {/* Display Period information if course type is 4 */}
+                            {(proposal.curso_tipo === '4' || proposal.curso_tipo === 4) && proposal.orc?.modulos?.[0]?.nome && (
+                                <div>
+                                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Período</label>
+                                    <div className="text-base text-slate-700 bg-blue-50 px-2 py-1 rounded inline-block">
+                                        {proposal.orc.modulos[0].nome}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="space-y-6 md:text-right">
                              <div>
@@ -270,91 +281,66 @@ export default function ProposalApproval() {
                              <label className="text-xs font-medium text-slate-500">Data de Nascimento</label>
                              <div className="text-slate-900">{formatDate(proposal.cliente?.config?.nascimento || proposal.cliente?.nascimento)}</div>
                          </div>
+
+                         <div className="col-span-full border-t border-slate-100 my-2"></div>
+
+                         {/* Address Section */}
+                         <div className="space-y-1">
+                             <label className="text-xs font-medium text-slate-500">CEP</label>
+                             <div className="text-slate-900">{cepApplyMask(proposal.cliente?.config?.cep || '')}</div>
+                         </div>
+                         <div className="space-y-1 md:col-span-2">
+                             <label className="text-xs font-medium text-slate-500">Endereço</label>
+                             <div className="text-slate-900">
+                                {proposal.cliente?.config?.endereco}, {proposal.cliente?.config?.numero}
+                                {proposal.cliente?.config?.complemento ? ` - ${proposal.cliente?.config?.complemento}` : ''}
+                             </div>
+                         </div>
+                         <div className="space-y-1">
+                             <label className="text-xs font-medium text-slate-500">Bairro</label>
+                             <div className="text-slate-900">{proposal.cliente?.config?.bairro}</div>
+                         </div>
+                         <div className="space-y-1">
+                             <label className="text-xs font-medium text-slate-500">Cidade/UF</label>
+                             <div className="text-slate-900">
+                                {proposal.cliente?.config?.cidade} / {proposal.cliente?.config?.estado}
+                             </div>
+                         </div>
                     </div>
                 </CardContent>
             </Card>
 
-            {/* Contracts Card */}
-            <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
-                <div className="bg-slate-50/50 p-6 border-b border-slate-100 flex items-center gap-3">
-                    <div className="p-2 bg-amber-100 rounded-lg text-amber-600">
-                       <LucideScrollText className="w-5 h-5" />
-                    </div>
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Termos e Contratos</h2>
-                        <p className="text-sm text-slate-500">Leia e aceite para continuar</p>
-                    </div>
-                </div>
-                <CardContent className="p-6 md:p-8">
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                            <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-4 space-y-4">
-                                {/* <FormField
-                                    control={form.control}
-                                    name="regrasGerais"
-                                    render={({ field }) => (
-                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                        <FormControl>
-                                        <Checkbox checked={field.value} onCheckedChange={field.onChange} className="mt-1" />
-                                        </FormControl>
-                                        <div className="space-y-1 leading-snug">
-                                        <FormLabel className="font-normal text-slate-700">
-                                            Li e concordo com o <a href="#" className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">Manual de Regras Gerais</a> do Aeroclube Juiz de Fora.
-                                        </FormLabel>
-                                        <FormMessage />
-                                        </div>
-                                    </FormItem>
-                                    )}
-                                /> */}
-
-                                {proposal.meta?.contrato_pdf?.map((contrato: any, index: number) => (
-                                    <div key={index} className="flex flex-row items-start space-x-3 space-y-0">
-                                         <Checkbox 
-                                            id={`contrato-${index}`}
-                                            checked={true} // Forcing checked or managing state? User said "populate", assuming they need to accept. 
-                                            // Ideally we should track acceptance, but for now let's just show them as links they assume to accept by submitting
-                                            // Or better, let's use a simple state or just visually list them since the user request was "populated by a list"
-                                            // The previous code had checkboxes. I'll make them checked checkboxes that link to the URL.
-                                            disabled={false}
-                                            className="mt-1"
-                                         />
-                                         <div className="space-y-1 leading-snug">
-                                            <label htmlFor={`contrato-${index}`} className="font-normal text-slate-700 text-sm cursor-pointer">
-                                                Li e aceito o <a href={contrato.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">{contrato.nome_contrato}</a>.
-                                            </label>
-                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-4 pt-4">
-                                <Button type="button" variant="ghost" 
-                                    onClick={() => navigate(`/aluno/matricula/${compositeId}/1`)}
-                                    className="text-slate-500 hover:text-slate-900 w-full sm:w-auto"
-                                >
-                                    ❮ Voltar e Editar
-                                </Button>
-                                <Button type="submit" 
-                                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-6 px-8 text-lg w-full sm:w-auto shadow-lg shadow-green-600/20 transition-all hover:scale-[1.02]" 
-                                    disabled={submitting}
-                                >
-                                    {submitting ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                        Processando...
-                                    </>
-                                    ) : (
-                                    <>
-                                        Aprovar Proposta
-                                        <LucideCheck className="ml-2 h-5 w-5" />
-                                    </>
-                                    )}
-                                </Button>
-                            </div>
-                        </form>
-                    </Form>
-                </CardContent>
-            </Card>
+            {/* Action Buttons - Terms Card removed temporarily */}
+            <div className="mt-8">
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                        <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-4 pt-4">
+                            <Button type="button" variant="ghost" 
+                                onClick={() => navigate(`/aluno/matricula/${compositeId}/1`)}
+                                className="text-slate-500 hover:text-slate-900 w-full sm:w-auto"
+                            >
+                                ❮ Voltar e Editar
+                            </Button>
+                            <Button type="submit" 
+                                className="bg-green-600 hover:bg-green-700 text-white font-bold py-6 px-8 text-lg w-full sm:w-auto shadow-lg shadow-green-600/20 transition-all hover:scale-[1.02]" 
+                                disabled={submitting}
+                            >
+                                {submitting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                    Processando...
+                                </>
+                                ) : (
+                                <>
+                                    Aprovar Proposta
+                                    <LucideCheck className="ml-2 h-5 w-5" />
+                                </>
+                                )}
+                            </Button>
+                        </div>
+                    </form>
+                </Form>
+            </div>
           </div>
 
         </div>

@@ -558,9 +558,9 @@ class MatriculaController extends Controller
             ->get()
             ->toArray();
         //incluir o campo com link publico da proposta
-        $link = '/aluno/matricula/'.$matricula->id_cliente.'_'.Qlib::zeroFill($matricula->id,5);
-        $data['link_orcamento'] = Qlib::qoption('front_url') . $link;//$matricula->link_orcamento??'';
-        $data['link_assinatura'] = Qlib::qoption('front_url') . str_replace('matricula','assinatura',$link);//$matricula->link_orcamento??'';
+        $link = '/aluno/matricula/'.$matricula->id_cliente.'_'.Qlib::zeroFill($matricula->id,5).'/1';
+        $data['link_orcamento'] = Qlib::qoption('front_url') . $link;
+        $data['link_assinatura'] = Qlib::qoption('front_url') . str_replace('matricula','assinatura',$link);
         return $data;
     }
 
@@ -801,43 +801,30 @@ class MatriculaController extends Controller
 		return $ret;
 	}
 
+    /**
+     * Helper to get matricula ID by token (stored in config).
+     */
+    public function get_id_by_token($token)
+    {
+        if (!$token) return null;
+        return Matricula::where('config->token', $token)->value('id');
+    }
+
 
     /**
      * Public endpoint to show proposal details for signature.
      */
     public function publicShow($client_id, $matricula_id)
     {
-        // Simple validation or hash check could be added here for security
-        // For now, fetching by IDs as requested
-        
         try {
-            $matricula = Matricula::join('cursos', 'matriculas.id_curso', '=', 'cursos.id')
-                ->join('turmas', 'matriculas.id_turma', '=', 'turmas.id')
-                ->select('matriculas.*', 'cursos.nome as curso_nome', 'cursos.tipo as curso_tipo', 'turmas.nome as turma_nome')
-                ->where('matriculas.id', $matricula_id)
-                ->where('matriculas.id_cliente', $client_id)
+            // Validation: Ensure the matricula exists and belongs to the client
+            Matricula::where('id', $matricula_id)
+                ->where('id_cliente', $client_id)
                 ->firstOrFail();
 
-            $client = User::findOrFail($client_id);
-            // Config is already cast to array in User model, but check just in case
-            if (!is_array($client->config)) {
-               $client->config = is_string($client->config) ? (json_decode($client->config, true) ?? []) : [];
-            }
-
-            $data = $matricula->toArray();
+            // Unify response using dm() helper
+            $data = $this->dm($matricula_id, $client_id);
             
-            // Format values for frontend
-            // Using Qlib::formatMoney or number_format if Qlib not available, assuming raw values are floats
-            // $data['valor_proposta_formatted'] = 'R$ ' . number_format($matricula->total ?? 0, 2, ',', '.');
-            
-            $data['cliente'] = $client->toArray();
-            $data['meta'] = $this->getAllMatriculaMeta($matricula_id);
-            $data['matricula'] = $matricula->toArray();
-            // Hide sensitive fields
-            unset($data['cliente']['password']);
-            unset($data['cliente']['remember_token']);
-            unset($data['cliente']['token']);
-            // dd($data);
             return response()->json($data);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
@@ -853,6 +840,8 @@ class MatriculaController extends Controller
     public function publicSign(Request $request, $client_id, $matricula_id)
     {
         try {
+            // tranform matricual_id em int
+            $matricula_id = (int) $matricula_id;
             $client = User::findOrFail($client_id);
             
             // Validate request data
@@ -860,26 +849,24 @@ class MatriculaController extends Controller
             $rules = [
                 'name' => 'required|string|max:255',
                 'email' => ['required', 'email', Rule::unique('users')->ignore($client->id)],
-                // 'pais_origem' -> stored in config or specific field? Assuming config or extra field.
-                // 'telefone' -> 'celular'?
-                'celular' => ['nullable', 'string', Rule::unique('users')->ignore($client->id)],
-                'nascimento' => 'nullable|date', // or string format validation
+                'celular' => ['required', 'string', Rule::unique('users')->ignore($client->id)],
+                'nascimento' => 'required|date',
                 'cpf' => ['required', 'string', Rule::unique('users')->ignore($client->id)],
-                'cep' => 'nullable|string',
-                'endereco' => 'nullable|string',
-                'numero' => 'nullable|string',
+                'cep' => 'required|string',
+                'endereco' => 'required|string',
+                'numero' => 'required|string',
                 'complemento' => 'nullable|string',
-                'bairro' => 'nullable|string',
-                'cidade' => 'nullable|string',
-                'estado' => 'nullable|string', // UF
-                'nacionalidade' => 'nullable|string',
-                'profissao' => 'nullable|string',
-                'sexo' => 'nullable|string',
-                'altura' => 'nullable|numeric',
-                'peso' => 'nullable|numeric',
-                // Extra fields might go into config
+                'bairro' => 'required|string',
+                'cidade' => 'required|string',
+                'estado' => 'required|string', 
+                'nacionalidade' => 'required|string',
+                'profissao' => 'required|string',
+                'sexo' => 'required|string',
+                'altura' => 'required|numeric',
+                'peso' => 'required|numeric',
                 'canac' => 'nullable|string',
-                'identidade' => 'nullable|string',
+                'identidade' => 'required|string',
+                'pais_origem' => 'required|string',
             ];
 
             $validator = Validator::make($request->all(), $rules);
@@ -901,7 +888,7 @@ class MatriculaController extends Controller
             // List of potential config fields based on standard User models in this project type
             $configFields = [
                 'pais_origem', 'canac', 'identidade', 'cep', 'endereco', 'numero',
-                'complemento', 'bairro', 'cidade', 'estado', 'nacionalidade',
+                'complemento', 'bairro', 'cidade', 'estado', 'nacionalidade','sexo','','','','','',
                 'profissao', 'altura', 'peso', 'nascimento', 'data_de_nascimento'
             ];
             
@@ -935,6 +922,7 @@ class MatriculaController extends Controller
 
             // Mark Step 1 as done in Matricula config
             $matricula = \App\Models\Matricula::find($matricula_id);
+            $ret['exec'] = false;
             if ($matricula) {
                 $matConfig = $matricula->config ?? [];
                 $matConfig['step1_done'] = true;
@@ -942,19 +930,22 @@ class MatriculaController extends Controller
                 $matricula->config = $matConfig;
                 $matricula->save();
                 //gerar pdf
-                $dm = $this->dm($matricula_id); 
-                $list_pdf_contratos = $this->contratos_periodos_pdf($matricula_id,$dm);
-                if($list_pdf_contratos) {
-                    $ret['exec'] = true;
-                }
+                // $dm = $this->dm($matricula_id); 
+                // $list_pdf_contratos = $this->contratos_periodos_pdf($matricula_id);
+                // if($list_pdf_contratos) {
+                    $ret = [
+                        'message' => 'Dados atualizados com sucesso!',
+                        'redirect' => '/aluno/matricula/' . $client_id . '_' . Qlib::zerofill($matricula_id, 5) . '/2',
+                        'client' => $client,
+                        // 'list_pdf' => $list_pdf_contratos,
+                        'exec' => true,
+                    ];
+                // }
             }
-
-            return response()->json([
-                'message' => 'Dados atualizados com sucesso!',
-                'redirect' => '/aluno/matricula/' . $client_id . '_' . $matricula_id . '/2',
-                'client' => $client,
-                'list_pdf' => $list_pdf_contratos,
-            ]);
+            if(!$ret['exec']){
+                $ret['message'] = 'Erro ao atualizar dados';
+            }
+            return response()->json($ret ,($ret['exec'])?200:500);
 
         } catch (\Exception $e) {
             return response()->json(['error' => 'Erro ao salvar dados: ' . $e->getMessage()], 500);
@@ -1018,8 +1009,13 @@ class MatriculaController extends Controller
             // if(!$ids){
                 //Buscar ids atualizados dos contratos atravez do id do periodo
                 $id_periodos = $dm['orc']['modulos'][0]['id']??null;
-                $d_periodo = (new PeriodoController())->show($id_periodos)->getData()->id_contratos;
+                try {
+                    $d_periodo = (new PeriodoController())->show($id_periodos)->getData()->id_contratos;
+                }catch(\Exception $e){
+                    $d_periodo = [];
+                }
                 $ids = $d_periodo??[];
+                // dd($ids);
                 // return response()->json(['error' => 'IDs dos contratos são necessários'], 400);
             // }
             // dd($dm,$ids);
@@ -1035,7 +1031,11 @@ class MatriculaController extends Controller
                 $dm['identidade'] = $dm['cliente']['config']['rg']??'';
                 // dd($dm);
                 foreach($ids as $id){
-                    $cont = $cc->show($id)->getData();
+                    try {
+                        $cont = $cc->show($id)->getData();
+                    } catch (\Exception $e) {
+                       continue;
+                    }
                     //Aplicar shortcodes
                     $cont->conteudo = Qlib::apply_shortcodes($cont->conteudo,$dm);
                     $contratos[] = ['id'=>$id,'conteudo'=>$cont->conteudo,'nome'=>$cont->nome,'slug'=>$cont->slug];
@@ -1105,7 +1105,7 @@ class MatriculaController extends Controller
      */
 
 
-use Illuminate\Support\Facades\Bus; // Added Bus import
+
 
     public function publicApprove(Request $request, $client_id, $matricula_id)
     {
@@ -1134,7 +1134,7 @@ use Illuminate\Support\Facades\Bus; // Added Bus import
                 new GeraPdfcontratosPnlJob($matricula_id),
                 new SendPeriodosZapsingJob($matricula_id),
             ])->dispatch();
-
+            
             return response()->json(['message' => 'Proposta aprovada com sucesso!']);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Erro ao aprovar proposta: ' . $e->getMessage()], 500);
