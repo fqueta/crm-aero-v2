@@ -10,6 +10,20 @@ use Stancl\Tenancy\Database\Concerns\HasDomains;
 class Tenant extends BaseTenant implements TenantWithDatabase
 {
     use HasDatabase, HasDomains;
+    
+    public static function getCustomColumns(): array
+    {
+        return [
+            'id',
+            'ativo',
+            'excluido',
+            'deletado',
+            'autor',
+            'reg_excluido',
+            'reg_deletado',
+            'data',
+        ];
+    }
 
     /**
      * Accessor: retorna o slug salvo na coluna JSON `data` do tenant.

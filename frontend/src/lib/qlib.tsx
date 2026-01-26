@@ -26,7 +26,19 @@ export function getTenantApiUrl(): string {
   
   // console.log('getTenantApiUrl', replaced);
   // Normalize: remove trailing slashes to avoid double slashes when concatenating version
-  return replaced.replace(/\/+$/, '');
+  let base = replaced.replace(/\/+$/, '');
+  // Dev fallback: if using *.localhost and DNS doesn't resolve, prefer 127.0.0.1
+  // Ex.: http://api-crm.localhost:8002/api -> http://127.0.0.1:8002/api
+  /*
+  if ((import.meta.env as any).DEV) {
+    const currentHost = window.location.hostname;
+    const shouldForceIp = currentHost === '127.0.0.1' || currentHost === 'localhost';
+    base = base.replace(/^https?:\/\/[^/]*\.localhost:(\d+)(\/.*)?$/i, (_m, port, path = '') => {
+      return shouldForceIp ? `http://127.0.0.1:${port}${path}` : `http://localhost:${port}${path}`;
+    });
+  }
+  */
+  return base;
 }
 
 /**

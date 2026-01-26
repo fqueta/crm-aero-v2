@@ -13,19 +13,24 @@ return new class extends Migration
     {
         // Remover índices para evitar erros ao alterar tipo
         try {
-            DB::statement('ALTER TABLE `client_attendances` DROP INDEX `client_attendances_client_id_index`');
+            Schema::table('client_attendances', function ($table) {
+                $table->dropIndex(['client_id']);
+            });
         } catch (\Throwable $e) {
-            // ignore se não existir
         }
+        
         try {
-            DB::statement('ALTER TABLE `client_attendances` DROP INDEX `client_attendances_attended_by_index`');
+            Schema::table('client_attendances', function ($table) {
+                $table->dropIndex(['attended_by']);
+            });
         } catch (\Throwable $e) {
-            // ignore se não existir
         }
 
         // Alterar tipos para VARCHAR(26) (ULID)
-        DB::statement('ALTER TABLE `client_attendances` MODIFY `client_id` VARCHAR(26) NOT NULL');
-        DB::statement('ALTER TABLE `client_attendances` MODIFY `attended_by` VARCHAR(26) NOT NULL');
+        Schema::table('client_attendances', function ($table) {
+            $table->string('client_id', 26)->change();
+            $table->string('attended_by', 26)->change();
+        });
 
         // Recriar índices
         Schema::table('client_attendances', function ($table) {
@@ -40,16 +45,22 @@ return new class extends Migration
     public function down(): void
     {
         try {
-            DB::statement('ALTER TABLE `client_attendances` DROP INDEX `client_attendances_client_id_index`');
+            Schema::table('client_attendances', function ($table) {
+                $table->dropIndex(['client_id']);
+            });
         } catch (\Throwable $e) {
         }
         try {
-            DB::statement('ALTER TABLE `client_attendances` DROP INDEX `client_attendances_attended_by_index`');
+            Schema::table('client_attendances', function ($table) {
+                $table->dropIndex(['attended_by']);
+            });
         } catch (\Throwable $e) {
         }
 
-        DB::statement('ALTER TABLE `client_attendances` MODIFY `client_id` BIGINT UNSIGNED NOT NULL');
-        DB::statement('ALTER TABLE `client_attendances` MODIFY `attended_by` BIGINT UNSIGNED NOT NULL');
+        Schema::table('client_attendances', function ($table) {
+            $table->unsignedBigInteger('client_id')->change();
+            $table->unsignedBigInteger('attended_by')->change();
+        });
 
         Schema::table('client_attendances', function ($table) {
             $table->index('client_id');

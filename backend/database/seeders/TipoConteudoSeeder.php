@@ -27,23 +27,27 @@ class TipoConteudoSeeder extends Seeder
         ];
 
         foreach ($tipos as $id => $nome) {
-            DB::table('posts')->updateOrInsert(
-                ['ID' => $id],
-                [
-                    'post_author' => 0,
-                    'post_title' => $nome,
-                    'post_name' => Str::slug($nome),
-                    'post_status' => 'publish',
-                    'post_type' => 'tipo_conteudo',
-                    'menu_order' => 0,
-                    'comment_status' => 'closed',
-                    'ping_status' => 'closed',
-                    'guid' => (string)$id,
-                    'comment_count' => 0,
-                    'updated_at' => now(),
-                    'created_at' => DB::raw('COALESCE((SELECT created_at FROM posts WHERE ID = '.$id.'), NOW())'),
-                ]
-            );
+            $values = [
+                'post_author' => 0,
+                'post_title' => $nome,
+                'post_name' => Str::slug($nome),
+                'post_status' => 'publish',
+                'post_type' => 'tipo_conteudo',
+                'menu_order' => 0,
+                'comment_status' => 'closed',
+                'ping_status' => 'closed',
+                'guid' => (string)$id,
+                'comment_count' => 0,
+                'updated_at' => now(),
+            ];
+
+            if (DB::table('posts')->where('ID', $id)->exists()) {
+                DB::table('posts')->where('ID', $id)->update($values);
+            } else {
+                $values['ID'] = $id;
+                $values['created_at'] = now();
+                DB::table('posts')->insert($values);
+            }
         }
     }
 }

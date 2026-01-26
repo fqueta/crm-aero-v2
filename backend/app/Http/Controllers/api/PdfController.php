@@ -83,6 +83,24 @@ class PdfController extends Controller
     }
 
     /**
+     * Normaliza HTML para desenvolvimento local reescrevendo hosts não resolvíveis.
+     * EN: Normalize HTML for local development by rewriting unresolved hosts.
+     */
+    private function rewriteLocalDevHosts(string $html): string
+    {
+        try {
+            $replacements = [
+                'http://api-crm.localhost:8002' => 'http://127.0.0.1:8002',
+                'https://api-crm.localhost:8002' => 'http://127.0.0.1:8002',
+            ];
+            $html = str_replace(array_keys($replacements), array_values($replacements), $html);
+        } catch (\Throwable $e) {
+            // silencioso
+        }
+        return $html;
+    }
+
+    /**
      * Gera um PDF com a listagem de componentes (post_type=componentes) aplicando filtros.
      * Generate a PDF listing of components (post_type=componentes) applying filters.
      *
@@ -318,6 +336,7 @@ class PdfController extends Controller
         // PT: Inicializa $extraPagesRaw para garantir existência antes de uso.
         // EN: Initialize $extraPagesRaw to ensure it exists before usage.
         $extraPagesRaw = [];
+        // dd($listaPaginas);
         if(is_array($listaPaginas)){
             foreach($listaPaginas as $key => $item){
                 $extraPagesRaw[$key]['html'] = $item['description'] ?? '';
@@ -371,8 +390,8 @@ class PdfController extends Controller
                 ];
             }
         }
-        // dd($galleryBackgrounds);
         if (!$skipExtras && !empty($galleryBackgrounds)) {
+            // dd($skipExtras,$galleryBackgrounds);
             // Function-level comment: Read optional defaults for background focus/fit from request.
             // PT: Lê defaults opcionais para posição e ajuste do fundo.
             // EN: Read optional defaults for background position and fit.
@@ -431,8 +450,12 @@ class PdfController extends Controller
             'cta_text' => (string)$request->input('cta_text', ''),
             'extra_pages' => $extraPages,
         ])->render();
+        // return $html;
+        // Reescreve hosts locais para evitar HostNotFound no wkhtmltopdf
+        // $html = $this->rewriteLocalDevHosts($html);
         // Modo de depuração opcional: retorna o HTML renderizado sem gerar PDF
         // Optional debug mode: return rendered HTML without generating PDF
+        // return $html;
         if ($request->boolean('debug_html')) {
             return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
         }
@@ -495,6 +518,10 @@ class PdfController extends Controller
                     // Continua gerando se não for possível obter mtime.
                 }
             }
+            // Se force=true, apaga o arquivo atual para garantir sobrescrita sem interferência de cache
+            if ($force && $disk->exists($relative)) {
+                try { $disk->delete($relative); } catch (\Throwable $e) { /* silencioso */ }
+            }
         }
         // Function-level comment: Engine selection without interrupting execution flow.
         // PT: Remove debug (dd) para não interromper a geração do PDF.
@@ -532,7 +559,6 @@ class PdfController extends Controller
                 $engine = 'wkhtmltopdf'; // fallback
             }
         }
-
         if ($engine !== 'browsershot') {
             // Geração do PDF com Snappy (wkhtmltopdf), salvando via Storage::put
             // PT: Usa wkhtmltopdf para evitar timeouts do Chromium em Windows.
@@ -545,17 +571,17 @@ class PdfController extends Controller
                 }
                 $headerHtml = View::make('pdf.header')->render();
                 $footerHtml = View::make('pdf.footer')->render();
-
                 if ($shouldGenerate) {
-                   // if(isset($_GET['tes'])){
+                   // if(isset($_GET['test'])){
                     //     return $headerHtml.$html.$footerHtml;
                     // }
                     // Function-level comment: Build wkhtmltopdf with header/footer and stable scale.
                     // PT: Monta wkhtmltopdf com cabeçalho/rodapé e escala estável 1:1.
                     // EN: Build wkhtmltopdf with header/footer and stable 1:1 scale.
-                    $pdfBinary = SnappyPdf::loadHTML($html)
+                    $pdf = SnappyPdf::loadHTML($html)
                         ->setOption('encoding', 'utf-8')
                         ->setOption('enable-local-file-access', true)
+                        ->setOption('load-error-handling', 'ignore')
                         ->setPaper('a4')
                         ->setOption('page-width', '210mm')
                         ->setOption('page-height', '297mm')
@@ -577,11 +603,35 @@ class PdfController extends Controller
                             '{PAGE_COUNT}' => '{PAGE_COUNT}'
                         ])
                         ->setOption('footer-html', $footerHtml)
-                        ->output();
-                    if (!$noStore) {
-                        // Grava o PDF pelo disco público
-                        $disk->put($relative, $pdfBinary);
-                        $absolute = $disk->path($relative);
+                        ->setTimeout(300);
+                    if ($noStore) {
+                        return $pdf->inline($filename);
+                    } else {
+                        // Salva usando o driver Knp\Snappy para compatibilidade com versões do wrapper
+                        $knp = app('snappy.pdf');
+                        $opts = [
+                            'encoding' => 'utf-8',
+                            'enable-local-file-access' => true,
+                            'load-error-handling' => 'ignore',
+                            'page-width' => '210mm',
+                            'page-height' => '297mm',
+                            'zoom' => '1.0',
+                            'header-html' => $headerHtml,
+                            'margin-top' => 0,
+                            'margin-bottom' => 0,
+                            'margin-left' => 0,
+                            'margin-right' => 0,
+                            'disable-smart-shrinking' => true,
+                            'footer-spacing' => '0',
+                            'print-media-type' => true,
+                            'background' => true,
+                            'replace' => [
+                                '{PAGE_NUM}' => '{PAGE_NUM}',
+                                '{PAGE_COUNT}' => '{PAGE_COUNT}',
+                            ],
+                            'footer-html' => $footerHtml,
+                        ];
+                        $knp->generateFromHtml($html, $absolute, $opts);
                     }
                 }
             } catch (\Throwable $e) {
@@ -600,21 +650,12 @@ class PdfController extends Controller
 
         // Metadados do arquivo
         $mime = 'application/pdf';
-        $size = $noStore ? ($pdfBinary ? strlen($pdfBinary) : null) : ($disk->exists($relative) ? $disk->size($relative) : null);
+        $size = $noStore ? null : ($disk->exists($relative) ? $disk->size($relative) : null);
 
         // Upsert registro em posts como files_uload
         if ($noStore) {
-            // Function-level comment: Stream PDF inline without caching.
-            // PT: Retorna o PDF em streaming, sem salvar e sem cache.
-            // EN: Stream the PDF inline, without saving and without cache.
-            return response($pdfBinary, 200)
-                ->header('Content-Type', $mime)
-                ->header('Content-Disposition', 'inline; filename="' . $filename . '"')
-                ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
-                ->header('Pragma', 'no-cache')
-                ->header('Expires', '0');
+            // Já retornado acima via inline; não persiste metadados.
         }
-
         // Persistente: mantém comportamento anterior (salva e retorna metadados JSON)
         $post = Post::where('post_type','files_uload')->where('guid',$relative)->first() ?? new Post();
         $post->post_type = 'files_uload';
@@ -631,6 +672,8 @@ class PdfController extends Controller
         $post->save();
         // URL pública
         $publicUrl = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
+        // Sanitiza possíveis vírgulas acidentais
+        $publicUrl = rtrim((string)$publicUrl, ", \t\n\r\0\x0B");
         //Gravar campo meta com o link do PDF
         $saveLink = Qlib::update_matriculameta($matricula->id, 'proposta_pdf', $publicUrl);
 
@@ -639,7 +682,8 @@ class PdfController extends Controller
                 'id' => $post->ID,
                 'nome' => $post->post_title,
                 'slug' => $post->post_name,
-                'url' => $publicUrl,
+                // Retorna URL com cache-busting; mantém meta com URL estável
+                'url' => $publicUrl . (str_contains($publicUrl, '?') ? '&' : '?') . 'v=' . time(),
                 'mime' => $mime,
                 'save_link' => $saveLink,
                 'size' => $size,

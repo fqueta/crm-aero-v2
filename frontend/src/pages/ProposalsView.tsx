@@ -73,7 +73,7 @@ export default function ProposalsView() {
     if (!id) return;
     try {
       const base = getApiUrl();
-      const url = `${base}/pdf/matriculas/${encodeURIComponent(String(id))}?debug_html=0&engine=snap&no_store=0`;
+      const url = `${base}/pdf/matriculas/${encodeURIComponent(String(id))}?debug_html=0&engine=snap&no_store=0&force=1&cache_ttl=0`;
       const headers: HeadersInit = { Accept: 'application/json' };
       const tk = token || localStorage.getItem('auth_token');
       if (tk) headers['Authorization'] = `Bearer ${tk}`;
@@ -82,10 +82,28 @@ export default function ProposalsView() {
         toast({ title: 'Erro', description: `Falha ao gerar PDF (HTTP ${resp.status})`, variant: 'destructive' });
         return;
       }
+      // Trata tanto JSON quanto PDF/HTML direto
+      const ct = resp.headers.get('Content-Type') || '';
+      if (ct.includes('application/pdf')) {
+        const blob = await resp.blob();
+        const urlBlob = URL.createObjectURL(blob);
+        window.open(urlBlob, '_blank');
+        toast({ title: 'PDF gerado', description: 'Abrindo o documento em nova aba.' });
+        return;
+      }
+      if (ct.includes('text/html')) {
+        const htmlText = await resp.text();
+        const blob = new Blob([htmlText], { type: 'text/html' });
+        const urlBlob = URL.createObjectURL(blob);
+        window.open(urlBlob, '_blank');
+        toast({ title: 'Visualização HTML', description: 'Exibindo conteúdo gerado.' });
+        return;
+      }
       const data = await resp.json().catch(() => ({}));
       const targetUrl = data?.data?.url || data?.url;
       if (typeof targetUrl === 'string' && targetUrl.length > 0) {
-        window.open(targetUrl, '_blank');
+        const bust = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+        window.open(bust, '_blank');
         toast({ title: 'PDF gerado', description: 'Abrindo o documento em nova aba.' });
       } else {
         toast({ title: 'PDF gerado', description: 'Resposta sem URL. Verifique o servidor.' });

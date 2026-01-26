@@ -13,12 +13,22 @@ return new class extends Migration
     public function up(): void
     {
         // Drop indexes if present to avoid conflicts during type change
-        try { DB::statement('ALTER TABLE `client_attendances` DROP INDEX `client_attendances_client_id_index`'); } catch (\Throwable $e) {}
-        try { DB::statement('ALTER TABLE `client_attendances` DROP INDEX `client_attendances_attended_by_index`'); } catch (\Throwable $e) {}
+        try { 
+            Schema::table('client_attendances', function ($table) {
+                $table->dropIndex(['client_id']);
+            });
+        } catch (\Throwable $e) {}
+        try { 
+            Schema::table('client_attendances', function ($table) {
+                $table->dropIndex(['attended_by']);
+            });
+        } catch (\Throwable $e) {}
 
         // Widen columns to VARCHAR(36)
-        DB::statement('ALTER TABLE `client_attendances` MODIFY `client_id` VARCHAR(36) NOT NULL');
-        DB::statement('ALTER TABLE `client_attendances` MODIFY `attended_by` VARCHAR(36) NOT NULL');
+        Schema::table('client_attendances', function ($table) {
+            $table->string('client_id', 36)->change();
+            $table->string('attended_by', 36)->change();
+        });
 
         // Recreate indexes
         Schema::table('client_attendances', function ($table) {
@@ -33,11 +43,21 @@ return new class extends Migration
      */
     public function down(): void
     {
-        try { DB::statement('ALTER TABLE `client_attendances` DROP INDEX `client_attendances_client_id_index`'); } catch (\Throwable $e) {}
-        try { DB::statement('ALTER TABLE `client_attendances` DROP INDEX `client_attendances_attended_by_index`'); } catch (\Throwable $e) {}
+        try { 
+            Schema::table('client_attendances', function ($table) {
+                $table->dropIndex(['client_id']);
+            });
+        } catch (\Throwable $e) {}
+        try { 
+            Schema::table('client_attendances', function ($table) {
+                $table->dropIndex(['attended_by']);
+            });
+        } catch (\Throwable $e) {}
 
-        DB::statement('ALTER TABLE `client_attendances` MODIFY `client_id` VARCHAR(26) NOT NULL');
-        DB::statement('ALTER TABLE `client_attendances` MODIFY `attended_by` VARCHAR(26) NOT NULL');
+        Schema::table('client_attendances', function ($table) {
+            $table->string('client_id', 26)->change();
+            $table->string('attended_by', 26)->change();
+        });
 
         Schema::table('client_attendances', function ($table) {
             $table->index('client_id');

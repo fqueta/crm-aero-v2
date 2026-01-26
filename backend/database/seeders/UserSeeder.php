@@ -24,6 +24,11 @@ class UserSeeder extends Seeder
                 'verificado' => 'n',
                 'token' => uniqid(),
                 'permission_id' => 1, // Grupo Master
+                'tipo_pessoa' => 'pf',
+                'genero' => 'm',
+                'ativo' => 's',
+                'excluido' => 'n',
+                'deletado' => 'n',
             ],
             [
                 // 'id' => Qlib::token(),
@@ -34,6 +39,12 @@ class UserSeeder extends Seeder
                 'verificado' => 'n',
                 'token' => 'id_contatada',
                 'permission_id' => 2, // Grupo Administrador
+                'tipo_pessoa' => 'pf',
+                'tipo_pessoa' => 'pf',
+                'genero' => 'm',
+                'ativo' => 's',
+                'excluido' => 'n',
+                'deletado' => 'n',
             ],
             [
                 'name'=> 'Monique Ribeiro',
@@ -43,6 +54,11 @@ class UserSeeder extends Seeder
                 'verificado' => 'n',
                 'token' => 'id_testemunha1',
                 'permission_id' => 3, // Grupo Administrador
+                'tipo_pessoa' => 'pf',
+                'genero' => 'f',
+                'ativo' => 's',
+                'excluido' => 'n',
+                'deletado' => 'n',
             ],
             [
                 'name'=> 'Renan Coimbra',
@@ -52,6 +68,12 @@ class UserSeeder extends Seeder
                 'verificado' => 'n',
                 'token' => 'id_testemunha2',
                 'permission_id' => 3, // Grupo Administrador
+                'tipo_pessoa' => 'pf',
+                'tipo_pessoa' => 'pf',
+                'genero' => 'm',
+                'ativo' => 's',
+                'excluido' => 'n',
+                'deletado' => 'n',
             ]
         ];
         //remove os antigos

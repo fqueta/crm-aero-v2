@@ -8,9 +8,6 @@ use Illuminate\Support\Facades\DB;
 class AeronavesSeeder extends Seeder
 {
 	/**
-	 * Insere ou atualiza uma aeronave ajustando o payload ao schema atual.
-	 *
-	 * - Remove campos obsoletos: 'data', 'atualizado', 'sociedade'.
 	 * - Garante que 'autor' seja persistido como string (big string).
 	 * - Converte 'ordenar' para inteiro.
 	 * - Normaliza 'hora_rescisao' para decimal válido ou null.
@@ -18,8 +15,41 @@ class AeronavesSeeder extends Seeder
 	 * - Normaliza enums: 'ativo', 'publicar', 'excluido', 'deletado' inválidos usam default.
 	 * - Se 'id' numérico existir: usa updateOrInsert para evitar duplicidade de chave.
 	 */
+    private function ensureTableExists(): void
+    {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('aeronaves')) {
+            \Illuminate\Support\Facades\Schema::create('aeronaves', function (\Illuminate\Database\Schema\Blueprint $table) {
+                $table->increments('id');
+                $table->string('nome', 300);
+                $table->string('codigo', 12)->nullable();
+                $table->string('tipo')->nullable();
+                $table->json('pacotes')->nullable();
+                $table->text('autor')->nullable();
+                $table->text('token')->nullable();
+                $table->enum('ativo', ['n','s'])->default('s');
+                $table->enum('publicar', ['n','s'])->default('n');
+                $table->longText('ficha')->nullable();
+                $table->text('url')->nullable();
+                $table->text('meta_descricao')->nullable();
+                $table->longText('obs')->nullable();
+                $table->json('config')->nullable();
+                $table->decimal('hora_rescisao', 12, 2)->nullable();
+                $table->integer('ordenar');
+                $table->enum('excluido', ['n','s'])->default('n');
+                $table->text('excluido_por')->nullable();
+                $table->enum('deletado', ['n','s'])->default('n');
+                $table->text('deletado_por')->nullable();
+                $table->longText('descricao')->nullable();
+                $table->text('reg_excluido')->nullable();
+                $table->text('reg_deletado')->nullable();
+                $table->timestamps();
+            });
+        }
+    }
+
 	private function insertAeronave(array $row): void
 	{
+
 		// Remover campos fora do schema atual
 		unset($row['data'], $row['atualizado'], $row['sociedade']);
 
@@ -153,6 +183,8 @@ class AeronavesSeeder extends Seeder
 	 */
 	public function run()
 	{
+        $this->ensureTableExists();
+
 		$this->insertAeronave([
 			'id' => "6",
 			'nome' => "Paulistinha",
@@ -461,33 +493,7 @@ class AeronavesSeeder extends Seeder
 			'reg_deletado' => "&rbrack;;",
 		]);
 
-		$this->insertAeronave([
-			'id' => "INSERT INTO `aeronaves` &lbrack;`id`",
-			'nome' => "`nome`",
-			'codigo' => "`codigo`",
-			'pacotes' => "`pacotes`",
-			'autor' => "`autor`",
-			'token' => "`token`",
-			'ativo' => "`ativo`",
-			'publicar' => "`publicar`",
-			'ficha' => "`ficha`",
-			'url' => "`url`",
-			'meta_descricao' => "`meta_descricao`",
-			'data' => "`data`",
-			'atualizado' => "`atualizado`",
-			'obs' => "`obs`",
-			'config' => "`config`",
-			'sociedade' => "`sociedade`",
-			'hora_rescisao' => "`hora_rescisao`",
-			'ordenar' => "`ordenar`",
-			'excluido' => "`excluido`",
-			'excluido_por' => "`excluido_por`",
-			'deletado' => "`deletado`",
-			'deletado_por' => "`deletado_por`",
-			'descricao' => "`descricao`",
-			'reg_excluido' => "`reg_excluido`",
-			'reg_deletado' => "`reg_deletado`&rbrack; VALUES",
-		]);
+
 
 		$this->insertAeronave([
 			'id' => "24",

@@ -18,7 +18,9 @@ return new class extends Migration {
             });
         } catch (\Throwable $e) {
             // Fallback para bancos que exigem mudança via SQL bruto
-            DB::statement("ALTER TABLE `matriculas` MODIFY `status` ENUM('a','g','p') NULL DEFAULT 'a'");
+            if (DB::getDriverName() !== 'sqlite') {
+                DB::statement("ALTER TABLE `matriculas` MODIFY `status` ENUM('a','g','p') NULL DEFAULT 'a'");
+            }
         }
     }
 
@@ -33,7 +35,9 @@ return new class extends Migration {
                 $table->integer('status')->nullable()->change();
             });
         } catch (\Throwable $e) {
-            DB::statement("ALTER TABLE `matriculas` MODIFY `status` INT NULL");
+            if (DB::getDriverName() !== 'sqlite') {
+                DB::statement("ALTER TABLE `matriculas` MODIFY `status` INT NULL");
+            }
         }
     }
 };
