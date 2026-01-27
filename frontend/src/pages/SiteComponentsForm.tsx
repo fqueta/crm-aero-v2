@@ -134,10 +134,19 @@ export default function SiteComponentsForm() {
   }, [contentTypesResp?.data, selectedTypeValue]);
   /**
    * isGallery
-   * pt-BR: Exibe o card quando o valor selecionado for exatamente "19".
-   * en-US: Show the card when selected value equals "19" exactly.
+   * pt-BR: Determina se o tipo selecionado é de galeria. Considera IDs 3 e 19
+   *        e também o slug retornado pelo backend ("galeria", "galeria-completa").
+   * en-US: Determines whether selected type is a gallery. Considers IDs 3 and 19
+   *        and also backend slug ("galeria", "galeria-completa").
    */
-  const isGallery = String(selectedTypeValue) === '19' || Number(selectedTypeValue) === 19;
+  const isGallery = useMemo(() => {
+    const val = String(selectedTypeValue || '');
+    if (val === '3' || val === '19') return true;
+    const list = (contentTypesResp?.data || []) as any[];
+    const item = list.find((opt: any) => String(opt.id ?? opt.value ?? opt.codigo) === val);
+    const slug = String(item?.slug || '').toLowerCase();
+    return slug === 'galeria' || slug === 'galeria-completa';
+  }, [contentTypesResp?.data, selectedTypeValue]);
 
   /**
    * gallerySelection
