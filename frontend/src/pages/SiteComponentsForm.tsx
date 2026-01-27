@@ -390,71 +390,35 @@ export default function SiteComponentsForm() {
     const rawConfig = (record as any)?.config?.galeria as any[] | undefined;
     const rawTop = (record as any)?.galeria as any[] | undefined;
     const raw = (rawConfig && Array.isArray(rawConfig) && rawConfig.length > 0) ? rawConfig : rawTop;
-    const ids: number[] = Array.isArray(raw)
-      ? raw.map((v: any) => (typeof v === 'object' && v !== null ? Number(v.id) : Number(v))).filter((n) => !Number.isNaN(n))
-      : [];
-    const metaById = new Map<number, { nome?: string; descricao?: string }>();
-    if (Array.isArray(raw)) {
-      raw.forEach((v: any) => {
-        if (typeof v === 'object' && v !== null && v.id !== undefined) {
-          metaById.set(Number(v.id), { nome: v.nome, descricao: v.descricao });
-        }
-      });
-    }
-
-    // Usa uploads do componente e busca apenas IDs faltantes (sem carregar biblioteca inteira)
     const componentUploads = ((uploadsQuery.data?.data as UploadRecord[]) || []);
-    if (ids && Array.isArray(ids) && ids.length > 0) {
-      const byId = new Map<number, UploadRecord>();
-      componentUploads.forEach((u) => byId.set(u.id, u));
-      const missingIds = ids.filter((gid) => !byId.has(gid));
-
-      if (missingIds.length > 0) {
-        (async () => {
-          try {
-            const fetched = await Promise.all(missingIds.map((mid) => uploadsService.getUpload(mid)));
-            fetched.forEach((u) => byId.set(u.id, u));
-            const ordered = ids.map((gid) => {
-              const base = byId.get(gid);
-              if (!base) return undefined;
-              const meta = metaById.get(gid) || {};
-              const item: GalleryItem = {
-                ...base,
-                nome_personalizado: meta.nome ?? base.nome ?? '',
-                descricao_personalizada: meta.descricao ?? '',
-              };
-              return item;
-            }).filter(Boolean) as GalleryItem[];
-            setGallerySelection(ordered);
-          } catch {
-            const fallback = ids.map((gid) => {
-              const base = byId.get(gid);
-              if (!base) return undefined;
-              const meta = metaById.get(gid) || {};
-              const item: GalleryItem = {
-                ...base,
-                nome_personalizado: meta.nome ?? base.nome ?? '',
-                descricao_personalizada: meta.descricao ?? '',
-              };
-              return item;
-            }).filter(Boolean) as GalleryItem[];
-            setGallerySelection(fallback);
-          }
-        })();
-      } else {
-        const ordered = ids.map((gid) => {
-          const base = byId.get(gid);
-          if (!base) return undefined;
-          const meta = metaById.get(gid) || {};
-          const item: GalleryItem = {
-            ...base,
-            nome_personalizado: meta.nome ?? base.nome ?? '',
-            descricao_personalizada: meta.descricao ?? '',
-          };
-          return item;
-        }).filter(Boolean) as GalleryItem[];
-        setGallerySelection(ordered);
-      }
+    const byId = new Map<number, UploadRecord>();
+    componentUploads.forEach((u) => byId.set(u.id, u));
+    // Monta itens na ordem fornecida pelo backend, usando public_url quando necessário (sem depender de GET por ID)
+    const ordered = Array.isArray(raw) ? raw.map((v: any) => {
+      const gid = typeof v === 'object' && v !== null ? Number(v.id) : Number(v);
+      if (Number.isNaN(gid) || gid <= 0) return undefined;
+      const base = byId.get(gid);
+      const url = base?.url || String(v.public_url || '');
+      if (!url) return undefined;
+      const item: GalleryItem = {
+        ...(base ?? {
+          id: gid,
+          nome: String(v.nome ?? ''),
+          slug: String(v.slug ?? ''),
+          url,
+          mime: 'image/*',
+          size: Number(v.size ?? 0),
+          ativo: 's',
+          ordenar: 0,
+          descricao: String(v.descricao ?? ''),
+        }),
+        nome_personalizado: v.nome ?? base?.nome ?? '',
+        descricao_personalizada: v.descricao ?? '',
+      };
+      return item;
+    }).filter(Boolean) as GalleryItem[] : [];
+    if (ordered.length > 0) {
+      setGallerySelection(ordered);
     } else if (componentUploads.length > 0) {
       const initial = componentUploads.map((u) => ({
         ...u,

@@ -655,6 +655,8 @@ class PdfController extends Controller
                             ],
                             'footer-html' => $footerHtml,
                         ];
+                        // Define timeout para o processo wkhtmltopdf
+                        try { $knp->setTimeout(300); } catch (\Throwable $e) { /* compat */ }
                         $knp->generateFromHtml($html, $absolute, $opts);
                     }
                 }

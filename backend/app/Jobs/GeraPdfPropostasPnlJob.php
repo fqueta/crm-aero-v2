@@ -13,6 +13,16 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected $id_matricula;
+    /**
+     * Timeout em segundos para este job (compatível com processos de PDF pesados).
+     * EN: Job timeout in seconds for heavy PDF generation.
+     */
+    public $timeout = 600;
+    /**
+     * Número de tentativas em caso de falha transitória.
+     * EN: Number of tries for transient failures.
+     */
+    public $tries = 2;
 
     /**
      * Create a new job instance.

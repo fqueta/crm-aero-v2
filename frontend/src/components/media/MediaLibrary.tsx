@@ -143,10 +143,10 @@ export function MediaLibrary({
   const fetchItems = async (pageNum: number, searchQuery: string) => {
     const params: any = { page: pageNum, per_page: 40, q: searchQuery, nome: searchQuery };
     if (filterType !== 'all') {
-        params.mime_like = filterType === 'image' ? 'image/' : 
-                           filterType === 'video' ? 'video/' : 
-                           filterType === 'audio' ? 'audio/' : 
-                           filterType === 'document' ? 'application/' : undefined;
+        params.mime_like = filterType === 'image' ? 'image' : 
+                           filterType === 'video' ? 'video' : 
+                           filterType === 'audio' ? 'audio' : 
+                           filterType === 'document' ? 'application' : undefined;
     }
     const resp = await uploadsService.listUploads(params);
     return resp;

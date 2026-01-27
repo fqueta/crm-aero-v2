@@ -26,6 +26,10 @@ class UploadController extends Controller
         if ($request->filled('id')) {
             $query->where('ID', $request->integer('id'));
         }
+        // Filter by MIME type prefix (e.g. 'image', 'application')
+        if ($request->filled('mime_like')) {
+            $query->where('post_mime_type', 'like', $request->string('mime_like') . '%');
+        }
         $items = $query->orderBy('menu_order')->orderByDesc('ID')->paginate($request->integer('per_page', 15), [
             'ID as id',
             'post_title as nome',
