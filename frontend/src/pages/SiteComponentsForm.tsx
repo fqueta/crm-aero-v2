@@ -110,6 +110,21 @@ export default function SiteComponentsForm() {
   }, [courseItems, selectedCourseValue]);
 
   /**
+   * courseOptionsWithFallback
+   * pt-BR: Opções do Select de curso com fallback do valor atual, para manter o rótulo após refresh.
+   * en-US: Course Select options with current-value fallback to preserve label after refresh.
+   */
+  const courseOptionsWithFallback = useMemo(() => {
+    const base = courseItems.map((c: any) => ({ value: String(c.id), label: String(c.nome ?? c.name ?? c.id) }));
+    const val = String(selectedCourseValue || '');
+    const exists = base.some(o => o.value === val);
+    if (val && !exists) {
+      base.unshift({ value: val, label: selectedCourseLabel || `(curso ${val})` });
+    }
+    return base;
+  }, [courseItems, selectedCourseValue, selectedCourseLabel]);
+
+  /**
    * selectedTypeValue
    * pt-BR: Valor reativo do campo `tipo_conteudo`. Usa `watch` diretamente
    *        para garantir atualização imediata ao selecionar o tipo.
@@ -147,6 +162,29 @@ export default function SiteComponentsForm() {
     const slug = String(item?.slug || '').toLowerCase();
     return slug === 'galeria' || slug === 'galeria-completa';
   }, [contentTypesResp?.data, selectedTypeValue]);
+
+  /**
+   * contentTypeOptions
+   * pt-BR: Opções do Select de tipo de conteúdo com fallback do valor atual
+   *        mesmo antes de a lista carregar (evita perder rótulo após refresh).
+   * en-US: Select options for content type with current-value fallback
+   *        even before the list loads (prevents losing label after refresh).
+   */
+  const contentTypeOptions = useMemo(() => {
+    const base = ((contentTypesResp?.data || []) as any[])
+      .filter((opt: any) => opt && (opt.id ?? opt.value ?? opt.codigo) !== undefined)
+      .map((opt: any) => ({
+        value: String(opt.id ?? opt.value ?? opt.codigo),
+        label: String(opt.nome ?? opt.name ?? opt.descricao ?? opt.titulo ?? (opt.id ?? opt.value ?? opt.codigo)),
+      }));
+    const val = String(selectedTypeValue || '');
+    const exists = base.some(o => o.value === val);
+    if (val && !exists) {
+      const fallbackLabel = selectedTypeLabel || (val === '3' ? 'Galeria' : val === '19' ? 'Galeria Completa' : '(valor atual)');
+      base.unshift({ value: val, label: fallbackLabel });
+    }
+    return base;
+  }, [contentTypesResp?.data, selectedTypeValue, selectedTypeLabel]);
 
   /**
    * gallerySelection
@@ -517,25 +555,14 @@ export default function SiteComponentsForm() {
                     <FormLabel>Tipo de conteúdo</FormLabel>
                     {/* pt-BR: Usa sempre string para evitar mismatch com itens do Select. */}
                     {/* en-US: Always use string to avoid mismatch with Select item values. */}
-                    <Select value={(field.value ? String(field.value) : undefined)} onValueChange={field.onChange}>
+                    <Select value={String(field.value ?? '')} onValueChange={field.onChange}>
                       <SelectTrigger>
                         <SelectValue placeholder={loadingContentTypes ? 'Carregando...' : 'Selecione o tipo'} />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* pt-BR: Fallback quando o valor atual não está nas opções carregadas. */}
-                        {/* en-US: Fallback when current value is not among loaded options. */}
-                        {!typeHasSelected && selectedTypeValue && (
-                          <SelectItem value={String(selectedTypeValue)}>{selectedTypeLabel || '(valor atual)'}</SelectItem>
-                        )}
-                        {(contentTypesResp?.data || []).
-                          filter((opt: any) => opt && (opt.id ?? opt.value ?? opt.codigo) !== undefined).
-                          map((opt: any) => {
-                            const value = String(opt.id ?? opt.value ?? opt.codigo);
-                            const label = opt.nome ?? opt.name ?? opt.descricao ?? opt.titulo ?? value;
-                            return (
-                              <SelectItem key={value} value={value}>{String(label)}</SelectItem>
-                            );
-                          })}
+                        {contentTypeOptions.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -582,18 +609,9 @@ export default function SiteComponentsForm() {
                         <SelectValue placeholder={coursesQuery.isLoading ? 'Carregando...' : 'Selecione o curso'} />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* pt-BR: Fallback para exibir o valor atual quando não consta nas opções. */}
-                        {/* en-US: Fallback to show current value when not present in options. */}
-                        {!courseHasSelected && selectedCourseValue && (
-                          <SelectItem value={String(selectedCourseValue)}>{selectedCourseLabel || '(valor atual)'}</SelectItem>
-                        )}
-                        {courseItems.map((c: any) => {
-                          const value = String(c.id);
-                          const label = String(c.nome ?? c.name ?? value);
-                          return (
-                            <SelectItem key={value} value={value}>{label}</SelectItem>
-                          );
-                        })}
+                        {courseOptionsWithFallback.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

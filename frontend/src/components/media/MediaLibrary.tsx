@@ -11,6 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RefreshCw } from "lucide-react";
 
 const FALLBACK_IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
@@ -301,28 +303,48 @@ export function MediaLibrary({
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex items-center gap-4 mt-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input 
-                placeholder="Buscar arquivos..." 
-                className="pl-9 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
-                value={search}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
-            </div>
+          <div className="flex flex-col gap-4 mt-6">
             <div className="flex items-center gap-2">
-                <input
-                    type="file"
-                    id="media-upload-input"
-                    className="hidden"
-                    multiple
-                    onChange={(e) => handleCreateUpload(e.target.files)}
-                />
-                <Button onClick={() => document.getElementById('media-upload-input')?.click()} disabled={isUploading}>
-                    {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                    Upload
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input 
+                        placeholder="Pesquisar por título" 
+                        className="pl-9 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
+                        value={search}
+                        onChange={(e) => handleSearch(e.target.value)}
+                    />
+                </div>
+                
+                <Select value={filterType} onValueChange={setFilterType}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Tipo de arquivo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="image">Imagens</SelectItem>
+                        <SelectItem value="document">Documentos</SelectItem>
+                        <SelectItem value="video">Vídeos</SelectItem>
+                        <SelectItem value="audio">Áudios</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <Button variant="outline" size="icon" onClick={() => queryClient.invalidateQueries({ queryKey: ['uploads'] })}>
+                    <RefreshCw className="h-4 w-4" />
                 </Button>
+
+                <div>
+                     <input
+                        type="file"
+                        id="media-upload-input"
+                        className="hidden"
+                        multiple
+                        onChange={(e) => handleCreateUpload(e.target.files)}
+                    />
+                    <Button onClick={() => document.getElementById('media-upload-input')?.click()} disabled={isUploading}>
+                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                        Upload
+                    </Button>
+                </div>
             </div>
           </div>
         </div>
