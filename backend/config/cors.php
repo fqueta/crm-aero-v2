@@ -35,9 +35,8 @@ return [
     |
     */
     'allowed_origins' => [
-        'https://api-interajai.maisaqui.com.br',
-        'https://api-aeroclube.maisaqui.com.br',
-        'https://maisaqui.com.br',
+        'https://crm-v2.aeroclubejf.com.br',
+        'https://api-crm.aeroclubejf.com.br',
         // Dev/local origins
         'http://crm.localhost:3000',
         'http://localhost:8000',
@@ -57,8 +56,8 @@ return [
     'allowed_origins_patterns' => [
         // Allow any subdomain of localhost on any port (dev)
         '/^https?:\\/\\/.*\\.localhost(:\\d+)?$/',
-        // Allow any subdomain of maisaqui.com.br (prod)
-        '/^https:\\/\\/.*\\.maisaqui\\.com\\.br$/',
+        // Allow any subdomain of aeroclubejf.com.br (prod)
+        '/^https:\\/\\/.*\\.aeroclubejf\\.com\\.br$/',
         // Allow localhost with any port
         '/^http:\\/\\/localhost:.*$/',
     ],

@@ -25,6 +25,7 @@ import { uploadsService } from '@/services/uploadsService';
 import EditFooterBar from '@/components/ui/edit-footer-bar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import type { UploadRecord } from '@/types/uploads';
+import { MediaLibrary } from '@/components/media/MediaLibrary';
 /**
  * GalleryItem
  * pt-BR: Tipo para item da galeria com metadados personalizados por componente.
@@ -150,16 +151,7 @@ export default function SiteComponentsForm() {
    * en-US: Controls opening of the image library dialog.
    */
   const [libraryOpen, setLibraryOpen] = useState(false);
-  /**
-   * library pagination/search state
-   * pt-BR: Estados para paginação incremental e busca local/servidor.
-   * en-US: States for incremental pagination and local/server search.
-   */
-  const [libraryPage, setLibraryPage] = useState(1);
-  const [libraryItems, setLibraryItems] = useState<UploadRecord[]>([]);
-  const [libraryHasMore, setLibraryHasMore] = useState(false);
-  const [librarySearch, setLibrarySearch] = useState('');
-  const [libraryLoadingMore, setLibraryLoadingMore] = useState(false);
+  
   /**
    * dragIndex
    * pt-BR: Índice do item arrastado para ordenação.
@@ -179,79 +171,14 @@ export default function SiteComponentsForm() {
     staleTime: 60 * 1000,
   });
 
-  /**
-   * uploadsLibraryQuery
-   * pt-BR: Lista geral de uploads (biblioteca) para seleção.
-   * en-US: Global uploads list (library) for selection.
-   */
-  const uploadsLibraryQuery = useQuery({
-    queryKey: ['uploads', 'library', { page: 1, per_page: 200 }],
-    queryFn: async () => uploadsService.listUploads({ page: 1, per_page: 200 }),
-    // pt-BR: Carrega a biblioteca APENAS quando o diálogo estiver aberto.
-    // en-US: Load the library ONLY when the dialog is open.
-    enabled: isGallery && libraryOpen,
-    staleTime: 60 * 1000,
-  });
+  const handleLibrarySelect = useCallback((items: UploadRecord[]) => {
+    items.forEach((item) => {
+        addToGallery(item);
+    });
+    setLibraryOpen(false);
+  }, []);
 
-  /**
-   * initLibraryItems
-   * pt-BR: Inicializa itens da biblioteca quando o diálogo abre ou quando a query muda.
-   * en-US: Initialize library items when dialog opens or query changes.
-   */
-  useEffect(() => {
-    if (!libraryOpen) return;
-    const resp = uploadsLibraryQuery.data;
-    const data = ((resp?.data as UploadRecord[]) || []);
-    setLibraryItems(data);
-    const current = Number(resp?.current_page || 1);
-    const last = Number(resp?.last_page || 1);
-    setLibraryPage(current);
-    setLibraryHasMore(current < last);
-  }, [libraryOpen, uploadsLibraryQuery.data]);
 
-  /**
-   * handleLibrarySearch
-   * pt-BR: Atualiza busca e reinicia paginação (busca simples, servidor opcional).
-   * en-US: Updates search and resets pagination (simple search, optional server).
-   */
-  const handleLibrarySearch = useCallback(async (value: string) => {
-    setLibrarySearch(value);
-    if (!libraryOpen) return;
-    try {
-      setLibraryLoadingMore(true);
-      const resp = await uploadsService.listUploads({ page: 1, per_page: 60, q: value, nome: value });
-      const data = ((resp?.data as UploadRecord[]) || []);
-      setLibraryItems(data);
-      const current = Number(resp?.current_page || 1);
-      const last = Number(resp?.last_page || 1);
-      setLibraryPage(current);
-      setLibraryHasMore(current < last);
-    } finally {
-      setLibraryLoadingMore(false);
-    }
-  }, [libraryOpen]);
-
-  /**
-   * loadMoreLibrary
-   * pt-BR: Carrega próxima página da biblioteca e concatena.
-   * en-US: Loads next library page and concatenates.
-   */
-  const loadMoreLibrary = useCallback(async () => {
-    if (!libraryOpen || libraryLoadingMore || !libraryHasMore) return;
-    try {
-      setLibraryLoadingMore(true);
-      const nextPage = libraryPage + 1;
-      const resp = await uploadsService.listUploads({ page: nextPage, per_page: 60, q: librarySearch, nome: librarySearch });
-      const data = ((resp?.data as UploadRecord[]) || []);
-      setLibraryItems((prev) => [...prev, ...data]);
-      const current = Number(resp?.current_page || nextPage);
-      const last = Number(resp?.last_page || current);
-      setLibraryPage(current);
-      setLibraryHasMore(current < last);
-    } finally {
-      setLibraryLoadingMore(false);
-    }
-  }, [libraryOpen, libraryLoadingMore, libraryHasMore, libraryPage, librarySearch]);
 
   /**
    * localPreviews
@@ -507,7 +434,7 @@ export default function SiteComponentsForm() {
    *        If "finish", navigates back to listing.
    */
   const handleSubmit = (data: FormData) => {
-    const payload: CreateComponentInput = { ...data };
+    const payload: CreateComponentInput = { ...data } as unknown as CreateComponentInput;
     // Quando for galeria (ID 19), incluir os IDs selecionados
     if (isGallery && gallerySelection.length > 0) {
       payload.galeria = gallerySelection.map((g) => ({ id: g.id, nome: g.nome_personalizado ?? g.nome ?? '', descricao: g.descricao_personalizada ?? '' }));
@@ -781,7 +708,15 @@ export default function SiteComponentsForm() {
                           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                             {localPreviews.map((p) => (
                               <div key={p.url} className="rounded-md overflow-hidden border">
-                                <img src={p.url} alt={p.name} loading="lazy" className="w-full h-32 object-cover" />
+                                <img
+                                  src={p.url}
+                                  alt={p.name}
+                                  loading="lazy"
+                                  className="w-full h-32 object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+                                  }}
+                                />
                                 <div className="px-2 py-1 text-xs truncate">{p.name}</div>
                               </div>
                             ))}
@@ -791,78 +726,20 @@ export default function SiteComponentsForm() {
                         {/* Lista de imagens existentes removida: exibir apenas dentro do diálogo de biblioteca. */}
 
                         {/* Dialog: Biblioteca de imagens */}
-                        <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
-                          <DialogContent className="max-w-4xl">
-                            <DialogHeader>
-                              <DialogTitle>Biblioteca de imagens</DialogTitle>
-                              <DialogDescription>
-                                Clique em uma imagem para adicionar/remover da galeria. Use a busca para filtrar.
-                              </DialogDescription>
-                            </DialogHeader>
-                            {/* Toolbar: busca e ações */}
-                            <div className="flex items-center gap-3 mb-3">
-                              <Input
-                                value={librarySearch}
-                                placeholder="Buscar por nome..."
-                                onChange={(e) => handleLibrarySearch(e.target.value)}
-                                className="w-full"
-                              />
-                              <Button type="button" variant="secondary" onClick={loadMoreLibrary} disabled={!libraryHasMore || libraryLoadingMore}>
-                                {libraryLoadingMore ? (<Loader2 className="h-4 w-4 animate-spin" />) : 'Carregar mais'}
-                              </Button>
-                            </div>
-
-                            {/* Grid com rolagem e carregamento incremental */}
-                            <div
-                              className="min-h-[240px] max-h-[60vh] overflow-auto"
-                              onScroll={(e) => {
-                                const el = e.currentTarget;
-                                const nearBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 120;
-                                if (nearBottom) loadMoreLibrary();
-                              }}
-                            >
-                              {(uploadsLibraryQuery.isLoading && libraryItems.length === 0) ? (
-                                <div className="text-sm text-muted-foreground">Carregando biblioteca...</div>
-                              ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                  {libraryItems.map((img) => (
-                                    <button
-                                      type="button"
-                                      key={`lib-${img.id}`}
-                                      className={`relative rounded-md overflow-hidden border text-left ${isSelectedInGallery(img.id) ? 'ring-2 ring-blue-500' : ''}`}
-                                      onClick={() => toggleInGallery(img)}
-                                    >
-                                      <img src={img.url} alt={img.nome} loading="lazy" className="w-full h-32 object-cover" />
-                                      {isSelectedInGallery(img.id) && (
-                                        <div className="absolute top-1 right-1 bg-white/80 rounded-full p-1 shadow">
-                                          <Check className="h-4 w-4 text-blue-600" />
-                                        </div>
-                                      )}
-                                      <div className="px-2 py-1 text-xs truncate">{img.nome}</div>
-                                    </button>
-                                  ))}
-                                  {libraryItems.length === 0 && (
-                                    <div className="text-sm text-muted-foreground col-span-full">Nenhuma imagem na biblioteca.</div>
-                                  )}
-                                </div>
-                              )}
-                              {libraryHasMore && (
-                                <div className="flex items-center justify-center py-3">
-                                  <Button type="button" variant="ghost" onClick={loadMoreLibrary} disabled={libraryLoadingMore}>
-                                    {libraryLoadingMore ? (<Loader2 className="h-4 w-4 animate-spin" />) : 'Carregar mais'}
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                        <MediaLibrary
+                            open={libraryOpen}
+                            onOpenChange={setLibraryOpen}
+                            onSelect={handleLibrarySelect}
+                            multiSelect={true}
+                            selectedIds={gallerySelection.map(g => g.id)}
+                        />
                       </CardContent>
                   </Card>
                 </div>
 
                 <div className="md:col-span-2 flex gap-3">
-                  <Button type="submit" disabled={createMutation.isLoading || updateMutation.isLoading}>
-                    {(createMutation.isLoading || updateMutation.isLoading) && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}
+                  <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+                    {(createMutation.isPending || updateMutation.isPending) && (<Loader2 className="mr-2 h-4 w-4 animate-spin" />)}
                     {id ? 'Atualizar' : 'Cadastrar'}
                   </Button>
                   <Button type="button" variant="outline" onClick={goBack}>Cancelar</Button>
@@ -878,7 +755,7 @@ export default function SiteComponentsForm() {
           onBack={goBack}
           onContinue={() => { finishAfterSaveRef.current = false; form.handleSubmit(handleSubmit)(); }}
           onFinish={() => { finishAfterSaveRef.current = true; form.handleSubmit(handleSubmit)(); }}
-          disabled={createMutation.isLoading || updateMutation.isLoading}
+          disabled={createMutation.isPending || updateMutation.isPending}
         />
       )}
     </div>
