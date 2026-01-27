@@ -27,6 +27,7 @@ interface MediaItemProps {
   item: UploadRecord;
   selected: boolean;
   onSelect: (item: UploadRecord) => void;
+  onDelete: (item: UploadRecord) => void;
 }
 
 const getFileIcon = (mime: string) => {
@@ -39,7 +40,7 @@ const getFileIcon = (mime: string) => {
   return <FileIcon className="h-8 w-8 text-gray-400" />;
 };
 
-const MediaItem = ({ item, selected, onSelect }: MediaItemProps) => {
+const MediaItem = ({ item, selected, onSelect, onDelete }: MediaItemProps) => {
   const isImage = item.mime.startsWith('image/');
 
   return (
@@ -71,8 +72,22 @@ const MediaItem = ({ item, selected, onSelect }: MediaItemProps) => {
       
       {/* Overlay with Info */}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
-        <p className="text-white text-xs font-medium truncate">{item.nome}</p>
+        <p className="text-white text-xs font-medium truncate pr-6">{item.nome}</p>
         <p className="text-white/70 text-[10px]">{formatBytes(item.size)}</p>
+      </div>
+      
+      <div className="absolute bottom-2 right-2 translate-y-full group-hover:translate-y-0 transition-transform duration-200 z-10">
+         <Button 
+            variant="destructive" 
+            size="icon" 
+            className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+                e.stopPropagation();
+                onDelete(item);
+            }}
+         >
+            <Trash2 className="h-3 w-3" />
+         </Button>
       </div>
 
       {selected && (
@@ -108,6 +123,9 @@ export function MediaLibrary({
   const [loadingMore, setLoadingMore] = useState(false);
   const [currentSelection, setCurrentSelection] = useState<UploadRecord[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [filterType, setFilterType] = useState('all');
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -122,13 +140,19 @@ export function MediaLibrary({
 
   const fetchItems = async (pageNum: number, searchQuery: string) => {
     const params: any = { page: pageNum, per_page: 40, q: searchQuery, nome: searchQuery };
+    if (filterType !== 'all') {
+        params.mime_like = filterType === 'image' ? 'image/' : 
+                           filterType === 'video' ? 'video/' : 
+                           filterType === 'audio' ? 'audio/' : 
+                           filterType === 'document' ? 'application/' : undefined;
+    }
     const resp = await uploadsService.listUploads(params);
     return resp;
   };
 
   // Initial load
   const { data: initialData, isLoading: isInitialLoading, refetch } = useQuery<PaginatedResponse<UploadRecord>>({
-    queryKey: ['uploads', 'library', { page: 1, q: search }],
+    queryKey: ['uploads', 'library', { page: 1, q: search, type: filterType }],
     queryFn: () => fetchItems(1, search),
     enabled: open,
     placeholderData: (previousData) => previousData,
@@ -144,6 +168,12 @@ export function MediaLibrary({
       setHasMore(initialData.current_page < initialData.last_page);
     }
   }, [initialData, page]); // Only reset on initial data change for page 1
+
+  // Refetch when filter changes
+  useEffect(() => {
+    setPage(1);
+    // React Query will refetch because key includes filterType
+  }, [filterType]);
 
   // Handle Search
   const handleSearch = (val: string) => {
@@ -166,6 +196,26 @@ export function MediaLibrary({
       console.error(error);
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  const handleDeleteTrigger = (item: UploadRecord) => {
+    setDeleteId(item.id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteId) return;
+    setIsDeleting(true);
+    try {
+        await uploadsService.deleteUpload(deleteId);
+        toast({ title: "Arquivo excluído", description: "O arquivo foi removido com sucesso." });
+        setItems(prev => prev.filter(i => i.id !== deleteId));
+        queryClient.invalidateQueries({ queryKey: ['uploads'] });
+    } catch (err) {
+        toast({ title: "Erro", description: "Não foi possível excluir o arquivo.", variant: "destructive" });
+    } finally {
+        setIsDeleting(false);
+        setDeleteId(null);
     }
   };
 
@@ -304,8 +354,9 @@ export function MediaLibrary({
                         <MediaItem 
                             key={item.id} 
                             item={item} 
-                            selected={isSelected(item.id)} // Note: selectedIds check might need refinement if we want to toggle them off
+                            selected={isSelected(item.id)}
                             onSelect={toggleSelect}
+                            onDelete={handleDeleteTrigger}
                         />
                     ))}
                 </div>
@@ -333,6 +384,24 @@ export function MediaLibrary({
             </div>
         </div>
       </DialogContent>
+
+      <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Excluir arquivo?</DialogTitle>
+                <DialogDescription>
+                    Tem certeza que deseja excluir este arquivo permanentemente? Esta ação não pode ser desfeita.
+                </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteId(null)} disabled={isDeleting}>Cancelar</Button>
+                <Button variant="destructive" onClick={handleConfirmDelete} disabled={isDeleting}>
+                    {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Excluir
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

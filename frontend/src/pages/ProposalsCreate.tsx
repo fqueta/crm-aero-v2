@@ -1235,7 +1235,7 @@ export default function ProposalsCreate() {
                 clientEmail={selectedClient?.email || ''}
                 course={selectedCourseNormalized as any}
                 module={normalizeModuleForTipo4(selectedModule) as any}
-                discountLabel="Desconto de Pontualidade"
+                discountLabel="Desconto"
                 discountAmountMasked={form.watch('desconto') || ''}
                 subtotalMasked={form.watch('subtotal') || ''}
                 totalMasked={form.watch('total') || ''}

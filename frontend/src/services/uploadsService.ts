@@ -65,6 +65,14 @@ class UploadsService extends BaseApiService {
     });
     return this.handleResponse<UploadResponse>(response);
   }
+  /**
+   * deleteUpload
+   * pt-BR: Remove um upload pelo ID.
+   * en-US: Deletes an upload by ID.
+   */
+  async deleteUpload(id: string | number): Promise<void> {
+    await this.delete(`/uploads/${id}`);
+  }
 }
 
 /**

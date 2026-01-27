@@ -1,7 +1,7 @@
-import React from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Pencil, Printer, FileText } from 'lucide-react';
+import { ArrowLeft, Pencil, Printer, FileText, Loader2 } from 'lucide-react';
 import ProposalViewContent from '@/components/school/ProposalViewContent';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
@@ -30,6 +30,7 @@ export default function ProposalsView() {
   // navState
   const navState = (location?.state || {}) as { returnTo?: string; funnelId?: string; stageId?: string };
   const { id } = useParams<{ id: string }>();
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
   /**
    * handleBack
    * pt-BR: Volta para a página de origem (histórico) ou para `returnTo`.
@@ -71,6 +72,7 @@ export default function ProposalsView() {
    */
   async function handleGeneratePdf() {
     if (!id) return;
+    setIsPdfLoading(true);
     try {
       const base = getApiUrl();
       const url = `${base}/pdf/matriculas/${encodeURIComponent(String(id))}?debug_html=0&engine=snap&no_store=0&force=1&cache_ttl=0`;
@@ -110,6 +112,8 @@ export default function ProposalsView() {
       }
     } catch (error) {
       toast({ title: 'Erro', description: 'Não foi possível gerar o PDF.', variant: 'destructive' });
+    } finally {
+      setIsPdfLoading(false);
     }
   }
 
@@ -117,6 +121,16 @@ export default function ProposalsView() {
     <div className="container mx-auto py-6 space-y-6">
       {/* Conteúdo principal */}
       {id ? <ProposalViewContent id={String(id)} /> : null}
+
+      {/* Overlay de carregamento do PDF */}
+      {isPdfLoading && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-white dark:bg-zinc-900 p-6 rounded-lg shadow-xl flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm font-medium">Gerando PDF...</p>
+          </div>
+        </div>
+      )}
 
       {/* Rodapé fixo com ações */}
       <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

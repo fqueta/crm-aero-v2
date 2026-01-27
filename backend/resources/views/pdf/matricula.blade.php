@@ -225,7 +225,7 @@
                                     @endforeach
                                     @if(isset($desconto) && $desconto !== null)
                                         <tr>
-                                            <td class="accent">Desconto de Pontualidade</td>
+                                            <td class="accent">Desconto</td>
                                             <td></td>
                                             <td></td>
                                             <td></td>
@@ -259,7 +259,7 @@
                                         <span class="chip">Total de Parcelas: {{ $linha['parcelas'] ?? '-' }}</span>
                                         <span class="chip">Valor da Parcela: R$ {{ isset($linha['valor']) ? number_format((float)$linha['valor'], 2, ',', '.') : '-' }}</span>
                                         @if(isset($linha['desconto']))
-                                            <span class="chip">Desconto Pontualidade: R$ {{ number_format((float)$linha['desconto'], 2, ',', '.') }}</span>
+                                            <span class="chip">Desconto: R$ {{ number_format((float)$linha['desconto'], 2, ',', '.') }}</span>
                                             <span class="chip">Parcela c/ Desconto: R$ {{ number_format(((float)$linha['valor']) - ((float)$linha['desconto']), 2, ',', '.') }}</span>
                                         @endif
                                     @endforeach

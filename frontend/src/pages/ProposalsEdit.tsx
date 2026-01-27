@@ -1435,7 +1435,7 @@ export default function ProposalsEdit() {
                         <tr>
                           <th className="p-2 text-left border">Total de Parcelas</th>
                           <th className="p-2 text-left border">Valor da Parcela</th>
-                          <th className="p-2 text-left border">Desconto Pontualidade</th>
+                          <th className="p-2 text-left border">Desconto</th>
                           <th className="p-2 text-left border">Parcela com Desconto</th>
                         </tr>
                       </thead>
@@ -1517,8 +1517,8 @@ export default function ProposalsEdit() {
                             <td className="p-2 border">
                               {/**
                                * ParcelaComDesconto (read-only)
-                               * pt-BR: Campo derivado (Valor da Parcela - Desconto Pontualidade), usado pelo shortcode.
-                               * en-US: Derived field (Installment Value - Punctuality Discount), used by the shortcode.
+                               * pt-BR: Campo derivado (Valor da Parcela - Desconto), usado pelo shortcode.
+                               * en-US: Derived field (Installment Value - Discount), used by the shortcode.
                                */}
                               <Input value={activeRowResolved?.parcelaComDesconto || ''} readOnly />
                             </td>
@@ -1584,7 +1584,7 @@ export default function ProposalsEdit() {
                           Valor da Parcela: {activeRowResolved?.valor || '-'}
                         </span>
                         <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
-                          Desconto Pontualidade: {activeRowResolved?.desconto || '-'}
+                          Desconto: {activeRowResolved?.desconto || '-'}
                         </span>
                         <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
                           Parcela c/ Desconto: {activeRowResolved?.parcelaComDesconto || '-'}
@@ -1606,7 +1606,7 @@ export default function ProposalsEdit() {
                 clientEmail={selectedClient?.email || ''}
                 course={selectedCourseNormalized as any}
                 module={normalizeModuleForTipo4(selectedModule ?? moduleFromEnrollment) as any}
-                discountLabel="Desconto de Pontualidade"
+                discountLabel="Desconto"
                 discountAmountMasked={form.watch('desconto') || ''}
                 subtotalMasked={form.watch('subtotal') || ''}
                 totalMasked={form.watch('total') || ''}

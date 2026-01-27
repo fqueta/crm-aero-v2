@@ -157,7 +157,7 @@ export function CourseForm({
    * en-US: Reads `tab` from URL and validates against available tabs. Returns
    *        'info' when the parameter is missing or invalid.
    */
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const allowedTabs = ['info', 'pricing', 'config', 'aircrafts', 'modules'];
   const tabParam = (searchParams.get('tab') || '').trim();
   const initialTab = allowedTabs.includes(tabParam) ? tabParam : 'info';
@@ -564,7 +564,11 @@ export function CourseForm({
   return (
     <FormProvider {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit, onInvalid)} className="space-y-6">
-      <Tabs defaultValue={initialTab} className="w-full">
+      <Tabs 
+        value={initialTab} 
+        onValueChange={(val) => setSearchParams({ tab: val }, { replace: true })}
+        className="w-full"
+      >
           <TabsList>
             <TabsTrigger value="info">Informações</TabsTrigger>
             <TabsTrigger value="pricing">Valores</TabsTrigger>
@@ -883,7 +887,7 @@ export function CourseForm({
                             </Button>
                             <CardContent className="pt-6">
                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                                <div className="md:col-span-2 space-y-2">
+                                <div className="md:col-span-3 space-y-2">
                                     <Label>Etapa</Label>
                                     <Select 
                                         value={form.getValues(`modulos.${idx}.etapa`)} 
@@ -900,30 +904,32 @@ export function CourseForm({
                                     )}
                                 </div>
                                 
-                                <div className="md:col-span-4 space-y-2">
+                                <div className="md:col-span-6 space-y-2">
                                     <Label>Título</Label>
-                                    <Input {...form.register(`modulos.${idx}.titulo` as const)} />
+                                    <Input {...form.register(`modulos.${idx}.titulo` as const)} placeholder="Título do módulo" />
                                     {((form.formState.errors.modulos as any)?.[idx]?.titulo?.message) && (
                                     <p className="text-xs text-red-600">{(form.formState.errors.modulos as any)[idx].titulo.message}</p>
                                     )}
                                 </div>
 
-                                <div className="md:col-span-2 space-y-2">
+                                <div className="md:col-span-3 space-y-2">
                                     <Label>Limite</Label>
-                                    <Input {...form.register(`modulos.${idx}.limite` as const)} />
+                                    <Input {...form.register(`modulos.${idx}.limite` as const)} placeholder="1" />
                                 </div>
 
-                                <div className="md:col-span-2 space-y-2">
-                                    <Label>Valor</Label>
+                                <div className="md:col-span-4 space-y-2">
+                                    <Label>Valor (R$)</Label>
                                     <Input 
                                         value={form.watch(`modulos.${idx}.valor`) || ''} 
                                         onChange={(e) => {
-                                            form.setValue(`modulos.${idx}.valor`, e.target.value);
-                                        }} 
+                                            const v = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
+                                            form.setValue(`modulos.${idx}.valor`, v);
+                                        }}
+                                        placeholder="R$ 0,00"
                                     />
                                 </div>
 
-                                <div className="md:col-span-2 space-y-2">
+                                <div className="md:col-span-8 space-y-2">
                                     <Label>Aeronaves</Label>
                                     <ModuleAircraftSelect
                                         value={form.watch(`modulos.${idx}.aviao`) || []}

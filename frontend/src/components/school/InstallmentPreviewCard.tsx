@@ -108,7 +108,7 @@ export default function InstallmentPreviewCard({ title = 'Parcelamento', parcela
             Valor da Parcela: {activeRow?.valor || '-'}
           </span>
           <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
-            Desconto Pontualidade: {activeRow?.desconto || '-'}
+            Desconto: {activeRow?.desconto || '-'}
           </span>
           <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
             Parcela c/ Desconto: {activeRow?.parcelaComDesconto || '-'}

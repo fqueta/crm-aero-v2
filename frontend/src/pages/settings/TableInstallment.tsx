@@ -136,7 +136,7 @@ export default function TableInstallment() {
 
   // Configuração tx2 (linhas dinâmicas)
   const [configTx2, setConfigTx2] = useState<InstallmentTx2Config[]>([
-    { name_label: 'Desconto de Pontualidade Mensalidade', name_valor: 'R$1.000,00 de desconto na mensalidade para pagamentos até a data de vencimento.' }
+    { name_label: 'Desconto Mensalidade', name_valor: 'R$1.000,00 de desconto na mensalidade para pagamentos até a data de vencimento.' }
   ]);
 
   /**
@@ -581,7 +581,7 @@ export default function TableInstallment() {
     // Mantém valor interno padrão
     setSelectedClassIds([]);
     setParcelas([{ index: 1, parcela: '6', tipo_entrada: '%', entrada: '', juros: '', valor: '', desconto: '' }]);
-    setConfigTx2([{ name_label: 'Desconto de Pontualidade Mensalidade', name_valor: 'R$1.000,00 de desconto na mensalidade para pagamentos até a data de vencimento.' }]);
+    setConfigTx2([{ name_label: 'Desconto Mensalidade', name_valor: 'R$1.000,00 de desconto na mensalidade para pagamentos até a data de vencimento.' }]);
   };
 
   /**
@@ -640,7 +640,7 @@ export default function TableInstallment() {
             {/* Nome */}
             <div>
               <Label>Nome</Label>
-              <Input placeholder="Desconto de Pontualidade" value={nome} onChange={(e) => setNome(e.target.value)} />
+              <Input placeholder="Desconto" value={nome} onChange={(e) => setNome(e.target.value)} />
               {formErrors?.nome && (
                 <p className="text-sm text-destructive mt-1">{formErrors.nome}</p>
               )}

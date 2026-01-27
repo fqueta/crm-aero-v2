@@ -160,7 +160,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
               clientEmail={clientEmail}
               course={course as any}
               module={modulo}
-              discountLabel="Desconto de Pontualidade"
+              discountLabel="Desconto"
               discountAmountMasked={descontoMasked}
               subtotalMasked={subtotalMasked}
               totalMasked={totalMasked}
