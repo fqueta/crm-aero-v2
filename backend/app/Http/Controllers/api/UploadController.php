@@ -82,7 +82,8 @@ class UploadController extends Controller
             'ativo' => 'nullable|in:s,n',
             'ordenar' => 'nullable|integer',
             // Regras: ao menos um entre arquivo ou url deve ser informado
-            'arquivo' => 'nullable|file|required_without:url',
+            // Validação estrita de imagem: apenas JPEG/PNG/WebP até ~5MB
+            'arquivo' => 'nullable|file|image|mimes:jpeg,jpg,png,webp|max:5120|required_without:url',
             'url' => 'nullable|url|required_without:arquivo',
             'descricao' => 'nullable|string',
         ])->validate();
@@ -109,6 +110,27 @@ class UploadController extends Controller
             $url = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
             $mime = $file->getMimeType();
             $size = $file->getSize();
+            // Checagem de integridade pós-gravação: compara tamanho gravado vs. tamanho original
+            try {
+                $storedExists = Storage::disk('public')->exists($path);
+                $storedSize = $storedExists ? Storage::disk('public')->size($path) : null;
+                if (!$storedExists || !is_int($storedSize) || $storedSize <= 0 || $storedSize !== (int) $size) {
+                    // Limpa arquivo possivelmente corrompido
+                    if ($storedExists) {
+                        Storage::disk('public')->delete($path);
+                    }
+                    return response()->json([
+                        'message' => 'Falha ao processar imagem: arquivo corrompido ou truncado em armazenamento.',
+                        'hint' => 'Verifique upload_max_filesize/post_max_size, proxy/CDN, e permissões de storage.',
+                    ], 422);
+                }
+            } catch (\Throwable $e) {
+                // Em caso de erro ao inspecionar filesystem, retorna falha segura
+                return response()->json([
+                    'message' => 'Erro ao validar integridade do arquivo enviado.',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
             // Nome padrão do arquivo
             $validated['nome'] = $validated['nome'] ?? $file->getClientOriginalName();
             $validated['slug'] = $validated['slug'] ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);

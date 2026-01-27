@@ -417,6 +417,30 @@ class PdfController extends Controller
             }
         }
 
+        // Garante pelo menos 2 páginas base (0=capa, 1=orçamento) mesmo sem galeria/extra_pages
+        // Base cover uses resolved backgroundUrl if available; budget page has no background by default.
+        if (count($extraPages) < 2) {
+            // Inserir placeholders no início do array para assegurar índices 0 e 1
+            $defaultBgPos = $request->input('background_position');
+            $defaultBgFit = $request->input('background_fit', 'contain');
+            // Página 0 (capa)
+            array_unshift($extraPages, [
+                'title' => null,
+                'html' => '',
+                'background_url' => $backgroundUrl ?: null,
+                'background_data_uri' => null,
+                'background_position' => is_string($defaultBgPos ?? null) ? $defaultBgPos : null,
+                'background_fit' => is_string($defaultBgFit ?? null) ? $defaultBgFit : null,
+            ]);
+            // Página 1 (orçamento)
+            array_splice($extraPages, 1, 0, [[
+                'title' => null,
+                'html' => '',
+                'background_url' => null,
+                'background_data_uri' => null,
+            ]]);
+        }
+
         // Function-level comment: Data URI conversion disabled globally.
         // PT: Conversão para base64/Data URI desativada; wkhtmltopdf tem 'enable-local-file-access'.
         // EN: Data URI conversion disabled; wkhtmltopdf uses 'enable-local-file-access'.
