@@ -200,9 +200,12 @@ class OptionController extends Controller
             return response()->json(['error' => 'Acesso negado'], 403);
         }
         $option = null;
-        // dd($request->all());
-        foreach($request->all() as $key => $value){
-            if(!empty($key) && !empty($value)){
+        $payload = $this->sanitizeInput($request->all());
+        foreach($payload as $key => $value){
+            if(!empty($key)){
+                if(is_string($value)){
+                    $value = str_replace('`','',$value);
+                }
                 if(is_bool($value)){
                     $value = (string)$value;
                 }

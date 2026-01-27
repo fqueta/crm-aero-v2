@@ -15,6 +15,7 @@ import { useCep } from '@/hooks/useCep';
 import { cpfApplyMask } from '@/lib/masks/cpf-apply-mask';
 import { phoneApplyMask } from '@/lib/masks/phone-apply-mask';
 import { cepApplyMask } from '@/lib/masks/cep-apply-mask';
+import { validarCpf } from '@/lib/qlib';
 import {
   Select,
   SelectContent,
@@ -28,7 +29,7 @@ import { PublicFooter } from "@/components/layout/PublicFooter";
 const formSchema = z.object({
   name: z.string().min(2, 'Nome é obrigatório'),
   email: z.string().email('E-mail inválido'),
-  cpf: z.string().min(11, 'CPF inválido'),
+  cpf: z.string().min(11, 'CPF inválido').refine(validarCpf, 'CPF inválido'),
   celular: z.string().min(10, 'Celular inválido'),
   nascimento: z.string().min(10, 'Data de nascimento inválida'),
   pais_origem: z.string().min(1, 'País de origem é obrigatório'),
