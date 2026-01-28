@@ -28,9 +28,23 @@ class ZapguruController extends Controller
     public function get_telefonezap_by_token_proposta($token=null)
     {
         $ret = null;
-        $id_cliente = Qlib::buscaValorDb0('matriculas','token',$token,'id_cliente');
+        $id_cliente = Qlib::buscaValorDb('matriculas','token',$token,'id_cliente');
         if($id_cliente){
-            $ret = Qlib::buscaValorDb0('clientes','id',$id_cliente,'telefonezap');
+            $ret = Qlib::buscaValorDb('clientes','id',$id_cliente,'telefonezap');
+        }
+        return $ret;
+    }
+	/**
+	 * Retora o telefonezap de um aluno com o id da proposta
+	 * @param string $id_matricula
+	 * @uso $telefonezap = (new ZapguruController)->get_telefonezap_by_id_matricula($id_matricula);
+	 */
+    public function get_telefonezap_by_id_matricula($id_matricula=null)
+    {
+        $ret = null;
+        $id_cliente = Qlib::buscaValorDb('matriculas','id',$id_matricula,'id_cliente');
+        if($id_cliente){
+            $ret = Qlib::buscaValorDb('clientes','id',$id_cliente,'telefonezap');
         }
         return $ret;
     }

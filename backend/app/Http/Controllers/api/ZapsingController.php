@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\MatriculasController;
+use App\Http\Controllers\ZapguruController;
 use App\Jobs\GeraPdfContratoJoub;
 use App\Jobs\SendZapsingJoub;
 use App\Models\User;
@@ -449,6 +450,79 @@ class ZapsingController extends Controller
         } catch (\Throwable $e) {
             $ret['mens'] = $e->getMessage();
         }
+        return $ret;
+    }
+    /**
+     * Metodo para adiminstrar um envio de mensagem do zapsing
+     * @param string $token
+     */
+    public function enviar_link_assinatura($id_matricula=null,$tk_periodo=false){
+        $d = (new MatriculaController())->dm($id_matricula);
+        $processo = [];
+        if($tk_periodo && isset($d['id']) && ($id_matricula = $d['id'])){
+            $campo_processo = 'processo_assinatura';
+            $json_processo = Qlib::get_matriculameta($id_matricula,$campo_processo);
+            if($json_processo){
+                $processo = Qlib::lib_json_array($json_processo);
+            }
+        }
+        $ret['exec'] = false;
+        if(isset($processo['response']['signers']) && isset($processo['response']['external_id'])){
+            $webhook_zapsing = $processo['response'];
+        }else{
+            $webhook_zapsing = isset($d['webhook_zapsing']['enviar']['response']) ? $d['webhook_zapsing']['enviar']['response'] : false;
+            if(!$webhook_zapsing){
+                $webhook_zapsing = isset($d['webhook_zapsing']) ? $d['webhook_zapsing'] : [];
+            }
+        }
+        $email = isset($d['email']) ? $d['email'] : false;
+        $app = config('app.name');
+        $temm = 'Olá *{nome}* sua assinatura foi solicitada, pelo *{app}*, para o documento, *{nome_doc}* segue o link de assinatura {link}';
+        $i = 0;
+        $zgc = new ZapguruController();
+        if($tk_periodo){
+            $tk = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
+            $arr_tk = explode('_',$tk);
+            $external_id = isset($arr_tk[0]) ? $arr_tk[0] : false;
+        }else{
+            $external_id = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
+        }
+        $nome_doc = isset($webhook_zapsing['name']) ? $webhook_zapsing['name'] : '';
+        if(isset($webhook_zapsing['signers'][$i]['sign_url']) && is_string($webhook_zapsing['signers'][$i]['sign_url']) && ($signers=$webhook_zapsing['signers'])){
+            if(is_array($signers)){
+                foreach ($signers as $k => $signer) {
+                    $nome = isset($signer['name']) ? $signer['name'] : '';
+                    $status = isset($signer['status']) ? $signer['status'] : '';
+                    // $nome_doc = isset($signer['name']) ? $signer['name'] : '';
+                    // $email = isset($signering['email']) ? $signering['email'] : $email;
+                    $email = isset($signer['email']) ? $signer['email'] : '';
+                    $link = isset($signer['sign_url']) ? $signer['sign_url'] : '';
+                    $mens = str_replace('{nome}',$nome,$temm);
+                    $mens = str_replace('{nome_doc}',$nome_doc,$mens);
+                    $mens = str_replace('{link}',$link,$mens);
+                    $mens = str_replace('{app}',$app,$mens);
+                    $ret['signer'][$k]['name'] = $nome;
+                    $ret['signer'][$k]['email'] = $email;
+                    $ret['signer'][$k]['nome_doc'] = $nome_doc;
+                    $ret['signer'][$k]['link'] = $link;
+                    $dialog_id = '679a438a9d7c8affe47e29b5';
+                    if($k==0){
+                        $telefonezap = $zgc->get_telefonezap_by_id_matricula($id_matricula);
+                        $conf_link_zap = ['telefonezap'=>$telefonezap,'text'=>$mens,'gravar_resposta'=>false,'dialog_id'=>$dialog_id];
+                    }else{
+                        $conf_link_zap = ['email'=>$email,'text'=>$mens,'tab'=>'usuarios_sistemas','gravar_resposta'=>false,'dialog_id'=>$dialog_id];
+                    }
+                    if($status=='signed'){
+                        $ret['signer'][$k]['status'] = $status;
+                    }else{
+                        $ret['signer'][$k]['criar_chat'] = $zgc->criar_chat($conf_link_zap);
+                    }
+                }
+            }
+
+        }
+        //Registrar um log
+        Log::info('enviar_link_assinatura para o zapguru:', $ret);
         return $ret;
     }
 

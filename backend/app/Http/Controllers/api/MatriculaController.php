@@ -1364,7 +1364,7 @@ class MatriculaController extends Controller
                 }
                 //Envia o link de assinatura para o whatsapp atrave do zapguru
                 if(Qlib::qoption('enviar_link_assinatura_zap')=='s'){
-                    $ret['enviar_link_assinatura'] = (new AdminZapsingController)->enviar_link_assinatura($tm,$tk_periodo);
+                    $ret['enviar_link_assinatura'] = (new ZapsingController())->enviar_link_assinatura($id,$tk_periodo);
                 }
             }
         }
