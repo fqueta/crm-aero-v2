@@ -1228,6 +1228,13 @@ class MatriculaController extends Controller
                     'redirect' => '/aluno/matricula/' . $client_id . '_' . $matricula_id . '/1'
                 ], 403);
             }
+            //se o id do cliente não concidir com o id do cliente da matricula
+            if ($client_id != $matricula->id_cliente) {
+                return response()->json([
+                    'error' => 'Cliente não autorizado.',
+                    'redirect' => '/aluno/matricula/' . $client_id . '_' . $matricula_id . '/1'
+                ], 403);
+            }
 
             // Update with Step 2 completion
             $config['step2_done'] = true;

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Http\Controllers\api\MatriculaController;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -32,8 +33,10 @@ class SendPeriodosZapsingJob implements ShouldQueue
         $id_matricula = $this->id_matricula;
         // Verify via Controller method, which handles duplication checks too
         try {
-            $zapsingController = new \App\Http\Controllers\api\ZapsingController();
-            $response = $zapsingController->enviar_envelope($id_matricula);
+            // $zapsingController = new \App\Http\Controllers\api\ZapsingController();
+            $MatriculaController = new \App\Http\Controllers\api\MatriculaController();
+            // $mc = new MatriculaController
+            $response = $MatriculaController->send_to_zapSing($id_matricula);
 
             if (isset($response['exec']) && $response['exec']) {
                 \Log::info("ZapSign Envelope sent successfully for Matricula ID: $id_matricula");
