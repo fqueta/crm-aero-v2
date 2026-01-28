@@ -66,6 +66,10 @@ class ProposalService extends BaseApiService {
   async approveProposal(clientId: string, matriculaId: string) {
     return this.post(`/proposal/${clientId}/${matriculaId}/approve`, {});
   }
+
+  async getContractsHtml(clientId: string, matriculaId: string) {
+    return this.get<any[]>(`/proposal/${clientId}/${matriculaId}/contracts-html`);
+  }
 }
 
 export const proposalService = new ProposalService();

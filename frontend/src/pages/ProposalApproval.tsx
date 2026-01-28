@@ -52,6 +52,7 @@ export default function ProposalApproval() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [proposal, setProposal] = useState<any>(null);
+  const [contracts, setContracts] = useState<any[]>([]);
 
   const form = useForm<ApprovalFormData>({
     resolver: zodResolver(formSchema),
@@ -72,8 +73,18 @@ export default function ProposalApproval() {
       }
 
       try {
-        const data = await proposalService.getProposal(id_cliente, id_matricula);
+        const [data, contractsData] = await Promise.all([
+            proposalService.getProposal(id_cliente, id_matricula),
+            proposalService.getContractsHtml(id_cliente, id_matricula)
+        ]);
+        
         setProposal(data);
+        if (Array.isArray(contractsData)) {
+            setContracts(contractsData);
+        } else {
+            console.warn("Contracts data received is not an array", contractsData);
+            setContracts([]);
+        }
 
         // Check if Step 1 is done
         // Note: data.matricula might be null if not found, but service throws usually.
@@ -309,6 +320,34 @@ export default function ProposalApproval() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Contracts Display */}
+            {contracts.length > 0 && (
+                <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
+                    <div className="bg-slate-50/50 p-6 border-b border-slate-100 flex items-center gap-3">
+                        <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
+                            <LucideScrollText className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900">Termos do Contrato</h2>
+                            <p className="text-sm text-slate-500">Leia atentamente os termos antes de aprovar</p>
+                        </div>
+                    </div>
+                    <CardContent className="p-6 md:p-8">
+                        <div className="space-y-8">
+                            {contracts.map((contract: any, index: number) => (
+                                <div key={contract.id || index} className="space-y-3">
+                                    <h3 className="font-semibold text-lg border-b pb-2">{contract.nome || 'Contrato'}</h3>
+                                    <div 
+                                        className="prose prose-sm max-w-none text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-y-auto max-h-[500px]"
+                                        dangerouslySetInnerHTML={{ __html: contract.conteudo }}
+                                    ></div>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Action Buttons - Terms Card removed temporarily */}
             <div className="mt-8">

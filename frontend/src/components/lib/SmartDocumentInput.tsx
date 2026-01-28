@@ -1,4 +1,4 @@
-import { Controller, Control } from "react-hook-form";
+import { Controller, Control, useFormContext } from "react-hook-form";
 import { FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { InputMask, format } from "@react-input/mask";
@@ -30,6 +30,7 @@ export function SmartDocumentInput({
   onBlur,
   disabled,
 }: SmartDocumentInputProps) {
+  const formContext = useFormContext();
   const [mask, setMask] = useState("");
   const [inputPlaceholder, setInputPlaceholder] = useState("");
   const [inputLabel, setInputLabel] = useState("");
@@ -156,12 +157,27 @@ export function SmartDocumentInput({
       const expectedLength = tipoPessoa === 'pf' ? 11 : 14;
       
       if (cleanValue.length === expectedLength) {
-        setIsValid(validateDocument(value));
+        const ok = validateDocument(value);
+        setIsValid(ok);
+        // Atualiza erro do react-hook-form conforme validação
+        if (formContext) {
+          if (!ok) {
+            formContext.setError(name as any, { type: 'validate', message: tipoPessoa === 'pf' ? 'CPF inválido' : 'CNPJ inválido' });
+          } else {
+            formContext.clearErrors(name as any);
+          }
+        }
       } else {
         setIsValid(null); // Ainda digitando
+        if (formContext) {
+          formContext.clearErrors(name as any);
+        }
       }
     } else {
       setIsValid(null);
+      if (formContext) {
+        formContext.clearErrors(name as any);
+      }
     }
   };
 
@@ -175,7 +191,15 @@ export function SmartDocumentInput({
     
     // Validação final no blur
     if (value && value.length > 0) {
-      setIsValid(validateDocument(value));
+      const ok = validateDocument(value);
+      setIsValid(ok);
+      if (formContext) {
+        if (!ok) {
+          formContext.setError(name as any, { type: 'validate', message: tipoPessoa === 'pf' ? 'CPF inválido' : 'CNPJ inválido' });
+        } else {
+          formContext.clearErrors(name as any);
+        }
+      }
     }
     
     // Chama o onBlur personalizado se fornecido
@@ -197,7 +221,7 @@ export function SmartDocumentInput({
   return (
     <FormItem>
       <FormLabel className="text-sm font-medium text-gray-700">
-        {inputLabel} {tipoPessoa === 'pf' || tipoPessoa === 'pj' ? '*' : ''}
+        {inputLabel}
       </FormLabel>
       <FormControl>
         <div className="relative">
@@ -210,14 +234,17 @@ export function SmartDocumentInput({
                 replacement={{ d: /\d/ }}
                 value={field.value && mask && typeof field.value === 'string' && field.value.trim() !== '' ? format(field.value, { mask, replacement: { d: /\d/ } }) : ""}
                 onChange={(e) => {
-                  field.onChange(e);
-                  handleValueChange(e.target.value);
+                  const val = e.target.value;
+                  field.onChange(val);
+                  handleValueChange(val);
                 }}
                 onBlur={(e) => handleBlur(e, field.onBlur)}
                 disabled={disabled}
                 placeholder={inputPlaceholder}
                 ref={field.ref}
-                className="h-11 pr-10 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`h-11 pr-10 flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isValid === false ? 'border-red-500 focus-visible:ring-red-500' : 'border-input focus-visible:ring-ring'
+                }`}
               />
             )}
           />

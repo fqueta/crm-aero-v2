@@ -30,6 +30,8 @@ import Categories from "./pages/Categories";
 import Permissions from "./pages/settings/Permissions";
 import Users from "./pages/settings/Users";
 import UserCreate from "./pages/settings/UserCreate";
+import UserEdit from "./pages/settings/UserEdit";
+import UserView from "./pages/settings/UserView";
 import UserProfiles from "./pages/settings/UserProfiles";
 import SystemSettings from "./pages/settings/SystemSettings";
 import Stages from "./pages/settings/Stages";
@@ -601,6 +603,20 @@ const App = () => {
                     >
                       <Users />
                     </PermissionGuard>
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/users/edit/:id" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <UserEdit />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/users/view/:id" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <UserView />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

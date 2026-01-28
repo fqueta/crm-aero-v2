@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useContractsList, useDeleteContract } from '@/hooks/contracts';
 import type { ContractRecord, ContractStatus } from '@/types/contracts';
 import { Card } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus, Copy } from 'lucide-react';
 import { contractsService } from '@/services/contractsService';
+import { coursesService } from '@/services/coursesService';
 import { toast } from 'sonner';
 
 /**
@@ -40,6 +41,43 @@ export default function ContractsList() {
   const items = useMemo(() => (data?.data ?? ([] as ContractRecord[])), [data]);
   const currentPage = data?.current_page ?? page;
   const lastPage = data?.last_page ?? 1;
+
+  /**
+   * coursesQuery
+   * pt-BR: Carrega um conjunto de cursos para mapear ID -> nome/título.
+   * en-US: Loads a set of courses to map ID -> name/title.
+   */
+  const coursesQuery = useQuery({
+    queryKey: ['cursos', 'list', 200],
+    queryFn: async () => coursesService.listCourses({ page: 1, per_page: 200 }),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const courseItems = ((coursesQuery.data as any)?.data || (coursesQuery.data as any)?.items || []) as any[];
+  const coursesMap = useMemo(() => {
+    const map = new Map<string | number, string>();
+    for (const c of courseItems) {
+      const id = (c?.id as any);
+      const label = String(c?.nome || c?.titulo || '');
+      if (id != null && label) {
+        map.set(typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id, label);
+      }
+    }
+    return map;
+  }, [courseItems]);
+
+  /**
+   * getCourseLabel
+   * pt-BR: Retorna o nome/título do curso pelo ID; fallback para o próprio ID.
+   * en-US: Returns the course name/title by ID; falls back to the raw ID.
+   */
+  function getCourseLabel(courseId?: number | string | null): string {
+    if (courseId == null || courseId === '') return '-';
+    const key = typeof courseId === 'string' && /^\d+$/.test(courseId) ? Number(courseId) : courseId;
+    const label = coursesMap.get(key as any);
+    return label ? label : String(courseId);
+  }
 
   /**
    * deleteMutation
@@ -153,7 +191,7 @@ export default function ContractsList() {
                   <TableCell>{c.nome}</TableCell>
                   <TableCell>{c.slug || '-'}</TableCell>
                   <TableCell>{c.ativo === 'publish' ? 'Publicado' : 'Rascunho'}</TableCell>
-                  <TableCell>{c.id_curso ? String(c.id_curso) : '-'}</TableCell>
+                  <TableCell>{getCourseLabel(c.id_curso)}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => handleCopy(c)} title="Copiar contrato">

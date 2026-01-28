@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEnrollment } from '@/hooks/enrollments';
 import { useClientById } from '@/hooks/clients';
 import { useQuery } from '@tanstack/react-query';
@@ -8,6 +9,8 @@ import { currencyRemoveMaskToNumber } from '@/lib/masks/currency';
 import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
+import ProposalContractsTab from './ProposalContractsTab';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface ProposalViewContentProps {
   /**
@@ -20,11 +23,56 @@ interface ProposalViewContentProps {
 
 /**
  * ProposalViewContent
- * pt-BR: Componente de visualização de proposta somente leitura, com card de Proposta Comercial e Parcelamento.
- * en-US: Read-only proposal view component, with Commercial Proposal card and Installment preview.
+ * pt-BR: Componente de visualização de proposta somente leitura, com abas para Visão Geral e Contratos.
+ * en-US: Read-only proposal view component, with tabs for Overview and Contracts.
  */
 export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const { data: enrollment } = useEnrollment(String(id || ''));
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  /**
+   * getInitialTab
+   * pt-BR: Obtém a aba inicial da URL: hash (#overview | #contracts) ou query (?tab=...).
+   * en-US: Gets initial tab from URL: hash (#overview | #contracts) or query (?tab=...).
+   */
+  const getInitialTab = useMemo(() => {
+    const hash = String(location.hash || '').replace('#', '');
+    if (hash === 'overview' || hash === 'contracts') return hash;
+    const qs = new URLSearchParams(location.search || '');
+    const t = qs.get('tab');
+    if (t === 'overview' || t === 'contracts') return t;
+    return 'overview';
+  }, [location.hash, location.search]);
+
+  /**
+   * tab
+   * pt-BR: Estado controlado da aba atual, sincronizado com a URL.
+   * en-US: Controlled state of the current tab, synchronized with the URL.
+   */
+  const [tab, setTab] = useState<string>(getInitialTab);
+
+  /**
+   * syncTabFromUrl
+   * pt-BR: Atualiza o estado quando o hash/query muda externamente.
+   * en-US: Updates state when hash/query changes externally.
+   */
+  useEffect(() => {
+    setTab(getInitialTab);
+  }, [getInitialTab]);
+
+  /**
+   * handleTabChange
+   * pt-BR: Atualiza aba e escreve o hash na URL (#overview | #contracts).
+   * en-US: Updates tab and writes hash in the URL (#overview | #contracts).
+   */
+  function handleTabChange(next: string) {
+    setTab(next);
+    navigate(
+      { pathname: location.pathname, search: location.search, hash: `#${next}` },
+      { replace: true }
+    );
+  }
 
   const clientId = useMemo(() => {
     const v = (enrollment as any)?.id_cliente ?? (enrollment as any)?.client_id;
@@ -117,61 +165,76 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          {/**
-           * Header
-           * pt-BR: Cabeçalho simples para a visualização da proposta.
-           * en-US: Simple header for proposal view.
-           */}
-          <CardTitle>Visualizar Proposta</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <div className="font-medium">Cliente</div>
-                <div>{clientName || '—'}</div>
-              </div>
-              <div>
-                <div className="font-medium">Curso</div>
-                <div>{(course as any)?.titulo || (course as any)?.nome || '—'}</div>
-              </div>
-              <div>
-                <div className="font-medium">Subtotal</div>
-                <div>{subtotalMasked || '—'}</div>
-              </div>
-              <div>
-                <div className="font-medium">Total</div>
-                <div>{totalMasked || '—'}</div>
-              </div>
-            </div>
+      <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+           <TabsTrigger value="overview" asChild><a href="#overview">Visão Geral</a></TabsTrigger>
+           <TabsTrigger value="contracts" asChild><a href="#contracts">Contratos</a></TabsTrigger>
+        </TabsList>
 
-            {/* Link para assinatura */}
-            {linkAssinatura && (
-              <SignatureLinkCard link={linkAssinatura} />
-            )}
+        <TabsContent value="overview" className="space-y-6 mt-4">
+            <Card>
+                <CardHeader>
+                <CardTitle>Visualizar Proposta</CardTitle>
+                </CardHeader>
+                <CardContent>
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <div className="font-medium">Cliente</div>
+                        <div>{clientName || '—'}</div>
+                    </div>
+                    <div>
+                        <div className="font-medium">Curso</div>
+                        <div>{(course as any)?.titulo || (course as any)?.nome || '—'}</div>
+                    </div>
+                    <div>
+                        <div className="font-medium">Subtotal</div>
+                        <div>{subtotalMasked || '—'}</div>
+                    </div>
+                    <div>
+                        <div className="font-medium">Total</div>
+                        <div>{totalMasked || '—'}</div>
+                    </div>
+                    </div>
 
-            <BudgetPreview
-              title="Proposta Comercial"
-              clientName={clientName}
-              clientId={client?.id ? String(client.id) : undefined}
-              clientPhone={clientPhone}
-              clientEmail={clientEmail}
-              course={course as any}
-              module={modulo}
-              discountLabel="Desconto"
-              discountAmountMasked={descontoMasked}
-              subtotalMasked={subtotalMasked}
-              totalMasked={totalMasked}
-              validityDate={computeValidityDate(validadeDias)}
-            />
+                    {/* Link para assinatura */}
+                    {linkAssinatura && (
+                    <SignatureLinkCard link={linkAssinatura} />
+                    )}
 
-            {/* Card de Parcelamento abaixo do card de Proposta Comercial */}
-            <InstallmentPreviewCard title="Parcelamento" parcelamento={parcelamento} />
-          </div>
-        </CardContent>
-      </Card>
+                    <BudgetPreview
+                        title="Proposta Comercial"
+                        clientName={clientName}
+                        clientId={client?.id ? String(client.id) : undefined}
+                        clientPhone={clientPhone}
+                        clientEmail={clientEmail}
+                        course={course as any}
+                        module={modulo}
+                        discountLabel="Desconto"
+                        discountAmountMasked={descontoMasked}
+                        subtotalMasked={subtotalMasked}
+                        totalMasked={totalMasked}
+                        validityDate={computeValidityDate(validadeDias)}
+                    />
+
+                    {/* Card de Parcelamento abaixo do card de Proposta Comercial */}
+                    <InstallmentPreviewCard title="Parcelamento" parcelamento={parcelamento} />
+                </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
+
+        <TabsContent value="contracts" className="mt-4">
+             {clientId && id ? (
+                <ProposalContractsTab clientId={clientId} enrollmentId={id} />
+             ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                    Carregando dados da matrícula...
+                </div>
+             )}
+        </TabsContent>
+      </Tabs>
+      
     </div>
   );
 }

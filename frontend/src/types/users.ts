@@ -15,6 +15,7 @@ export interface UserConfig {
   bairro: string;
   cidade: string;
   uf: string;
+  equipe?: string[];
 }
 
 export interface UserRecord {
@@ -48,6 +49,33 @@ export interface CreateUserInput {
   config: UserConfig;
   genero: "m" | "f" | "ni";
   ativo: "s" | "n";
+}
+
+export interface UserFormData {
+  name: string;
+  email: string;
+  permission_id: string;
+  tipo_pessoa?: 'pf' | 'pj';
+  password?: string;
+  genero?: 'm' | 'f' | 'ni';
+  ativo?: 's' | 'n';
+  cpf?: string;
+  cnpj?: string;
+  razao?: string;
+  config?: {
+    celular?: string;
+    telefone_comercial?: string;
+    nascimento?: string;
+    telefone_residencial?: string;
+    cep?: string;
+    endereco?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string; 
+    cidade?: string;
+    uf?: string;
+    equipe?: string[];
+  };
 }
 
 export interface UpdateUserInput {

@@ -61,6 +61,7 @@ Route::name('api.')->prefix('v1')->middleware([
     // Public routes for Proposal Signature
     Route::get('proposal/{client_id}/{matricula_id}', [\App\Http\Controllers\api\MatriculaController::class, 'publicShow']);
     Route::post('proposal/{client_id}/{matricula_id}/sign', [\App\Http\Controllers\api\MatriculaController::class, 'publicSign']);
+    Route::get('proposal/{client_id}/{matricula_id}/contracts-html', [\App\Http\Controllers\api\MatriculaController::class, 'contratos_periodos_html']);
 
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');

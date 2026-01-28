@@ -824,7 +824,7 @@ class MatriculaController extends Controller
 
             // Unify response using dm() helper
             $data = $this->dm($matricula_id, $client_id);
-            
+
             return response()->json($data);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
@@ -843,7 +843,7 @@ class MatriculaController extends Controller
             // tranform matricual_id em int
             $matricula_id = (int) $matricula_id;
             $client = User::findOrFail($client_id);
-            
+
             // Validate request data
             // Adapting validation based on the fields shown in the image/request
             $rules = [
@@ -858,7 +858,7 @@ class MatriculaController extends Controller
                 'complemento' => 'nullable|string',
                 'bairro' => 'required|string',
                 'cidade' => 'required|string',
-                'estado' => 'required|string', 
+                'estado' => 'required|string',
                 'nacionalidade' => 'required|string',
                 'profissao' => 'required|string',
                 'sexo' => 'required|string',
@@ -876,22 +876,22 @@ class MatriculaController extends Controller
             }
 
             $data = $request->except(['config']);
-            
+
             // Handle config/meta fields
             // Ensure we handle config correctly regardless of cast
             $currentConfig = is_array($client->config) ? $client->config : (is_string($client->config) ? (json_decode($client->config, true) ?? []) : []);
-            
+
             // Map specific fields to config if they don't exist in users table columns
             // Assuming users table has basic fields, others go to config
             // Based on User model fillable: name, email, cpf, cnpj, celular(maybe via cast/accessors?), genero, etc.
-            
+
             // List of potential config fields based on standard User models in this project type
             $configFields = [
                 'pais_origem', 'canac', 'identidade', 'cep', 'endereco', 'numero',
                 'complemento', 'bairro', 'cidade', 'estado', 'nacionalidade','sexo','','','','','',
                 'profissao', 'altura', 'peso', 'nascimento', 'data_de_nascimento'
             ];
-            
+
             \Illuminate\Support\Facades\Log::info('Processing Config Fields', ['request_all' => $request->all()]);
 
             foreach ($configFields as $field) {
@@ -899,7 +899,7 @@ class MatriculaController extends Controller
                     $currentConfig[$field] = $request->input($field);
                 }
             }
-            
+
             // Direct update for fillable fields
             $fillableUpdates = $request->only(['name', 'email', 'cpf', 'celular', 'sexo']); // sexo might require mapping to 'genero'
             if ($request->has('sexo')) {
@@ -930,7 +930,7 @@ class MatriculaController extends Controller
                 $matricula->config = $matConfig;
                 $matricula->save();
                 //gerar pdf
-                // $dm = $this->dm($matricula_id); 
+                // $dm = $this->dm($matricula_id);
                 // $list_pdf_contratos = $this->contratos_periodos_pdf($matricula_id);
                 // if($list_pdf_contratos) {
                     $ret = [
@@ -1018,7 +1018,7 @@ class MatriculaController extends Controller
                 // dd($ids);
                 // return response()->json(['error' => 'IDs dos contratos são necessários'], 400);
             // }
-            // dd($dm,$ids);
+            // dd($id_periodos);
             //Localizar os conteudos dos contratos com esses ids
             if($ids && count($ids)){
                 $cc = new ContratoController();
@@ -1027,9 +1027,33 @@ class MatriculaController extends Controller
                 $dm['cpf_aluno'] = $dm['cliente']['cpf']??'';
                 $dm['estado_civil'] = $dm['cliente']['estado_civil']??'';
                 $dm['nacionalidade'] = $dm['cliente']['nacionalidade']??'';
+                $dm['data_nascimento'] = $dm['cliente']['config']['nascimento']??'';
+                if($dm['data_nascimento']){
+                    $dm['data_nascimento'] = date('d/m/Y',strtotime($dm['data_nascimento']));
+                }
+                $dm['celular'] = $dm['cliente']['config']['celular']??'';
+                $dm['telefone'] = $dm['cliente']['config']['telefone']??'';
+                //Adicionar mascar de telefone
+                if($dm['celular']){
+                    $dm['celular'] = Qlib::mask($dm['celular'],'(99) 99999-9999');
+                }
+                if($dm['telefone']){
+                    $dm['telefone'] = Qlib::mask($dm['telefone'],'(99) 9999-9999');
+                }
+
                 $dm['curso'] = $dm['curso_nome']??'';
                 $dm['identidade'] = $dm['cliente']['config']['rg']??'';
-                // dd($dm);
+                $testemunhas = $this->testemunhas();
+                $dm['nome_testemunha1'] = $testemunhas[0]['name']??'';
+                $dm['cpf_testemunha1'] = $testemunhas[0]['cpf']??'';
+                $dm['nome_testemunha2'] = $testemunhas[1]['name']??'';
+                $dm['cpf_testemunha2'] = $testemunhas[1]['cpf']??'';
+                $dm['data_contrato_aceito'] = Qlib::dataLocal();
+                $assinar = $this->helper_assinar($testemunhas);
+                if(is_array($assinar) && count($assinar)){
+                    $dm = array_merge($dm,$assinar);
+                }
+                // dd($assinar,$dm);
                 foreach($ids as $id){
                     try {
                         $cont = $cc->show($id)->getData();
@@ -1038,7 +1062,8 @@ class MatriculaController extends Controller
                     }
                     //Aplicar shortcodes
                     $cont->conteudo = Qlib::apply_shortcodes($cont->conteudo,$dm);
-                    $contratos[] = ['id'=>$id,'conteudo'=>$cont->conteudo,'nome'=>$cont->nome,'slug'=>$cont->slug];
+                    $conteudo = $cont->conteudo??'';
+                    $contratos[] = ['id'=>$id,'conteudo'=>$conteudo,'nome'=>$cont->nome,'slug'=>$cont->slug];
                 }
             }
             return $contratos;
@@ -1046,6 +1071,50 @@ class MatriculaController extends Controller
             // return response()->json($contratos);
         }
         return response()->json(['error' => 'Matrícula não encontrada'], 404);
+    }
+    /**
+     * Metodo para auxiliar o preenchimento de assinaturas nos contratos
+     * @param string $conteudo O conteúdo do contrato com os shortcodes {NOME} e {CPF}
+     * @param string $nome O nome da pessoa a ser assinada
+     * @param string $cpf O CPF da pessoa a ser assinada
+     * @return string O conteúdo do contrato com as assinaturas preenchidas
+     */
+    public function helper_assinar($testemunhas=[]){
+        if(!count($testemunhas)){
+            $testemunhas =  $this->testemunhas();
+        }
+        $data_aceito_contrato = Qlib::dataLocal();
+        $nome_contratada = '';
+        $nome_testemunha1 = '';
+        $nome_testemunha2 = '';
+        $cpf_testemunha1 = '';
+        $cpf_testemunha2 = '';
+        $cpf_contratada = '';
+        $assinatura_contratada = '';
+        $assinatura_testemunha1 = '';
+        $assinatura_testemunha2 = '';
+        $dcont = User::where('token','id_contatada')->first();
+        $ret = [];
+        if($dcont){
+                // $nome_contratada = $dcont[0]['nome'].' '.$dcont[0]['sobrenome'];
+                $nome_contratada = $dcont->name;
+                $cpf_contratada = $dcont->cpf;
+                $ret['assinatura_contratada'] = '<span style="font-size:13px" class="text-danger">Contrato assinado digitalmete por <b>{nome_contratada}</b> na data em '.$data_aceito_contrato.'</span>';
+                $ret['assinatura_contratada'] = str_replace('{nome_contratada}',$nome_contratada,$ret['assinatura_contratada']);
+            }
+            if($testemunhas[0]){
+                $nome_testemunha1 = $testemunhas[0]['name']??'';
+                $cpf_testemunha1 = $testemunhas[0]['cpf']??'';
+                $assinatura_testemunha1 = '<span style="font-size:13px" class="text-danger" style="">Contrato assinado digitalmete por <b>{nome_testemunha1}</b> na data em '.$data_aceito_contrato.'</span>';
+                $ret['assinatura_testemunha1'] = str_replace('{nome_testemunha1}',$nome_testemunha1,$assinatura_testemunha1);
+            }
+            if($testemunhas[1]){
+                $nome_testemunha2 = $testemunhas[1]['name']??'';
+                $cpf_testemunha2 = $testemunhas[1]['cpf']??'';
+                $ret['assinatura_testemunha2'] = '<span style="font-size:13px" class="text-danger" style="">Contrato assinado digitalmete por <b>{nome_testemunha2}</b> na data em '.$data_aceito_contrato.'</span>';
+                $ret['assinatura_testemunha2'] = str_replace('{nome_testemunha2}',$nome_testemunha2,$ret['assinatura_testemunha2']);
+            }
+            return $ret;
     }
     /**
      * Metodo para gerar um arquivos pdf estatico com os contratos de periodos de uma matricula
@@ -1097,13 +1166,50 @@ class MatriculaController extends Controller
         $ret['contratos_pdf'] = $contratos_pdf;
         return $ret;
     }
+
+    /**
+     * Metodo para retornar os contratos em HTML para visualização
+     */
+    public function contratos_periodos_html($client_id, $matricula_id)
+    {
+        try {
+            // Verifica se a matrícula pertence ao cliente
+            Matricula::where('id', $matricula_id)
+                ->where('id_cliente', $client_id)
+                ->firstOrFail();
+            $contratos = $this->contratos_periodos($matricula_id);
+
+            // Verifica erro vindo do metodo contratos_periodos
+            if (isset($contratos['error']) || $contratos instanceof \Illuminate\Http\JsonResponse) {
+                return $contratos;
+            }
+
+            return response()->json($contratos);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Matrícula não encontrada ou acesso negado'], 404);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Erro ao carregar contratos: ' . $e->getMessage()], 500);
+        }
+    }
     /**
      * Criar metodo para gerenciar assinaturas
      */
     /**
      * metodo helper para gerar lista de testemunhas que vao assinar os contratos
      */
-
+    public function testemunhas(){
+        $testemunhas = [];
+        $arr_token_testemunas = ['id_testemunha1','id_testemunha2'];
+        /**Lista do ids das testemunhas da matricula */
+        foreach($arr_token_testemunas as $token){
+            $testemunhas[] = User::where('token',$token)->first()->toArray();
+        }
+        /**
+         * resgatar os dados de usuarios das testemunhas da matricula
+         */
+        return $testemunhas;
+    }
 
 
 
@@ -1111,7 +1217,7 @@ class MatriculaController extends Controller
     {
         try {
             $matricula = \App\Models\Matricula::findOrFail($matricula_id);
-            
+
             // Validate Step 1 completion
             $config = $matricula->config ?? [];
             if (empty($config['step1_done'])) {
@@ -1125,7 +1231,7 @@ class MatriculaController extends Controller
             $config['step2_done'] = true;
             $config['step2_at'] = now()->toDateTimeString();
             $matricula->config = $config;
-            
+
             $matricula->save();
 
             // Dispatch Jobs Sequentially
@@ -1134,7 +1240,7 @@ class MatriculaController extends Controller
                 new GeraPdfcontratosPnlJob($matricula_id),
                 new SendPeriodosZapsingJob($matricula_id),
             ])->dispatch();
-            
+
             return response()->json(['message' => 'Proposta aprovada com sucesso!']);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Erro ao aprovar proposta: ' . $e->getMessage()], 500);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -9,34 +9,13 @@ import { AddressAccordion } from "@/components/lib/AddressAccordion";
 import { SmartDocumentInput } from '@/components/lib/SmartDocumentInput';
 import { MaskedInputField } from '@/components/lib/MaskedInputField';
 import { UseFormReturn } from 'react-hook-form';
-import { Eye, EyeOff } from 'lucide-react';
-
-interface Permission {
-  id: number;
-  name: string;
-}
-
-/**
- * Estrutura de dados do formulário de usuário
- * User form data structure used by react-hook-form
- */
-interface UserFormData {
-  name: string;
-  email: string;
-  permission_id: string;
-  tipo_pessoa?: 'pf' | 'pj';
-  password?: string;
-  genero?: 'm' | 'f' | 'ni';
-  ativo?: 's' | 'n';
-  cpf?: string;
-  cnpj?: string;
-  razao?: string;
-  config?: {
-    celular?: string;
-    telefone_comercial?: string;
-    nascimento?: string;
-  };
-}
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { phoneApplyMask } from '@/lib/masks/phone-apply-mask';
+import { UserFormData } from '@/types/users';
+import { PermissionRecord } from '@/types/permissions';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 /**
  * Propriedades do componente UserForm
@@ -47,35 +26,18 @@ interface UserFormProps {
   onSubmit: (data: UserFormData) => void;
   onCancel: () => void;
   editingUser?: UserFormData | null;
-  permissions: Permission[];
+  permissions: PermissionRecord[];
   isLoadingPermissions: boolean;
   handleOnclick?: () => void;
-  /** Controla exibição do campo Tipo de Pessoa | Controls visibility of person type field */
-  showTipoPessoa?: boolean;
-  /** Controla exibição do campo Gênero | Controls visibility of gender field */
-  showGenero?: boolean;
-  /** Controla exibição da seção de endereço | Controls visibility of address section */
-  showAddressSection?: boolean;
-  /** Controla exibição do CPF (PF) | Controls CPF visibility for PF */
-  showCpf?: boolean;
-  /** Controla exibição dos telefones | Controls phone fields visibility */
-  showPhones?: boolean;
-  /** Usa Switch para campo Ativo | Use Switch for Active field */
-  ativoAsSwitch?: boolean;
-  /** Controla exibição de Data de Nascimento | Controls birth date visibility */
-  showBirthDate?: boolean;
+  /** Custom render for actions (buttons) */
+  renderActions?: React.ReactNode;
+  /** Controla exibição do footer padrão (DialogFooter) */
+  showFooter?: boolean;
 }
 
 /**
- * Componente de formulário para criação e edição de usuários
- * Suporta tanto pessoa física quanto jurídica com validações específicas
- */
-/**
  * UserForm — Formulário compartilhado de usuário
- * pt-BR: Permite criar/editar usuários com campos configuráveis por flags.
- *        Use `showAddressSection` para ocultar a seção de endereço quando necessário.
- * en-US: Shared user form for create/edit flows with configurable field visibility.
- *        Use `showAddressSection` to hide the address section when needed.
+ * Layout atualizado para corresponder ao ClientForm (seções, grid).
  */
 export function UserForm({
   form,
@@ -85,130 +47,53 @@ export function UserForm({
   permissions,
   isLoadingPermissions,
   handleOnclick,
-  showTipoPessoa = true,
-  showGenero = true,
-  showAddressSection = true,
-  showCpf = true,
-  showPhones = true,
-  ativoAsSwitch = false,
-  showBirthDate = true,
+  renderActions,
+  showFooter = true,
 }: UserFormProps): React.ReactElement {
   const [showPassword, setShowPassword] = React.useState(false);
+  const tipoPessoa = 'pf';
+
   return (
     <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(onSubmit, (errors) => {
-          console.error('Erros de validação:', errors);
-        })}
-        className="space-y-6"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nome</FormLabel>
-                <FormControl>
-                  <Input placeholder="Nome completo" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email</FormLabel>
-                <FormControl>
-                  <Input type="email" placeholder="email@exemplo.com" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          {showTipoPessoa && (
-            <FormField
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        {/* Seção: Informações Básicas */}
+        <div className="bg-gray-50 p-6 rounded-lg border">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+            Informações Básicas
+          </h3>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+             <FormField
               control={form.control}
-              name="tipo_pessoa"
+              name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tipo de Pessoa</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o tipo" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="pf">Pessoa Física</SelectItem>
-                      <SelectItem value="pj">Pessoa Jurídica</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Nome</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Nome completo" {...field} className="h-11" />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          )}
-          <FormField
-            control={form.control}
-            name="permission_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Permissão</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingPermissions}>
+
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder={isLoadingPermissions ? "Carregando..." : "Selecione a permissão"} />
-                    </SelectTrigger>
+                    <Input type="email" placeholder="email@exemplo.com" {...field} className="h-11" />
                   </FormControl>
-                  <SelectContent className="z-[60]">
-                    {permissions.map((permission) => (
-                      <SelectItem key={permission.id} value={String(permission.id)}>
-                        {permission.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Senha</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Senha (min. 6 caracteres)"
-                      {...field}
-                      value={field.value ?? ''}
-                    />
-                    <button
-                      type="button"
-                      aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowPassword((v) => !v)}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          {showGenero && (
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Tipo de Pessoa removido do cadastro de usuário (apenas PF) */}
+
             <FormField
               control={form.control}
               name="genero"
@@ -217,7 +102,7 @@ export function UserForm({
                   <FormLabel>Gênero</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-11">
                         <SelectValue placeholder="Selecione o gênero" />
                       </SelectTrigger>
                     </FormControl>
@@ -231,76 +116,115 @@ export function UserForm({
                 </FormItem>
               )}
             />
-          )}
-          <FormField
-            control={form.control}
-            name="ativo"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Ativo</FormLabel>
-                {ativoAsSwitch ? (
-                  <FormControl>
-                    <Switch
-                      checked={field.value === 's'}
-                      onCheckedChange={(checked) => field.onChange(checked ? 's' : 'n')}
-                    />
-                  </FormControl>
-                ) : (
-                  <Select onValueChange={field.onChange} value={field.value}>
+
+            <SmartDocumentInput
+              name="cpf"
+              control={form.control}
+              label="CPF"
+              tipoPessoa="pf"
+              placeholder="000.000.000-00"
+            />
+
+            <FormField
+              control={form.control}
+              name="permission_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Permissão de Acesso</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingPermissions}>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder={isLoadingPermissions ? "Carregando..." : "Selecione a permissão"} />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value="s">Sim</SelectItem>
-                      <SelectItem value="n">Não</SelectItem>
+                    <SelectContent className="z-[60]">
+                      {permissions.map((permission) => (
+                        <SelectItem key={permission.id} value={String(permission.id)}>
+                          {permission.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          {form.watch('tipo_pessoa') === 'pf' && (
-            showCpf ? (
-              <SmartDocumentInput
-                name="cpf"
-                control={form.control}
-                label="CPF"
-                tipoPessoa="pf"
-                placeholder="000.000.000-00"
-              />
-            ) : null
-          )}
-          {form.watch('tipo_pessoa') === 'pj' && (
-            <>
-              <SmartDocumentInput
-                name="cnpj"
-                control={form.control}
-                label="CNPJ"
-                tipoPessoa="pj"
-                placeholder="00.000.000/0000-00"
-              />
-              <FormField
-                control={form.control}
-                name="razao"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Razão Social</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Razão social da empresa" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </>
-          )}
-          {showPhones && (
-            <>
-              {/* Celular com máscara DDI */}
-              <FormField
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="config.equipe"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Equipe</FormLabel>
+                  <EquipeMultiSelect
+                    value={Array.isArray(field.value) ? (field.value as any[]).map(String) : []}
+                    onChange={(next) => field.onChange(next)}
+                    items={permissions}
+                    loading={isLoadingPermissions}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
+
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 col-span-1 lg:col-span-2">
+                 <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Senha</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder="Senha (min. 6 caracteres)"
+                            {...field}
+                            value={field.value ?? ''}
+                            className="h-11 pr-10"
+                          />
+                          <button
+                            type="button"
+                            aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowPassword((v) => !v)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="ativo"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm h-11 mt-8">
+                      <div className="space-y-0.5">
+                        <FormLabel>Status: {field.value === 's' ? <span className="text-green-600 font-bold bg-green-100 px-2 py-0.5 rounded text-xs">ATIVO</span> : <span className="text-red-600 font-bold bg-red-100 px-2 py-0.5 rounded text-xs">INATIVO</span>}</FormLabel>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value === 's'}
+                          onCheckedChange={(checked) => field.onChange(checked ? 's' : 'n')}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+            </div>
+            
+             <FormField
                 control={form.control}
                 name="config.celular"
                 render={({ field }) => (
@@ -312,69 +236,145 @@ export function UserForm({
                         value={field.value || ''}
                         onChange={(e) => field.onChange(phoneApplyMask(e.target.value))}
                         placeholder="+55 (11) 99999-9999"
-                        disabled={isLoadingPermissions}
+                        className="h-11"
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              {/* Telefone comercial com máscara DDI */}
-              <FormField
+
+               <FormField
                 control={form.control}
-                name="config.telefone_comercial"
+                name="config.telefone_residencial" // Usando residencial como "Telefone" genérico conforme imagem
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Telefone</FormLabel>
                     <FormControl>
-                      <Input
+                       <Input
                         {...field}
                         value={field.value || ''}
                         onChange={(e) => field.onChange(phoneApplyMask(e.target.value))}
                         placeholder="+55 (11) 3333-4444"
-                        disabled={isLoadingPermissions}
+                        className="h-11"
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </>
-          )}
-          {showBirthDate && (
-            <FormField
-              control={form.control}
-              name="config.nascimento"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Data de Nascimento</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="date"
-                      {...field}
-                      value={field.value || ""}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+
+              <FormField
+                control={form.control}
+                name="config.nascimento"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data de Nascimento</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        value={field.value || ""}
+                        className="h-11"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
             />
-          )}
-          {showAddressSection && <AddressAccordion form={form} />}
+
+          </div>
         </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            onClick={handleOnclick}
-            disabled={isLoadingPermissions}
-          >
-            {editingUser ? 'Salvar' : 'Criar'}
-          </Button>
-        </DialogFooter>
+
+        {/* Seção: Endereço */}
+        <AddressAccordion form={form} />
+        
+        {/* Renderiza ações personalizadas (Salvar e Continuar, etc) se fornecidas */}
+        {renderActions}
+
+        {/* Footer padrão se não houver actions personalizadas */}
+        {showFooter && !renderActions && (
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              onClick={handleOnclick}
+              disabled={isLoadingPermissions}
+            >
+              {editingUser ? 'Salvar' : 'Criar'}
+            </Button>
+          </DialogFooter>
+        )}
       </form>
     </Form>
+  );
+}
+
+function EquipeMultiSelect({
+  value,
+  onChange,
+  items,
+  loading,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  items: PermissionRecord[];
+  loading?: boolean;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState('');
+
+  const filtered = (query.trim()
+    ? items.filter((p) => String(p?.name || '').toLowerCase().includes(query.trim().toLowerCase()))
+    : items);
+
+  const label = (value && value.length)
+    ? items.filter((p) => (value || []).map(String).includes(String(p.id))).map((p) => String(p?.name || p.id)).join(', ')
+    : (loading ? 'Carregando...' : 'Selecione membros da equipe');
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" className="justify-between w-full h-11">
+          <span className="truncate">{label}</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[420px] p-2" align="start">
+        <div className="space-y-2">
+          <Input placeholder="Buscar permissões..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <ScrollArea className="h-52">
+            <div className="space-y-1">
+              {filtered.map((p) => {
+                const id = String(p.id);
+                const nome = String(p?.name || id);
+                const checked = (value || []).map(String).includes(id);
+                return (
+                  <label key={id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted cursor-pointer">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(chk) => {
+                        const next = new Set((value || []).map(String));
+                        if (chk) next.add(String(id)); else next.delete(String(id));
+                        onChange(Array.from(next));
+                      }}
+                    />
+                    <span className="text-sm">{nome}</span>
+                  </label>
+                );
+              })}
+              {filtered.length === 0 && (
+                <div className="text-xs text-muted-foreground px-2 py-1">Nenhuma permissão encontrada</div>
+              )}
+            </div>
+          </ScrollArea>
+          <div className="flex items-center justify-between pt-1">
+            <Button type="button" variant="ghost" onClick={() => onChange([])}>Limpar</Button>
+            <Button type="button" onClick={() => setOpen(false)}>Concluir</Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

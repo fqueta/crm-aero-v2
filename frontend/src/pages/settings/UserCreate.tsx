@@ -1,80 +1,68 @@
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-// Removido uso direto de campos de telefone no cadastro
-import { UserForm } from '@/components/users/UserForm';
-import { usePermissionsList } from '@/hooks/permissions';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useToast } from "@/hooks/use-toast";
+import * as z from "zod";
+import { UserForm } from "@/components/users/UserForm";
+import EditFooterBar from '@/components/ui/edit-footer-bar';
 import { useCreateUser } from '@/hooks/users';
-import { CreateUserInput } from '@/types/users';
-import { toast } from '@/hooks/use-toast';
+import { usePermissionsList } from '@/hooks/permissions';
+import { UserFormData, CreateUserInput } from '@/types/users';
 
-// Schema simplificado apenas com os campos que aparecem na imagem
-const userCreateSchema = z.object({
-  // Tipo de pessoa fixo: PF
-  tipo_pessoa: z.literal('pf').default('pf'),
-  permission_id: z.coerce.string().min(1, 'Permissão é obrigatória'),
-  name: z.string().min(1, 'Nome é obrigatório'),
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
-  ativo: z.enum(['s', 'n']).default('s'),
+const userSchema = z.object({
+  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
+  email: z.string().email("Email inválido"),
+  permission_id: z.string().optional(),
+  tipo_pessoa: z.enum(["pf", "pj"]).optional(),
+  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"), // Password required for create
+  genero: z.enum(["m", "f", "ni"]).optional(),
+  ativo: z.enum(["s", "n"]).optional(),
+  cpf: z.string().optional(),
+  cnpj: z.string().optional(),
+  razao: z.string().optional(),
   config: z.object({
-    celular: z.string().nullable().optional(),
-    telefone_comercial: z.string().nullable().optional(),
-    nascimento: z.string().nullable().optional(),
-    cep: z.string().nullable().optional(),
-    endereco: z.string().nullable().optional(),
-    numero: z.string().nullable().optional(),
-    complemento: z.string().nullable().optional(),
-    bairro: z.string().nullable().optional(),
-    cidade: z.string().nullable().optional(),
-  }).default({
-    celular: '',
-    telefone_comercial: '',
-    nascimento: '',
-    cep: '',
-    endereco: '',
-    numero: '',
-    complemento: '',
-    bairro: '',
-    cidade: '',
-  }),
+    celular: z.string().optional(),
+    telefone_comercial: z.string().optional(),
+    telefone_residencial: z.string().optional(),
+    nascimento: z.string().optional(),
+    cep: z.string().optional(),
+    endereco: z.string().optional(),
+    numero: z.string().optional(),
+    complemento: z.string().optional(),
+    bairro: z.string().optional(),
+    cidade: z.string().optional(),
+    uf: z.string().optional(),
+  }).optional(),
 });
 
-type UserCreateFormData = z.infer<typeof userCreateSchema>;
-
-/**
- * UserCreate Page
- * pt-BR: Página dedicada para cadastro de usuário. Mantém apenas os campos solicitados,
- *        fixa o tipo de pessoa como PF e remove o campo Telefone Residencial.
- * en-US: Dedicated page for user registration. Keeps only requested fields,
- *        defaults person type to PF and removes Residential Phone field.
- */
 export default function UserCreate() {
   const navigate = useNavigate();
-  const createMutation = useCreateUser();
+  const { toast } = useToast();
+  const finishAfterSaveRef = useRef<boolean>(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   const { data: permissionsData, isLoading: isLoadingPermissions } = usePermissionsList();
   const permissions = permissionsData?.data || [];
+  
+  const createUserMutation = useCreateUser();
 
-  const form = useForm<UserCreateFormData>({
-    resolver: zodResolver(userCreateSchema),
+  const form = useForm<UserFormData>({
+    resolver: zodResolver(userSchema),
     defaultValues: {
-      tipo_pessoa: 'pf',
-      permission_id: '',
-      name: '',
-      email: '',
-      password: '',
+      name: "",
+      email: "",
+      permission_id: "",
+      tipo_pessoa: "pf",
+      genero: 'ni',
       ativo: 's',
       config: {
         celular: '',
         telefone_comercial: '',
+        telefone_residencial: '',
         nascimento: '',
         cep: '',
         endereco: '',
@@ -82,101 +70,93 @@ export default function UserCreate() {
         complemento: '',
         bairro: '',
         cidade: '',
+        uf: '',
       },
     },
   });
 
-  // Preenche automaticamente a primeira permissão carregada, se existir
-  useEffect(() => {
-    const first = permissions[0]?.id;
-    if (first && !form.getValues('permission_id')) {
-      form.setValue('permission_id', String(first));
-    }
-  }, [permissions]);
-
-  /**
-   * onSubmit
-   * pt-BR: Cria o usuário e redireciona para a lista de usuários em caso de sucesso.
-   * en-US: Creates the user and navigates back to the users list on success.
-   */
-  const onSubmit = async (data: UserCreateFormData) => {
+  const onSubmit = (data: UserFormData) => {
+    setIsLoading(true);
+    
+    // Convert UserFormData to CreateUserInput
+    // config needs to be cast or mapped if strictly typed
     const payload: CreateUserInput = {
-      tipo_pessoa: 'pf',
-      permission_id: data.permission_id,
-      email: data.email,
-      password: data.password,
-      name: data.name,
-      genero: 'ni', // não exibido no formulário, usa padrão
-      ativo: data.ativo,
-      token: '',
-      config: {
-        nome_fantasia: '',
-        celular: data.config.celular || '',
-        telefone_residencial: '', // removido do formulário
-        telefone_comercial: data.config.telefone_comercial || '',
-        rg: '',
-        nascimento: data.config.nascimento || '',
-        escolaridade: '',
-        profissao: '',
-        tipo_pj: '',
-        cep: data.config.cep || '',
-        endereco: data.config.endereco || '',
-        numero: data.config.numero || '',
-        complemento: data.config.complemento || '',
-        bairro: data.config.bairro || '',
-        cidade: data.config.cidade || '',
-        uf: '',
-      },
+        ...data,
+        token: '',
+        password: data.password || 'mudar123', // Schema enforces it but fallback just in case
+        config: data.config as any
     };
 
-    try {
-      await createMutation.mutateAsync(payload);
-      toast({ title: 'Usuário criado', description: 'Cadastro realizado com sucesso.' });
-      navigate('/admin/settings/users');
-    } catch (err: any) {
-      toast({ title: 'Erro ao criar usuário', description: err?.message || 'Tente novamente.', variant: 'destructive' });
-    }
+    createUserMutation.mutate(payload, {
+        onSuccess: () => {
+          toast({ title: "Usuário criado com sucesso" });
+          setIsLoading(false);
+          if (finishAfterSaveRef.current) {
+            navigate('/admin/settings/users');
+          } else {
+             // If "Save and Continue", maybe clear form or stay? 
+             // Usually "Save and Continue" stays on edit page of created item or just clears for new.
+             // EditFooterBar usually implies "Save and (stay/create another)" vs "Save and Exit".
+             // For Create, "Save and Continue" typically means "Save and Create Another" or "Save and Edit This".
+             // Sticking to "Save and Exit" -> list. "Save and Continue" -> stay/reset.
+             // Let's reset form for "Save and Continue" (Create Another)
+             form.reset();
+             toast({ title: "Pronto para criar outro usuário" });
+          }
+        },
+        onError: (error: any) => {
+          toast({ 
+            title: "Erro ao criar", 
+            description: error?.message || "Ocorreu um erro ao criar o usuário",
+            variant: "destructive" 
+          });
+          setIsLoading(false);
+        }
+      }
+    );
   };
 
-  /**
-   * onCancel
-   * pt-BR: Cancela o cadastro e volta para a lista.
-   * en-US: Cancels and returns to the list.
-   */
-  const onCancel = () => navigate('/admin/settings/users');
+  const handleCancel = () => {
+    navigate('/admin/settings/users');
+  };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="container mx-auto p-6 space-y-6 pb-24">
+      <div className="flex items-center space-x-4">
+        <Button variant="outline" size="sm" onClick={handleCancel}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar
+        </Button>
         <div>
-          <h1 className="text-3xl font-bold">Novo Usuário</h1>
-          <p className="text-muted-foreground">Preencha os dados para criar um novo usuário</p>
+          <h1 className="text-2xl font-bold text-gray-900">Novo Usuário</h1>
+          <p className="text-gray-600">Preencha os dados para criar um novo usuário</p>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Cadastro de Usuário</CardTitle>
-          <CardDescription>Campos essenciais conforme solicitado</CardDescription>
+          <CardTitle>Dados do Usuário</CardTitle>
+          <CardDescription>Campos obrigatórios marcados com *</CardDescription>
         </CardHeader>
         <CardContent>
-          <UserForm
-            form={form}
-            onSubmit={onSubmit}
-            onCancel={onCancel}
-            editingUser={null}
-            permissions={permissions}
-            isLoadingPermissions={isLoadingPermissions}
-            showTipoPessoa={false}
-            showGenero={false}
-            showAddressSection={false}
-            showCpf={false}
-            showPhones={false}
-            ativoAsSwitch={true}
-            showBirthDate={false}
-          />
+            <UserForm 
+              form={form}
+              onSubmit={onSubmit}
+              onCancel={handleCancel}
+              permissions={permissions}
+              isLoadingPermissions={isLoadingPermissions}
+              showFooter={false}
+            />
         </CardContent>
       </Card>
+
+      <EditFooterBar
+        onBack={handleCancel}
+        onContinue={() => { finishAfterSaveRef.current = false; form.handleSubmit(onSubmit)(); }}
+        onFinish={() => { finishAfterSaveRef.current = true; form.handleSubmit(onSubmit)(); }}
+        disabled={isLoading || createUserMutation.isPending}
+        fixed
+      />
     </div>
   );
 }

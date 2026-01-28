@@ -63,6 +63,18 @@ class Qlib
         return $dataLocal;
     }
     /**
+     * Metodo para mascar de telefone
+     * @param string $telefone
+     * @return string telefone mascarado
+     */
+    static function mask($telefone, $mask = '(99) 99999-9999'){
+        $telefone = preg_replace('/\D/', '', $telefone);
+        return preg_replace_callback('/\d/', function($match) use ($mask) {
+            static $i = 0;
+            return $mask[$i++] . $match[0];
+        }, $telefone);
+    }
+    /**
      * Metodo para validar um CPF retorna true|false
      * @param string $cpf
      * @return boolean true | false
