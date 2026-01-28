@@ -424,7 +424,7 @@ class ZapsingController extends Controller
                 'docs' => $docs,
                 'lang' => 'pt-br',
             ];
-            dd($body);
+            // dd($body);
             $response = $this->post([
                 'endpoint' => 'docs',
                 'body' => $body
