@@ -91,7 +91,7 @@ class ZapsingController extends Controller
                     'Authorization' => $this->api_id,
                 ])->post($urlEndpoint, $body);
                 // dd($response);
-                if($response){  
+                if($response){
                     $ret['exec'] = true;
                     $ret['mens'] = 'Documento enviado com sucesso';
                     $ret['color'] = 'success';
@@ -260,7 +260,7 @@ class ZapsingController extends Controller
     /**
      * Cria um array com os dados de todos quan são os signatarios.
      */
-    public function signers_matricula($sing=[],$type=1){  
+    public function signers_matricula($sing=[],$type=1){
         $id_contatada = 'id_contatada';
         $id_testemunha1 = 'id_testemunha1';
         $id_testemunha2 = 'id_testemunha2';
@@ -362,7 +362,7 @@ class ZapsingController extends Controller
             if (!$cliente) {
                 throw new \Exception("Client not found for Matricula ID: $id_matricula");
             }
-            
+
             // Fetch PDF URLs from metadata
             $propostaPdfUrl = Qlib::get_matriculameta($id_matricula, 'proposta_pdf');
             $contratosMeta = Qlib::get_matriculameta($id_matricula, 'contrato_pdf');
@@ -375,7 +375,7 @@ class ZapsingController extends Controller
                     'url_pdf' => $propostaPdfUrl,
                 ];
             }
-
+            // dd($contratosMeta);
             // Add Contract PDFs
             if ($contratosMeta) {
                 $decoded = json_decode($contratosMeta, true);
@@ -415,7 +415,7 @@ class ZapsingController extends Controller
             ];
 
             $signers = $this->signers_matricula($signer);
-            // Prepare Envelope Payload 
+            // Prepare Envelope Payload
             $body = [
                 'name' => $cliente->name . ' * '.$matricula['curso_nome'].' #'.$id_matricula,
                 'url_pdf' => $propostaPdfUrl,
@@ -424,17 +424,18 @@ class ZapsingController extends Controller
                 'docs' => $docs,
                 'lang' => 'pt-br',
             ];
+            dd($body);
             $response = $this->post([
-                'endpoint' => 'docs', 
+                'endpoint' => 'docs',
                 'body' => $body
             ]);
 
             if (isset($response['exec']) && $response['exec']) {
                 $responseData = $response['response'] ?? [];
-                
+
                 // Save metadata
                 Qlib::update_matriculameta($id_matricula, 'enviar_envelope', json_encode($responseData));
-                
+
                 if (isset($responseData['external_id'])) {
                      Qlib::update_matriculameta($id_matricula, 'processo_assinatura', json_encode($responseData));
                 }

@@ -776,9 +776,11 @@ class MatriculaController extends Controller
 					$arr_periodo = Qlib::decodeArray($config['arr_periodo']);
 					$token_periodo = isset($arr_periodo['token']) ? $arr_periodo['token'] : '';
                     // $token = $config['token_matricula'];
-					//gravar contrato estatico...
+                    //gravar proposta
                     GeraPdfPropostasPnlJob::dispatch($id_matricula);
+					//gravar contrato estatico...
                     GeraPdfcontratosPnlJob::dispatch($id_matricula)->delay(now()->addSeconds(5));
+                    //enviar para zapsing
                     SendPeriodosZapsingJob::dispatch($id_matricula)->delay(now()->addSeconds(5));
 					// $ret['gravar_copia'] = $this->grava_contrato_statico_periodo($config['token_matricula'],$token_periodo);
 
