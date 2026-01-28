@@ -39,8 +39,9 @@ class TesteController extends Controller
         // }
         // $ret = (new OrcamentoController)->resumo_proposta_periodos($id??'');
         // $ret = (new MatriculaController)->contratos_periodos($id??'');
-        $ret = (new MatriculaController)->contratos_periodos_pdf($id??'');
-        $ret = (new \App\Http\Controllers\api\ZapsingController)->enviar_envelope($id??'');
+        // $ret = (new MatriculaController)->contratos_periodos_pdf($id??'');
+        // $ret = (new \App\Http\Controllers\api\ZapsingController)->enviar_envelope($id??'');
+        $ret = (new MatriculaController)->send_to_zapSing($id??'');
         // $ret = (new MenuController)->getMenus(1);
         // $ret = Qlib::token();
         return $ret;

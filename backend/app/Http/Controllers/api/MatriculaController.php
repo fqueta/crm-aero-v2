@@ -1248,4 +1248,240 @@ class MatriculaController extends Controller
             return response()->json(['error' => 'Erro ao aprovar proposta: ' . $e->getMessage()], 500);
         }
     }
+    /**
+     * Metodo para enviar o termo para zapsing
+     * @params $tm $token da matricula
+     * @usu $ret = (new MatriculaController)->send_to_zapSing('token_matricula');
+     */
+    public function send_to_zapSing($id_matricula,$dm=false,$tk_periodo=false){
+        if(!$dm && $id_matricula){
+            $dm = $this->dm($id_matricula);
+        }
+        $ret['exec'] = false;
+        // $ret['dm'] = $dm;
+        $ret['mens'] = 'Matricula de id '.$id_matricula.' não foi encontrada';
+        $ret['color'] = 'danger';
+        //listar contrato
+        // return $ret;
+        if(!$dm){
+            return $ret;
+        }
+        $id = isset($dm['id']) ? $dm['id'] : '';
+        $tipo_curso = isset($dm['curso_tipo']) ? $dm['curso_tipo'] : '';
+        $nome = '';
+        // $pdf = new PaginaController();
+        if($tipo_curso == 4){
+            //Recupera o nome do Periodo
+            $nome = $dm['orc'][0]['nome']??'';
+        }           
+        
+        //verifica se ja tem os links do contrato criados
+        $contratosMeta = Qlib::get_matriculameta($id, 'contrato_pdf');
+        // dd($contratosMeta,$dm);
+        $contratos = false;
+        if(is_string($contratosMeta)){
+            $contratos = json_decode($contratosMeta,true);
+        }
+        if(!is_array($contratos)){
+            //gerar os pdf dos contratos
+            $gerar_contratos = $this->contratos_periodos_pdf($id??'');
+            if($gerar_contratos['exec']){
+                $contratosMeta = Qlib::get_matriculameta($id, 'contrato_pdf');
+                $contratos = json_decode($contratosMeta,true);
+            }
+        }
+        // dd($arr_contratos);
+        // if($id){
+        //     if(!$contratosMeta)
+        //         $contratos = $this->contratos_periodos_pdf($id??'');
+            
+        // }else{
+        //     $contratos = false;
+        // }
+        $enviar = false;
+        if(isset($contratos[0]['url']) && ($link_c = $contratos[0]['url'])){
+            //link do contrato de prestação ou seja o principal contrato
+            $enviar = $this->enviar_envelope($id,$dm,$link_c);
+            // $enviar = (new \App\Http\Controllers\api\ZapsingController)->enviar_envelope($id??'');
+            if($tk_periodo){
+                if($enviar['exec'] == true){
+                    $campo_processamento = 'enviar_envelope_'.$tk_periodo;
+                    $ret['exec'] = true;
+                    //gravar o processamento em campo
+                    $ret['save_process'] = Qlib::update_matriculameta($id,$campo_processamento,Qlib::lib_array_json($enviar));
+                    //removendo o primiero contrato da lista
+                    if(is_array($contratos)){
+                        $n_cont = array_shift($contratos);
+                        $token_doc = isset($enviar['response']['token']) ? $enviar['response']['token'] : false;
+                        if($token_doc && is_array($n_cont)){
+                            $ret['anexos'] = $this->enviar_contratos_anexos(false,false,$dm,$tk_periodo);
+                        }
+                    }else{
+                        $ret['exec'] = false;
+                        $ret['mens'] = 'Lista de contratos inválidos';
+                        $ret['color'] = 'danger';
+
+                    }
+                }
+            }else{
+                if($enviar['exec'] == true){
+                    $ret['exec'] = true;
+                    //gravar o processamento em campo
+                    $ret['save_process'] = Qlib::update_matriculameta($id,'enviar_envelope',Qlib::lib_array_json($enviar));
+                    //removendo o primiero contrato da lista
+                    $n_cont = array_shift($contratos);
+                    $token_doc = isset($enviar['response']['token']) ? $enviar['response']['token'] : false;
+                    if($token_doc && is_array($n_cont)){
+                        $ret['anexos'] = $this->enviar_contratos_anexos(false,false,$dm);
+                    }
+                }
+            }
+        }
+        $ret['enviar'] = $enviar;
+        // dump($ret);
+        //gravar historico do envio do orçamento
+        if(isset($ret['exec']) && $ret['exec']){
+            $post_id = isset($dm['id']) ? $dm['id'] : null;
+            if($post_id){
+                if($tk_periodo){
+                    if(isset($ret['enviar']) && ($res_process=$ret['enviar'])){
+                        $ret['salv_hist'] = Qlib::update_matriculameta($post_id,'processo_assinatura',Qlib::lib_array_json($res_process));
+                    }
+                }else{
+                    $ret['salv_hist'] = Qlib::update_matriculameta($post_id,(new ZapsingController)->campo_processo,Qlib::lib_array_json($ret));
+                    if(isset($ret['salv_hist']['exec']) && $ret['salv_hist']['exec']){
+                        $ret['exec'] = true;
+                        $ret['mens'] = 'Matricula de id '.$id_matricula.' foi enviada para assinatura';
+                        $ret['color'] = 'success';
+                    }
+                }
+                //Envia o link de assinatura para o whatsapp atrave do zapguru
+                if(Qlib::qoption('enviar_link_assinatura_zap')=='s'){
+                    $ret['enviar_link_assinatura'] = (new AdminZapsingController)->enviar_link_assinatura($tm,$tk_periodo);
+                }
+            }
+        }
+        // Log::info('send_to_zapSing:', $ret);
+        return $ret;
+    }
+    /**
+     * Enviar um envelope com 1 documento para o zapsing
+     * @param string $id id da matricula
+     * @param string $dm dados da matricula para evitar uma nova consulta
+     */
+    public function enviar_envelope($id,$dm=false,$url_pdf=''){
+        if(!$dm && $id){
+            $dm = $this->dm($id);
+        }
+        $zpc = new ZapsingController;;
+        $ret['exec'] = false;
+        if($dm && $url_pdf){
+            $cliente = $dm['cliente'] ?? [];
+            $nome = isset($cliente['nome']) ? $cliente['nome'] : '';
+            $email = isset($cliente['email']) ? $cliente['email'] : '';
+            $cpf = isset($cliente['cpf']) ? $cliente['cpf'] : '';
+            $celular = isset($cliente['celular']) ? $cliente['celular'] : '';
+            $tipo_curso = isset($dm['curso_tipo']) ? $dm['curso_tipo'] : '';
+            $periodo = isset($dm['orc']['modulos'][0]['nome']) ? $dm['orc']['modulos'][0]['nome'] : '';
+            if($tipo_curso == 4){
+            }
+            $signers = [
+                "name" => $nome,
+                "email" => $email,
+                "cpf" => $cpf,
+                "send_automatic_email" => false,
+                "send_automatic_whatsapp" => false,
+                "auth_mode" => "CPF", //tokenEmail,assinaturaTela-tokenEmail,tokenSms,assinaturaTela-tokenSms,tokenWhatsapp,assinaturaTela-tokenWhatsapp,CPF,assinaturaTela-cpf,assinaturaTela
+                "order_group" => 1,
+            ];
+            $signers = $zpc->signers_matricula($signers);
+            //Criar o nome
+            $name = $nome. ' * '.@$dm['curso_nome'].' - '.@$dm['id'];
+            if($periodo){
+                $name .= ' - '.@$periodo;
+            }
+            //o id externo será a matricula + id do cliente
+            $externar_id = $id;
+            if($dm['id_cliente']??false){
+                $externar_id = $id.'_'.$dm['id_cliente'];
+            }
+            $body = [
+                "name" => trim($name),// 'Assinatura da proposta',
+                "url_pdf" => $url_pdf,
+                "external_id" => $externar_id,
+                "folder_path" => '/CRM',
+                "signers" =>$signers,
+                ];
+            //eviar
+            $ret = (new ZapsingController)->post([
+                "endpoint" => 'docs',
+                "body" => $body,
+            ]);
+        }
+        return $ret;
+
+    }
+    /**
+     * gera um array com os link dos contratos
+     */
+    public function enviar_contratos_anexos($contatos_anexos=[],$id=false,$dm=false,$tk_periodo=false){
+        if(!$dm && $id){
+            $dm = $this->dm($id);
+        }
+        $ret['exec'] = false;
+        $ret['dm'] = $dm;
+        $ret['mens'] = 'Matricula não encontrada';
+        $ret['color'] = 'danger';
+        //listar contrato
+        if(!$dm){
+            return $ret;
+        }
+        $id = isset($dm['id']) ? $dm['id'] : '';
+        if($id && !is_array($contatos_anexos)){
+            //gerar os pdf dos contratos
+            $gerar_contratos = $this->contratos_periodos_pdf($id??'');
+            if($gerar_contratos['exec']){
+                $contratosMeta = Qlib::get_matriculameta($id, 'contrato_pdf');
+                $contatos_anexos = json_decode($contratosMeta,true);
+            }
+        }
+        // dd($contatos_anexos);
+        if(is_array($contatos_anexos)){
+            //conseguir o token do contrato principal
+            // if($tk_periodo){
+            //     $denv_p = Qlib::get_matriculameta($id,'enviar_envelope_'.$tk_periodo);
+            // }else{
+            $denv_p = Qlib::get_matriculameta($id,'enviar_envelope');
+            // }
+            $ret['exec'] = false;
+            $arr = [];
+            if($denv_p){
+                $arr = Qlib::lib_json_array($denv_p);
+                // dd($arr);
+                $token_envelope = isset($arr['response']['token']) ? $arr['response']['token'] : false;
+                if($token_envelope && is_array($contatos_anexos)){
+                    $zp = new ZapsingController;
+                    // $lastKey = array_key_last($contatos_anexos); // Obtém a última chave
+                    foreach($contatos_anexos As $k=>$v){
+                        $link = isset($v['url']) ? $v['url'] : false;
+                        // if ($k === $lastKey) {
+                        //     $nome_arquivo = isset($v['meta_key']) ? $v['meta_key'] : false;
+                        // } else {
+                        // $arr_n = explode('/', $link);
+                        $nome_arquivo = isset($v['nome_contrato']) ? $v['nome_contrato'] : '';
+                        // }
+                        // $nome = ucwords($nome_arquivo);
+                        $nome = $nome_arquivo;
+                        // dump($token_envelope,$link,$nome);
+                        $ret['anexo'][$k] = $zp->enviar_anexo($token_envelope,$link,$nome);
+                        if(isset($ret['anexo'][$k]['exec']))
+                            $ret['exec'] = true;
+                    }
+
+                }
+            }
+            return $ret;
+        }
+
+    }
 }
