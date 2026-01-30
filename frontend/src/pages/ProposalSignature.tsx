@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Check, ArrowRight, X } from 'lucide-react';
+import { Loader2, Check, ArrowRight, X, CheckCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -15,7 +15,7 @@ import { useCep } from '@/hooks/useCep';
 import { cpfApplyMask } from '@/lib/masks/cpf-apply-mask';
 import { phoneApplyMask } from '@/lib/masks/phone-apply-mask';
 import { cepApplyMask } from '@/lib/masks/cep-apply-mask';
-import { validarCpf } from '@/lib/qlib';
+import { validarCpf, getApiUrl } from '@/lib/qlib';
 import {
   Select,
   SelectContent,
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
+import { useAuth } from '@/contexts/AuthContext';
 
 const formSchema = z.object({
   name: z.string().min(2, 'Nome é obrigatório'),
@@ -54,6 +55,7 @@ type FormData = z.infer<typeof formSchema>;
 export default function ProposalSignature() {
   const { compositeId } = useParams<{ compositeId: string }>();
   const [clientId, matriculaId] = compositeId ? compositeId.split('_') : [null, null];
+  const { isAuthenticated } = useAuth();
 
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -97,7 +99,43 @@ export default function ProposalSignature() {
 
       try {
         const data = await proposalService.getProposal(clientId, matriculaId);
+        const status = (data as any)?.status;
+        const successRedirect = (data as any)?.redirect;
+        if (status === 'aprovado' || status === 'assinado') {
+          toast.info((data as any)?.message || 'Proposta já aprovada. Redirecionando...');
+          if (successRedirect) {
+            window.location.href = successRedirect;
+          } else {
+            window.location.href = `/aluno/matricula/${clientId}_${matriculaId}/2`;
+          }
+          return;
+        }
         setProposal(data);
+        try {
+          const token = localStorage.getItem('auth_token');
+          const base = getApiUrl();
+          const meta = (data as any)?.meta || {};
+          const payload = {
+            status_assinatura: meta?.status_assinatura,
+            step1_done: (data as any)?.config?.step1_done || false,
+            step2_done: (data as any)?.config?.step2_done || false,
+          };
+          await fetch(`${base}/event-logs`, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              entity_type: 'matriculas',
+              entity_id: String(matriculaId),
+              action: 'view_public_status',
+              description: `Visualização status pública da matrícula ${matriculaId}`,
+              payload,
+            }),
+          }).catch(() => {});
+        } catch {}
         
         // Populate form with existing client data
         if (data.cliente) {
@@ -140,7 +178,7 @@ export default function ProposalSignature() {
             })(),
           });
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
         toast.error('Erro ao carregar dados da proposta');
       } finally {
@@ -268,6 +306,14 @@ export default function ProposalSignature() {
                   <Label className="text-muted-foreground">Turma</Label>
                   <p className="text-lg font-medium">{proposal.turma_nome}</p>
                 </div>
+                {(proposal as any)?.curso_tipo && ((proposal as any).curso_tipo === '4' || (proposal as any).curso_tipo === 4) && (proposal as any)?.orc?.modulos?.[0]?.nome && (
+                  <div>
+                    <Label className="text-muted-foreground">Período</Label>
+                    <p className="text-base text-slate-700 bg-blue-50 px-2 py-1 rounded inline-block">
+                      {(proposal as any).orc.modulos[0].nome}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <Label className="text-muted-foreground">Valor Total</Label>
                   <p className="text-lg font-medium">
@@ -282,6 +328,53 @@ export default function ProposalSignature() {
                 <h4 className="text-blue-800 font-medium mb-1">Status da Matrícula</h4>
                 <p className="text-blue-600 text-sm">Aguardando assinatura e confirmação de dados.</p>
               </div>
+              
+              {/* Admin Status Card */}
+              {isAuthenticated && (
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+                {(() => {
+                  const meta: any = (proposal as any)?.meta || {};
+                  const statusAssinatura: string | undefined = meta?.status_assinatura;
+                  const hasLinksAssinados =
+                    Boolean(meta?.salvar_links_assinados) ||
+                    Object.keys(meta || {}).some((k) => k.startsWith('salvar_links_assinados_'));
+                  const step1 = Boolean((proposal as any)?.config?.step1_done);
+                  const step2 = Boolean((proposal as any)?.config?.step2_done);
+                  const isAssinado = hasLinksAssinados;
+                  const isAprovado = statusAssinatura === 'aprovado' || step2;
+                  const label = isAssinado ? 'Assinada' : (isAprovado ? 'Aprovada' : 'Em andamento');
+                  const icon = isAssinado ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Clock className="h-4 w-4 text-blue-600" />;
+                  const desc = isAssinado
+                    ? 'Está proposta já está aprovada e assinada.'
+                    : (isAprovado ? 'A proposta foi aprovada e está aguardando assinatura digital.' : 'Proposta em andamento. Aguarde conclusão da etapa 1 e aprovação.');
+                  return (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-slate-800">Status para Administrador</h4>
+                      <div className="flex items-center gap-2">
+                        {icon}
+                        <span className={`text-sm ${isAssinado ? 'text-green-700' : (isAprovado ? 'text-blue-700' : 'text-slate-700')}`}>{label}</span>
+                      </div>
+                      <p className="text-xs text-slate-600">{desc}</p>
+                      <div className="flex items-center gap-3 text-xs text-slate-600">
+                        <span>Etapa 1: {step1 ? 'Concluída' : 'Pendente'}</span>
+                        <span>Etapa 2: {step2 ? 'Concluída' : 'Aguardando'}</span>
+                      </div>
+                      {(isAssinado || isAprovado) && (
+                        <div className="pt-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => window.open(`/aluno/matricula/${clientId}_${matriculaId}/2/aprovado`, '_self')}
+                          >
+                            Ver tela “Aguardando Assinatura Digital”
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+              )}
             </CardContent>
           </Card>
 

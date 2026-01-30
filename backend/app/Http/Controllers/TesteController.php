@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\api\ZapsingController;
 use App\Services\Escola;
 use App\Services\Qlib;
 use Illuminate\Http\Request;
@@ -9,12 +10,14 @@ use App\Helpers\StringHelper;
 use App\Http\Controllers\api\MatriculaController;
 use App\Http\Controllers\api\OrcamentoController;
 use Database\Seeders\MenuSeeder;
+use App\Http\Controllers\api\ZapguruController;
 
 class TesteController extends Controller
 {
     public function index(Request $request){
         // $d = $request->all();
         $ret = [];
+        $zgc = new ZapguruController();
         $id = $request->get('id');
         // $helper = new StringHelper();
         // $ret = $helper->formatarCpf('12345678900');
@@ -41,9 +44,13 @@ class TesteController extends Controller
         // $ret = (new MatriculaController)->contratos_periodos($id??'');
         // $ret = (new MatriculaController)->contratos_periodos_pdf($id??'');
         // $ret = (new \App\Http\Controllers\api\ZapsingController)->enviar_envelope($id??'');
-        $ret = (new MatriculaController)->send_to_zapSing($id??'');
+        // $ret = (new MatriculaController)->send_to_zapSing($id??'');
+        
+        // $ret['enviar_link_assinatura'] = (new ZapsingController())->enviar_link_assinatura($id);
         // $ret = (new MenuController)->getMenus(1);
         // $ret = Qlib::token();
+        // $telefonezap = $zgc->get_telefonezap_by_id_matricula($id);
+        $ret = (new ZapsingController())->enviar_link_assinatura($id);
         return $ret;
     }
 }

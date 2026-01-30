@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, CheckCircle, FileText as LucideFileText, User as LucideUser, ScrollText as LucideScrollText, Check as LucideCheck } from "lucide-react";
+import { Loader2, CheckCircle, FileText as LucideFileText, User as LucideUser, ScrollText as LucideScrollText, Check as LucideCheck, Copy as LucideCopy } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -112,10 +112,17 @@ export default function ProposalApproval() {
     
     setSubmitting(true);
     try {
-        await proposalService.approveProposal(id_cliente, id_matricula);
-        toast.success("Proposta aprovada com sucesso!");
-        // Reload to show success state
-        window.location.reload(); 
+        const resp: any = await proposalService.approveProposal(id_cliente, id_matricula);
+        if (resp?.redirect) {
+          window.location.href = resp.redirect;
+          return;
+        }
+        toast.success(resp?.message || "Proposta aprovada com sucesso!");
+        setProposal((prev: any) => {
+          if (!prev) return prev;
+          const next = { ...prev, config: { ...(prev.config || {}), step2_done: true, step2_at: new Date().toISOString() } };
+          return next;
+        });
     } catch (error) {
         console.error("Erro ao aprovar:", error);
         toast.error("Erro ao realizar a aprovação.");
@@ -165,9 +172,43 @@ export default function ProposalApproval() {
                         <p className="text-gray-600">
                            Obrigado, <strong>{proposal.cliente?.name}</strong>. Em breve voce receberá uma mensagem com o link para assinar a proposta.
                         </p>
-                        <Button variant="outline" onClick={() => window.open('https://aeroclubejf.com.br', '_blank')}>
-                            Voltar ao site
-                        </Button>
+
+                        {proposal.processo_assinatura?.signers?.[0]?.sign_url && (
+                          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-4 text-left">
+                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 block">Link para Assinatura</label>
+                            <div className="flex gap-2 items-center">
+                              <code className="flex-1 bg-white border border-slate-200 rounded px-3 py-2 text-sm text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap h-10 flex items-center">
+                                {proposal.processo_assinatura.signers[0].sign_url}
+                              </code>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-10 w-10 shrink-0"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(proposal.processo_assinatura.signers[0].sign_url);
+                                  toast.success("Link copiado!");
+                                }}
+                                title="Copiar Link"
+                              >
+                                <LucideCopy className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="default"
+                                className="h-10 shrink-0 bg-blue-600 hover:bg-blue-700"
+                                onClick={() => window.open(proposal.processo_assinatura.signers[0].sign_url, '_blank')}
+                                title="Abrir Assinatura"
+                              >
+                                Assinar
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="pt-4">
+                             <Button variant="outline" onClick={() => window.open('https://aeroclubejf.com.br', '_blank')}>
+                                Voltar ao site
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -322,7 +363,7 @@ export default function ProposalApproval() {
             </Card>
 
             {/* Contracts Display */}
-            {contracts.length > 0 && (
+            {false && contracts.length > 0 && (
                 <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
                     <div className="bg-slate-50/50 p-6 border-b border-slate-100 flex items-center gap-3">
                         <div className="p-2 bg-purple-100 rounded-lg text-purple-600">

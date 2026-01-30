@@ -2,6 +2,7 @@
 namespace App\Services;
 
 use App\Helpers\TemaEAD;
+use App\Http\Controllers\api\MatriculaController;
 use App\Jobs\PresencaEmMassaJob;
 use App\Models\Matricula;
 use App\Models\Tenant;
@@ -147,21 +148,12 @@ class Escola
 	 * @param int $id_matricula
 	 * @return boolean true|false
 	 */
-	static function contrato_assinado($id_matricula,$exibe_dados=false){
-		//uso Escola::contrato_assinado($id_matricula);
-		$ret = false;
-		$json_c = Qlib::buscaValorDb($GLOBALS['tab12'],'id',$id_matricula,'contrato');
-		if($json_c){
-			$c = lib_json_array($json_c);
+	static function contrato_assinado($id_matricula){
+		$status_assintura_atual = Qlib::get_matriculameta($id_matricula,(new MatriculaController)->campos_status_assinatura);
+		if($status_assintura_atual == 'assinatura_confirmada'){
+			return true;
 		}
-		if(isset($c['aceito_contrato']) && $c['aceito_contrato']=='on'){
-			if($exibe_dados){
-				$ret = $c;
-			}else{
-				$ret = true;
-			}
-		}
-		return $ret;
+        return $status_assintura_atual;
 	}
 	/**
 	 * Gera uma página de historico em html para ser exibido no admin ou no site

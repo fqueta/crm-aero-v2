@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Laravel\Sanctum\PersonalAccessToken;
 // Removido import indevido de função do PHPUnit; usar nativo is_array
+use App\Models\EventLog;
+use App\Models\Stage;
 
 class UserController extends Controller
 {
@@ -208,6 +210,17 @@ class UserController extends Controller
         $ret['data'] = $user;
         $ret['message'] = 'Usuário criado com sucesso';
         $ret['status'] = 201;
+        try {
+            EventLog::create([
+                'entity_type' => 'user',
+                'entity_id' => (string)$user->id,
+                'action' => 'created',
+                'description' => 'Usuário criado',
+                'payload' => $validated,
+                'actor_id' => (string)$request->user()->id,
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {}
         return response()->json($ret, 201);
     }
 
@@ -454,6 +467,18 @@ class UserController extends Controller
         // dd($validated);
         $userToUpdate->update($validated);
 
+        try {
+            EventLog::create([
+                'entity_type' => 'user',
+                'entity_id' => (string)$userToUpdate->id,
+                'action' => 'updated',
+                'description' => 'Usuário atualizado',
+                'payload' => $validated,
+                'actor_id' => (string)$user->id,
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {}
+
         return response()->json([
             'exec' => true,
             'data' => $userToUpdate,
@@ -483,8 +508,85 @@ class UserController extends Controller
             'deletado'     => 's',
             'reg_deletado' =>['data'=>now()->toDateTimeString(),'user_id'=>request()->user()->id] ,
         ]);
+        try {
+            EventLog::create([
+                'entity_type' => 'user',
+                'entity_id' => (string)$userToDelete->id,
+                'action' => 'deleted',
+                'description' => 'Usuário marcado como deletado',
+                'payload' => ['reg_deletado' => $userToDelete->reg_deletado],
+                'actor_id' => (string)$user->id,
+                'ip_address' => request()->ip(),
+            ]);
+        } catch (\Throwable $e) {}
         return response()->json([
             'message' => 'Usuário marcado como deletado com sucesso'
         ], 200);
+    }
+    /**
+     * Atualiza rapidamente a etapa (stage) do cadastro de cliente/usuário.
+     */
+    public function updateStageRapid(Request $request, string $id)
+    {
+        $auth = $request->user();
+        if (!$auth) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+        if (!$this->permissionService->isHasPermission('edit')) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+
+        $userToUpdate = User::find($id);
+        if (!$userToUpdate) {
+            return response()->json(['error' => 'Usuário não encontrado'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'stage_id' => ['required', 'integer', 'exists:stages,id'],
+        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+        $validated = $validator->validated();
+
+        $newStageId = (int)$validated['stage_id'];
+        $oldStageId = (int)($userToUpdate->config['stage_id'] ?? 0);
+
+        $cfg = is_array($userToUpdate->config)
+            ? $userToUpdate->config
+            : (is_string($userToUpdate->config) ? (json_decode($userToUpdate->config, true) ?? []) : []);
+        $cfg['stage_id'] = $newStageId;
+
+        $stage = null;
+        try {
+            $stage = Stage::select(['id','funnel_id'])->find($newStageId);
+        } catch (\Throwable $e) {
+            $stage = null;
+        }
+        if ($stage && isset($stage->funnel_id)) {
+            $cfg['funnelId'] = $stage->funnel_id;
+        }
+        $userToUpdate->config = $cfg;
+        $userToUpdate->save();
+
+        try {
+            EventLog::create([
+                'entity_type' => 'user',
+                'entity_id' => (string)$userToUpdate->id,
+                'action' => 'stage_changed',
+                'description' => 'Etapa do cliente alterada',
+                'payload' => [
+                    'from_stage_id' => $oldStageId,
+                    'to_stage_id' => $newStageId,
+                ],
+                'actor_id' => (string)$auth->id,
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {}
+
+        return response()->json($userToUpdate);
     }
 }

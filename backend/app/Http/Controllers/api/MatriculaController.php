@@ -15,11 +15,14 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use App\Services\Qlib;
+use App\Services\Escola;
 use Illuminate\Support\Facades\Bus;
 // Import removido: Str não é mais necessário
 use App\Jobs\GeraPdfPropostasPnlJob;
 use App\Jobs\GeraPdfcontratosPnlJob;
 use App\Jobs\SendPeriodosZapsingJob;
+use App\Models\EventLog;
+use Illuminate\Support\Facades\Storage;
 
 class MatriculaController extends Controller
 {
@@ -27,6 +30,7 @@ class MatriculaController extends Controller
     public $default_funil_vendas_id;
     public $default_etapa_vendas_id;
     public $default_proposal_situacao_id;
+    public $campos_status_assinatura;
 
     public function __construct()
     {
@@ -34,6 +38,7 @@ class MatriculaController extends Controller
         $this->default_funil_vendas_id = Qlib::qoption('default_funil_vendas_id');
         $this->default_etapa_vendas_id = Qlib::qoption('default_etapa_vendas_id');
         $this->default_proposal_situacao_id = Qlib::qoption('default_proposal_situacao_id');
+        $this->campos_status_assinatura = 'status_assinatura';
     }
 
     /**
@@ -482,6 +487,18 @@ class MatriculaController extends Controller
         $matricula->fill($validated);
         $matricula->save();
 
+        try {
+            EventLog::create([
+                'entity_type' => 'matricula',
+                'entity_id' => (string)$matricula->id,
+                'action' => 'created',
+                'description' => 'Matrícula criada',
+                'payload' => $validated,
+                'actor_id' => (string)$user->id,
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {}
+
         // Vincular parcelamentos do curso (até 2), garantindo compatibilidade com o curso da matrícula
         if (array_key_exists('parcelamento_ids', $validated) && is_array($validated['parcelamento_ids'])) {
             $ids = array_unique(array_filter($validated['parcelamento_ids'], fn($v) => is_numeric($v)));
@@ -692,6 +709,18 @@ class MatriculaController extends Controller
         $matricula->fill($validated);
         $matricula->save();
 
+        try {
+            EventLog::create([
+                'entity_type' => 'matricula',
+                'entity_id' => (string)$matricula->id,
+                'action' => 'updated',
+                'description' => 'Matrícula atualizada',
+                'payload' => $validated,
+                'actor_id' => (string)$user->id,
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {}
+
         // Sincronizar parcelamentos do curso, se informados
         if (array_key_exists('parcelamento_ids', $validated) && is_array($validated['parcelamento_ids'])) {
             $ids = array_unique(array_filter($validated['parcelamento_ids'], fn($v) => is_numeric($v)));
@@ -819,13 +848,40 @@ class MatriculaController extends Controller
     public function publicShow($client_id, $matricula_id)
     {
         try {
-            // Validation: Ensure the matricula exists and belongs to the client
-            Matricula::where('id', $matricula_id)
+            $matricula = Matricula::where('id', $matricula_id)
                 ->where('id_cliente', $client_id)
                 ->firstOrFail();
-
-            // Unify response using dm() helper
             $data = $this->dm($matricula_id, $client_id);
+            //Verificar se a assinatura ja foi registrada
+            $status_assintura_atual = Qlib::get_matriculameta($matricula_id,$this->campos_status_assinatura);
+            $is_assinado = Escola::contrato_assinado($matricula_id);
+            $config = is_array($matricula->config) ? $matricula->config : (is_string($matricula->config) ? (json_decode($matricula->config, true) ?? []) : []);
+            $step1Done = !empty($config['step1_done']);
+            // Redireciona para etapa 2 somente se já concluiu a etapa 1 (para evitar loop)
+            if(($status_assintura_atual == 'aprovado' || $is_assinado) && $step1Done){
+                $client = User::findOrFail($client_id);
+            $status = $is_assinado ? 'aprovado' : '';
+            $message = $is_assinado
+                ? 'Está proposta ja está aprovada e assinada'
+                : 'A proposta foi aprovada e está aguardando assinatura digital.';
+                $ret = [
+                    'status' => $status,
+                    'message' => $message,
+                    'redirect' => '/aluno/matricula/' . $client_id . '_' . Qlib::zerofill($matricula_id, 5) . '/2/aprovado',
+                        'client' => $client,
+                        // 'list_pdf' => $list_pdf_contratos,
+                        'exec' => true,
+                    ];
+                return response()->json($ret, 200);
+            }
+            //mudança de etapa da matricula
+            $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('show'), (string)$client_id, request()->ip(), 'Etapa alterada via publicShow');
+            $clientUser = User::find($client_id);
+            if ($clientUser) {
+                //mudança de epata do cliente
+                $this->applyUserStage($clientUser, $this->getUserStageId('show'), (string)$client_id, request()->ip(), 'Etapa do cliente alterada via publicShow');
+            }
+
 
             return response()->json($data);
 
@@ -931,6 +987,11 @@ class MatriculaController extends Controller
                 $matConfig['step1_at'] = now()->toDateTimeString();
                 $matricula->config = $matConfig;
                 $matricula->save();
+                $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('sign'), (string)$client_id, $request->ip(), 'Etapa alterada via publicSign');
+                $clientUser = User::find($client_id);
+                if ($clientUser) {
+                    $this->applyUserStage($clientUser, $this->getUserStageId('sign'), (string)$client_id, $request->ip(), 'Etapa do cliente alterada via publicSign');
+                }
                 //gerar pdf
                 // $dm = $this->dm($matricula_id);
                 // $list_pdf_contratos = $this->contratos_periodos_pdf($matricula_id);
@@ -1243,6 +1304,15 @@ class MatriculaController extends Controller
 
             $matricula->save();
 
+            //mudança de etapa da matricula
+            $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('approve'), (string)$client_id, $request->ip(), 'Etapa alterada via publicApprove');
+            $clientUser = User::find($client_id);
+            if ($clientUser) {
+                //mudança de epata do cliente
+                $this->applyUserStage($clientUser, $this->getUserStageId('approve'), (string)$client_id, $request->ip(), 'Etapa do cliente alterada via publicApprove');
+            }
+            //Grabar status assinatura
+            $updata_status = Qlib::update_matriculameta($matricula_id,$this->campos_status_assinatura,'aprovado');
             // Dispatch Jobs Sequentially
             Bus::chain([
                 new GeraPdfPropostasPnlJob($matricula_id),
@@ -1250,10 +1320,100 @@ class MatriculaController extends Controller
                 new SendPeriodosZapsingJob($matricula_id),
             ])->dispatch();
 
-            return response()->json(['message' => 'Proposta aprovada com sucesso!']);
+            return response()->json([
+                'message' => 'Proposta aprovada com sucesso!',
+                'updata_status' => $updata_status,
+                'redirect' => '/aluno/matricula/' . $client_id . '_' . Qlib::zerofill($matricula_id, 5) . '/2/aprovado',
+                'exec' => true
+            ]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Erro ao aprovar proposta: ' . $e->getMessage()], 500);
         }
+    }
+    /**
+     * Atualiza rapidamente a etapa (stage) da matrícula.
+     */
+    public function updateStageRapid(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+        if (!$this->permissionService->isHasPermission('edit')) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+
+        $matricula = Matricula::find($id);
+        if (!$matricula) {
+            return response()->json(['error' => 'Matrícula não encontrada'], 404);
+        }
+
+        $input = $this->mapFields($request);
+        $validator = Validator::make($input, [
+            'stage_id' => ['required', 'integer', 'exists:stages,id'],
+        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+        $validated = $validator->validated();
+
+        $newStageId = (int)$validated['stage_id'];
+        $oldStageId = $matricula->stage_id;
+        $matricula->stage_id = $newStageId;
+
+        $stage = null;
+        try {
+            $stage = Stage::select(['id', 'funnel_id'])->find($newStageId);
+        } catch (\Exception $e) {
+            $stage = null;
+        }
+        if ($stage && isset($stage->funnel_id)) {
+            $matricula->funnel_id = $stage->funnel_id;
+        }
+
+        $currentConfig = is_array($matricula->config)
+            ? $matricula->config
+            : (is_string($matricula->config) ? (json_decode($matricula->config, true) ?? []) : []);
+        $currentConfig['stage_id'] = $newStageId;
+        if (!isset($currentConfig['funnelId']) && $stage && isset($stage->funnel_id)) {
+            $currentConfig['funnelId'] = $stage->funnel_id;
+        }
+        $matricula->config = $currentConfig;
+
+        $matricula->save();
+
+        try {
+            DB::table('matricula_stage_history')->insert([
+                'matricula_id' => $matricula->id,
+                'from_stage_id' => $oldStageId,
+                'to_stage_id' => $newStageId,
+                'user_id' => (string)$user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+        }
+
+        try {
+            EventLog::create([
+                'entity_type' => 'matricula',
+                'entity_id' => (string)$matricula->id,
+                'action' => 'stage_changed',
+                'description' => 'Etapa alterada',
+                'payload' => [
+                    'from_stage_id' => $oldStageId,
+                    'to_stage_id' => $newStageId,
+                ],
+                'actor_id' => (string)$user->id,
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {}
+
+        $out = $this->mapOutputFields($matricula->toArray());
+        return response()->json($out);
     }
     /**
      * Metodo para enviar o termo para zapsing
@@ -1280,8 +1440,8 @@ class MatriculaController extends Controller
         if($tipo_curso == 4){
             //Recupera o nome do Periodo
             $nome = $dm['orc'][0]['nome']??'';
-        }           
-        
+        }
+
         //verifica se ja tem os links do contrato criados
         $contratosMeta = Qlib::get_matriculameta($id, 'contrato_pdf');
         // dd($contratosMeta,$dm);
@@ -1301,7 +1461,7 @@ class MatriculaController extends Controller
         // if($id){
         //     if(!$contratosMeta)
         //         $contratos = $this->contratos_periodos_pdf($id??'');
-            
+
         // }else{
         //     $contratos = false;
         // }
@@ -1490,5 +1650,180 @@ class MatriculaController extends Controller
             return $ret;
         }
 
+    }
+    private function applyMatriculaStage(Matricula $matricula, int $newStageId, string $actorId, string $ip, string $description): void
+    {
+        $oldStageId = $matricula->stage_id;
+        $matricula->stage_id = $newStageId;
+        $stage = null;
+        try {
+            $stage = Stage::select(['id','funnel_id'])->find($newStageId);
+        } catch (\Throwable $e) {
+            $stage = null;
+        }
+        if ($stage && isset($stage->funnel_id)) {
+            $matricula->funnel_id = $stage->funnel_id;
+        }
+        $cfg = is_array($matricula->config) ? $matricula->config : (is_string($matricula->config) ? (json_decode($matricula->config, true) ?? []) : []);
+        $cfg['stage_id'] = $newStageId;
+        if (!isset($cfg['funnelId']) && $stage && isset($stage->funnel_id)) {
+            $cfg['funnelId'] = $stage->funnel_id;
+        }
+        $matricula->config = $cfg;
+        $matricula->save();
+        try {
+            DB::table('matricula_stage_history')->insert([
+                'matricula_id' => $matricula->id,
+                'from_stage_id' => $oldStageId,
+                'to_stage_id' => $newStageId,
+                'user_id' => $actorId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $e) {}
+        try {
+            EventLog::create([
+                'entity_type' => 'matricula',
+                'entity_id' => (string)$matricula->id,
+                'action' => 'stage_changed',
+                'description' => $description,
+                'payload' => [
+                    'from_stage_id' => $oldStageId,
+                    'to_stage_id' => $newStageId,
+                ],
+                'actor_id' => $actorId,
+                'ip_address' => $ip,
+            ]);
+        } catch (\Throwable $e) {}
+        try {
+            event(new \App\Events\StageChanged(
+                'matricula',
+                (string)$matricula->id,
+                is_null($oldStageId) ? null : (int)$oldStageId,
+                (int)$newStageId,
+                $actorId,
+                $ip,
+                []
+            ));
+        } catch (\Throwable $e) {}
+    }
+    private function applyUserStage(User $user, int $newStageId, string $actorId, string $ip, string $description): void
+    {
+        $cfg = is_array($user->config) ? $user->config : (is_string($user->config) ? (json_decode($user->config, true) ?? []) : []);
+        $oldStageId = (int)($cfg['stage_id'] ?? 0);
+        $cfg['stage_id'] = $newStageId;
+        $stage = null;
+        try {
+            $stage = Stage::select(['id','funnel_id'])->find($newStageId);
+        } catch (\Throwable $e) {
+            $stage = null;
+        }
+        if ($stage && isset($stage->funnel_id)) {
+            $cfg['funnelId'] = $stage->funnel_id;
+        }
+        $user->config = $cfg;
+        $user->save();
+        try {
+            EventLog::create([
+                'entity_type' => 'user',
+                'entity_id' => (string)$user->id,
+                'action' => 'stage_changed',
+                'description' => $description,
+                'payload' => [
+                    'from_stage_id' => $oldStageId,
+                    'to_stage_id' => $newStageId,
+                ],
+                'actor_id' => $actorId,
+                'ip_address' => $ip,
+            ]);
+        } catch (\Throwable $e) {}
+        try {
+            event(new \App\Events\StageChanged(
+                'user',
+                (string)$user->id,
+                $oldStageId,
+                $newStageId,
+                $actorId,
+                $ip,
+                []
+            ));
+        } catch (\Throwable $e) {}
+    }
+
+
+    private function getMatriculaStageId(string $action): int
+    {
+        $key = match ($action) {
+            'show' => 'matricula_stage_show_id',
+            'sign' => 'matricula_stage_sign_id',
+            'approve' => 'matricula_stage_approve_id',
+            default => null,
+        };
+        if ($key) {
+            $opt = Qlib::qoption($key);
+            if (is_numeric($opt)) {
+                return (int)$opt;
+            }
+        }
+        return match ($action) {
+            'show' => 8,
+            'sign' => 9,
+            'approve' => 10,
+            default => 0,
+        };
+    }
+
+    private function getUserStageId(string $action): int
+    {
+        $key = match ($action) {
+            'show' => 'user_stage_show_id',
+            'sign' => 'user_stage_sign_id',
+            'approve' => 'user_stage_approve_id',
+            default => null,
+        };
+        if ($key) {
+            $opt = Qlib::qoption($key);
+            if (is_numeric($opt)) {
+                return (int)$opt;
+            }
+        }
+        return match ($action) {
+            'show' => 3,
+            'sign' => 4,
+            'approve' => 5,
+            default => 0,
+        };
+    }
+    /**
+     * Metodo para baixar o arquivo assinado de um oraçmento baixar em um diretorio padrão de oraçamento
+     * @param string $token
+     */
+    public function baixar_arquivo($id_matricula,$url,$nome_arquivo=false,$slug=false,$pasta=false){
+        // $url = "https://zapsign.s3.amazonaws.com/sandbox/dev/2024/12/pdf/72d30d89-da1f-4e10-9025-3689b03ef3d4/7a773057-05d3-4843-be1d-0fe6bffdb730.pdf?AWSAccessKeyId=AKIASUFZJ7JCTI2ZRGWX&Signature=oRLj2PALoDs1JEkx%2FHm4TV1ZM%2BQ%3D&Expires=1734026017";
+        $num=null;
+        $nome_arquivo = $nome_arquivo?$nome_arquivo:'assinado';
+        $nome_arquivo = Qlib::createSlug($nome_arquivo);
+        $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$nome_arquivo.'.pdf';
+        if($pasta){
+            $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$pasta.'/'.$nome_arquivo.'.pdf';
+        }
+        if(Storage::exists($caminhoSalvar)){
+            $num='-'.time();
+        }
+        $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$nome_arquivo.$num.'.pdf';
+        if($pasta){
+            $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$pasta.'/'.$nome_arquivo.$num.'.pdf';
+        }
+        $ret = Qlib::download_file($url,$caminhoSalvar);
+        $ret['url'] = $url;
+        $ret['id_matricula'] = $id_matricula;
+        if($ret['exec']){
+            $link = Storage::url($caminhoSalvar);
+            $ret['link'] = $link;
+            if($slug){
+                $ret['salv'] = Qlib::update_matriculameta($id_matricula,$slug,Qlib::lib_array_json(['link'=>$link,'data'=>Qlib::dataLocal()]));
+            }
+        }
+        return $ret;
     }
 }

@@ -22,10 +22,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Save, CheckCircle } from 'lucide-react';
+import { ArrowLeft, FileText, Save, CheckCircle, Plus } from 'lucide-react';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import SelectGeraValor from '@/components/school/SelectGeraValor';
 import { currencyApplyMask, currencyRemoveMaskToNumber, currencyRemoveMaskToString } from '@/lib/masks/currency';
+import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
+import { clientsService } from '@/services/clientsService';
 import BudgetPreview from '@/components/school/BudgetPreview';
 
 /**
@@ -111,6 +113,75 @@ export default function ProposalsCreate() {
    * en-US: Stores the last created ID to allow opening the view page.
    */
   const lastCreatedIdRef = useRef<string>('');
+  
+  // Quick Client Creation State
+  const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  const [quickEmail, setQuickEmail] = useState('');
+  const [quickPhone, setQuickPhone] = useState('');
+  const [quickConsultantId, setQuickConsultantId] = useState('');
+  const [quickClientLoading, setQuickClientLoading] = useState(false);
+
+  /**
+   * handleQuickClientSubmit
+   * pt-BR: Cria um cliente de forma rápida e o seleciona no formulário.
+   * en-US: Creates a client quickly and selects it in the form.
+   */
+  async function handleQuickClientSubmit() {
+    if (!quickName.trim()) {
+      toast({ title: 'Erro', description: 'Nome é obrigatório.', variant: 'destructive' });
+      return;
+    }
+    // Validation for phone could be added here if needed, consistent with "New Lead" form
+    const phoneClean = phoneRemoveMask(quickPhone);
+    if (quickPhone && phoneClean.length < 10) {
+         toast({ title: 'Erro', description: 'Telefone inválido.', variant: 'destructive' });
+         return;
+    }
+
+    setQuickClientLoading(true);
+    try {
+      const payload: any = {
+        name: quickName,
+        email: quickEmail,
+        telefone: phoneClean,
+        tipo_pessoa: 'pf',
+        status: 'actived',
+        // Associate consultant if selected
+        autor: quickConsultantId || undefined, 
+        // Campos obrigatórios mínimos para passar na validação do backend (se houver)
+        // Minimum required fields to pass backend validation (if any)
+        config: {},
+      };
+      
+      const created = await clientsService.createClient(payload);
+      
+      // Atualiza o cache de lista de clientes para incluir o novo
+      await queryClient.invalidateQueries({ queryKey: ['clients'] });
+      
+      // Seleciona o novo cliente no formulário
+      // Selects the new client in the form
+      // Pequeno delay para garantir que o cache invalidado propagou (embora invalidateQueries seja async)
+      setTimeout(() => {
+        form.setValue('id_cliente', String(created.id));
+        setClientSearch(created.name); // Atualiza termo de busca para mostrar o novo cliente
+        setIsQuickClientOpen(false);
+        // Limpa campos
+        setQuickName('');
+        setQuickEmail('');
+        setQuickPhone('');
+        setQuickConsultantId('');
+        toast({ title: 'Sucesso', description: `Cliente ${created.name} criado e selecionado.` });
+      }, 200);
+
+    } catch (error: any) {
+      console.error(error);
+      const msg = error?.response?.data?.message || 'Erro ao criar cliente.';
+      toast({ title: 'Erro', description: msg, variant: 'destructive' });
+    } finally {
+      setQuickClientLoading(false);
+    }
+  }
 
   // Form setup
   const form = useForm<ProposalFormData>({
@@ -879,6 +950,19 @@ export default function ProposalsCreate() {
                           onSearch={setClientSearch}
                           searchTerm={clientSearch}
                           debounceMs={250}
+                          footer={({ setOpen }) => (
+                            <Button 
+                              variant="ghost" 
+                              className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                              onClick={() => {
+                                setIsQuickClientOpen(true);
+                                setOpen(false);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Criar Novo Cliente
+                            </Button>
+                          )}
                         />
                       )}
                       <FormMessage />
@@ -1283,6 +1367,75 @@ export default function ProposalsCreate() {
           </div>
         </div>
       </div>
+
+      {/* Modal de Criação Rápida de Cliente */}
+      {isQuickClientOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setIsQuickClientOpen(false)}>
+          <div className="w-full max-w-[600px] bg-background rounded-lg shadow-lg border" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b">
+               <div className="font-medium">Novo Cliente</div>
+               <div className="text-xs text-muted-foreground">Preencha os dados básicos para cadastro rápido</div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium mb-1.5 block">Nome completo *</label>
+                  <Input 
+                    value={quickName} 
+                    onChange={(e) => setQuickName(e.target.value)} 
+                    placeholder="Ex.: João da Silva"
+                    className={!quickName.trim() ? '' : ''} // Simple validation visual if needed
+                  />
+                  {!quickName.trim() && (
+                     <p className="text-[10px] text-muted-foreground mt-1">Nome é obrigatório</p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs font-medium mb-1.5 block">Email</label>
+                  <Input 
+                    value={quickEmail} 
+                    onChange={(e) => setQuickEmail(e.target.value)} 
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-medium mb-1.5 block">Telefone</label>
+                  <Input 
+                    value={quickPhone} 
+                    onChange={(e) => setQuickPhone(phoneApplyMask(e.target.value))} 
+                    placeholder="+55 (11) 99999-9999"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium mb-1.5 block">Consultor</label>
+                  <Combobox
+                    options={consultantOptions}
+                    value={quickConsultantId}
+                    onValueChange={setQuickConsultantId}
+                    placeholder="Selecione um consultor"
+                    searchPlaceholder="Pesquisar consultores..."
+                    emptyText="Nenhum consultor encontrado."
+                    loading={isLoadingConsultants}
+                    onSearch={setConsultantSearch}
+                    searchTerm={consultantSearch}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="p-4 flex items-center justify-end gap-2 border-t bg-muted/20 rounded-b-lg">
+              <Button variant="outline" onClick={() => setIsQuickClientOpen(false)} disabled={quickClientLoading}>
+                Cancelar
+              </Button>
+              <Button onClick={handleQuickClientSubmit} disabled={quickClientLoading}>
+                {quickClientLoading ? 'Criando...' : 'Criar Cliente'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

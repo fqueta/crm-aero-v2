@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\api;
 
+use App\Http\Controllers\Controller;
 use App\Services\Qlib;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +31,7 @@ class ZapguruController extends Controller
         $ret = null;
         $id_cliente = Qlib::buscaValorDb('matriculas','token',$token,'id_cliente');
         if($id_cliente){
-            $ret = Qlib::buscaValorDb('clientes','id',$id_cliente,'telefonezap');
+            $ret = Qlib::buscaValorDb('users','id',$id_cliente,'celular');
         }
         return $ret;
     }
@@ -44,7 +45,7 @@ class ZapguruController extends Controller
         $ret = null;
         $id_cliente = Qlib::buscaValorDb('matriculas','id',$id_matricula,'id_cliente');
         if($id_cliente){
-            $ret = Qlib::buscaValorDb('clientes','id',$id_cliente,'telefonezap');
+            $ret = Qlib::buscaValorDb('users','id',$id_cliente,'celular');
         }
         return $ret;
     }
@@ -734,7 +735,7 @@ class ZapguruController extends Controller
 		$ret = $zg->criar_chat(array('telefonezap'=>'5532984741602'));
 
 		*/
-
+		dd($config);
 		$ret['exec'] = false;
         $cel = isset($config['telefonezap']) ? $config['telefonezap'] : false;
         $tab = isset($config['tab']) ? $config['tab'] : $GLOBALS['tab15'];
@@ -758,7 +759,7 @@ class ZapguruController extends Controller
                 if($tab=='capta_lead'){
                     $campo_bus = 'email';
                     $campo_enc = 'celular';
-                    $cel = Qlib::buscaValorDb0($tab,$campo_bus,$email,$campo_enc," AND ".Qlib::compleDelete());
+                    $cel = Qlib::buscaValorDb($tab,$campo_bus,$email,$campo_enc," AND ".Qlib::compleDelete());
                 }elseif($tab == 'usuarios_sistemas'){
                     $campo_bus = 'email';
                     $campo_enc = 'telefonezap';
@@ -766,7 +767,7 @@ class ZapguruController extends Controller
                 }else{
                     $campo_bus = 'Email';
                     $campo_enc = 'telefonezap';
-                    $cel = Qlib::buscaValorDb0($tab,$campo_bus,$email,$campo_enc," AND ".Qlib::compleDelete());
+                    $cel = Qlib::buscaValorDb($tab,$campo_bus,$email,$campo_enc," AND ".Qlib::compleDelete());
                 }
                 // dd($cel);
                 if($tab != 'usuarios_sistemas'){
@@ -1886,7 +1887,7 @@ class ZapguruController extends Controller
      */
     public function client_link_chat($tab='',$campo_bus='',$valor_bus='',$campo_enc='zapguru')
     {
-        $json = Qlib::buscaValorDb0($tab,$campo_bus,$valor_bus,$campo_enc);
+        $json = Qlib::buscaValorDb($tab,$campo_bus,$valor_bus,$campo_enc);
         //Verificar se o cadastro de cliente ja tem um link chat
         $link_chat = $this->link_chat($json);
         return $link_chat;

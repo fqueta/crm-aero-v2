@@ -275,6 +275,30 @@ export const defaultMenu: MenuItemDTO[] = [
         url: "/admin/settings/system",
         permission: "settings.system.view",
         can_view: true
+      },
+      {
+        title: "Workflows",
+        url: "/admin/settings/workflows",
+        permission: "settings.workflows.view",
+        can_view: true
+      },
+      {
+        title: "Regras",
+        url: "/admin/settings/rules",
+        permission: "settings.rules.view",
+        can_view: true
+      },
+      {
+        title: "Ações",
+        url: "/admin/settings/actions",
+        permission: "settings.actions.view",
+        can_view: true
+      },
+      {
+        title: "Designer de Workflows",
+        url: "/admin/settings/workflows/designer",
+        permission: "settings.workflows.view",
+        can_view: true
       }
     ]
   }

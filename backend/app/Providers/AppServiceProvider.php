@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use App\Helpers\StringHelper;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Event;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -34,5 +35,7 @@ class AppServiceProvider extends ServiceProvider
             ['label' => 'Usuários', 'href' => '/users'],
             ['label' => 'Configurações', 'href' => '/settings'],
         ]);
+        Event::listen(\App\Events\StageChanged::class, \App\Listeners\StageChangedListener::class);
+        Event::listen(\App\Events\WebhookReceived::class, \App\Listeners\WebhookReceivedListener::class);
     }
 }

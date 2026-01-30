@@ -11,6 +11,7 @@ import { useFunnel, useStagesList } from '@/hooks/funnels';
 import { phoneApplyMask } from '@/lib/masks/phone-apply-mask';
 import { useEnrollmentsList, useDeleteEnrollment } from '@/hooks/enrollments';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import ClientEventLogsCard from '@/components/clients/ClientEventLogsCard';
 
 
 
@@ -726,6 +727,9 @@ export default function ClientView() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Event Logs do Cliente */}
+        <ClientEventLogsCard clientId={client.id} />
 
         {/* (removido) Matrículas e Propostas: movido para full-width acima de Informações do Sistema */}
 

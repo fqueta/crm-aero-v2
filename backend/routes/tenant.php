@@ -329,6 +329,14 @@ Route::name('api.')->prefix('api/v1')->middleware([
             'workflows' => 'id'
         ]]);
         Route::patch('workflows/{id}/toggle-active', [WorkflowController::class, 'toggleActive'])->name('workflows.toggle-active');
+        // Regras e ações de workflow
+        Route::apiResource('workflow-rules', \App\Http\Controllers\api\WorkflowRuleController::class, ['parameters' => [
+            'workflow-rules' => 'id'
+        ]]);
+        Route::apiResource('workflow-actions', \App\Http\Controllers\api\WorkflowActionController::class, ['parameters' => [
+            'workflow-actions' => 'id'
+        ]]);
+        Route::get('workflow/metrics', \App\Http\Controllers\api\WorkflowMetricsController::class.'@index')->name('workflow.metrics');
     });
 
 

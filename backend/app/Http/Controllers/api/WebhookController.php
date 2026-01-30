@@ -55,6 +55,15 @@ class WebhookController extends Controller
 
             // Processar webhook baseado no endpoint
             $result = $this->processWebhook($endp1, null, $request);
+            try {
+                event(new \App\Events\WebhookReceived(
+                    $endp1,
+                    null,
+                    $request->all(),
+                    $request->headers->all(),
+                    $request->ip()
+                ));
+            } catch (\Throwable $e) {}
 
             return response()->json([
                 'success' => true,
@@ -102,6 +111,15 @@ class WebhookController extends Controller
 
             // Processar webhook baseado nos endpoints
             $result = $this->processWebhook($endp1, $endp2, $request);
+            try {
+                event(new \App\Events\WebhookReceived(
+                    $endp1,
+                    $endp2,
+                    $request->all(),
+                    $request->headers->all(),
+                    $request->ip()
+                ));
+            } catch (\Throwable $e) {}
 
             return response()->json([
                 'success' => true,
@@ -158,7 +176,7 @@ class WebhookController extends Controller
                 return $this->processMetricsWebhook($endp2, $payload, $headers);
 
             case 'zapsing':
-                return $this->processZapsingWebhook($endp2, $payload, $headers);
+                return $this->processZapsingWebhook($endp1, $endp2, $payload, $headers);
             default:
                 return $this->processGenericWebhook($endp1, $endp2, $payload, $headers);
         }
@@ -348,7 +366,6 @@ class WebhookController extends Controller
             'endpoint2' => $endp2,
             'payload_keys' => array_keys($payload)
         ]);
-
         // Lógica genérica para webhooks não específicos
         $proccess = (new ZapsingController())->webhook($payload);
         return [
@@ -360,5 +377,5 @@ class WebhookController extends Controller
             'data' => $proccess
         ];
     }
-    
+
 }

@@ -78,12 +78,12 @@ Route::name('api.')->prefix('v1')->middleware([
     Route::fallback(function () {
         return response()->json(['message' => 'Rota não encontrada'], 404);
     });
-    
+
     // Rota de teste para API
     Route::get('/teste', [TesteController::class,'index'])->name('teste.index');
-    
 
-    
+
+
     Route::middleware(['auth:sanctum','auth.active'])->group(function () {
         Route::get('user',[UserController::class,'perfil'])->name('perfil.user');
         Route::get('user/can',[UserController::class,'can_access'])->name('perfil.can');
@@ -91,6 +91,7 @@ Route::name('api.')->prefix('v1')->middleware([
         Route::apiResource('users', UserController::class,['parameters' => [
             'users' => 'id'
         ]]);
+        Route::patch('users/{id}/etapa', [UserController::class, 'updateStageRapid'])->name('users.update-stage');
         Route::apiResource('clients', ClientController::class,['parameters' => [
             'clients' => 'id'
         ]]);
@@ -98,7 +99,7 @@ Route::name('api.')->prefix('v1')->middleware([
         Route::put('clients/{id}/restore', [ClientController::class, 'restore'])->name('clients.restore');
         Route::delete('clients/{id}/force', [ClientController::class, 'forceDelete'])->name('clients.forceDelete');
 
-        
+
 
         // Rotas para posts
         Route::apiResource('posts', PostController::class,['parameters' => [
@@ -223,6 +224,10 @@ Route::name('api.')->prefix('v1')->middleware([
         Route::apiResource('matriculas', \App\Http\Controllers\api\MatriculaController::class, ['parameters' => [
             'matriculas' => 'id'
         ]]);
+        Route::patch('matriculas/{id}/etapa', [\App\Http\Controllers\api\MatriculaController::class, 'updateStageRapid'])->name('matriculas.update-stage');
+        // Logs de eventos
+        Route::get('event-logs', [\App\Http\Controllers\api\EventLogController::class, 'index'])->name('event-logs.index');
+        Route::post('event-logs', [\App\Http\Controllers\api\EventLogController::class, 'store'])->name('event-logs.store');
         // Rotas para situações de matrícula (posts: situacao_matricula)
         Route::apiResource('situacoes-matricula', SituacaoMatriculaController::class, ['parameters' => [
             'situacoes-matricula' => 'id'
@@ -256,11 +261,11 @@ Route::post('/v1/teste-json-simple', function(\Illuminate\Http\Request $request)
     \Log::info('Teste JSON Simple - request->json()->all():', $request->json()->all() ?? []);
     \Log::info('Teste JSON Simple - request->getContent():', [$request->getContent()]);
     \Log::info('Teste JSON Simple - Content-Type:', [$request->header('Content-Type')]);
-    
+
     // Tratar codificação UTF-8
     $rawContent = $request->getContent();
     $cleanContent = mb_convert_encoding($rawContent, 'UTF-8', 'UTF-8');
-    
+
     return response()->json([
         'request_all' => $request->all(),
         'request_json' => $request->json()->all() ?? [],

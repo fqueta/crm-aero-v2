@@ -119,6 +119,28 @@ export function ClientForm({
     }
   }, [form?.formState?.errors]);
 
+  // Controle do segundo acordeão (Contatos, Endereço, etc)
+  const [openSections, setOpenSections] = useState<string[]>([]);
+  
+  useEffect(() => {
+    const errors = form?.formState?.errors ?? {};
+    const cfgErrors = (errors as any)?.config ?? {};
+    const newSections = new Set(openSections);
+    
+    // Mapeamento de campos para seções
+    // Mapping fields to sections
+    if (cfgErrors?.celular || cfgErrors?.telefone_residencial) newSections.add('contatos');
+    if (cfgErrors?.nascimento || cfgErrors?.escolaridade || cfgErrors?.profissao || cfgErrors?.rg) newSections.add('pessoais');
+    if (cfgErrors?.tipo_pj || cfgErrors?.nome_fantasia) newSections.add('empresa');
+    if (cfgErrors?.cep || cfgErrors?.endereco || cfgErrors?.numero || cfgErrors?.complemento || cfgErrors?.bairro || cfgErrors?.cidade || cfgErrors?.uf) newSections.add('endereco');
+    if (cfgErrors?.observacoes) newSections.add('observacoes');
+    
+    // Atualiza se houver mudanças e se houver erros
+    if (Object.keys(errors).length > 0 && newSections.size > openSections.length) {
+       setOpenSections(Array.from(newSections));
+    }
+  }, [form?.formState?.errors]);
+
   /**
     * Função para buscar CEP e preencher campos de endereço automaticamente
     * @param cep CEP digitado pelo usuário
@@ -678,7 +700,12 @@ export function ClientForm({
           </div>
         </div>
 
-        <Accordion type="multiple" className="w-full space-y-4">
+        <Accordion 
+          type="multiple" 
+          className="w-full space-y-4"
+          value={openSections}
+          onValueChange={setOpenSections}
+        >
           {/* Seção: Contatos */}
           <AccordionItem value="contatos" className="bg-gray-50 rounded-lg border px-6">
             <AccordionTrigger className="text-lg font-semibold text-gray-900 hover:no-underline">

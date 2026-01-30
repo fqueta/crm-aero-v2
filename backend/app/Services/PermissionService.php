@@ -99,6 +99,12 @@ class PermissionService
             $url = '/settings/permissions';
         }elseif($name=='api.users.index' || $name == 'api.users.update' || $name == 'api.users.show' || $name == 'api.users.store' || $name == 'api.users.destroy'){
             $url = '/settings/users';
+        }elseif($name=='api.workflows.index' || $name == 'api.workflows.update' || $name == 'api.workflows.show' || $name == 'api.workflows.store' || $name == 'api.workflows.destroy' || $name == 'api.workflows.toggle-active'){
+            $url = '/admin/settings/workflows';
+        }elseif($name=='api.workflow-rules.index' || $name == 'api.workflow-rules.update' || $name == 'api.workflow-rules.show' || $name == 'api.workflow-rules.store' || $name == 'api.workflow-rules.destroy'){
+            $url = '/admin/settings/rules';
+        }elseif($name=='api.workflow-actions.index' || $name == 'api.workflow-actions.update' || $name == 'api.workflow-actions.show' || $name == 'api.workflow-actions.store' || $name == 'api.workflow-actions.destroy'){
+            $url = '/admin/settings/actions';
         }elseif($name=='api.parcelamentos.index' || $name == 'api.parcelamentos.update' || $name == 'api.parcelamentos.show' || $name == 'api.parcelamentos.store' || $name == 'api.parcelamentos.destroy'){
             $url = '/settings/table-installment';
         }elseif($name=='api.situacoes-matricula.index' || $name == 'api.situacoes-matricula.update' || $name == 'api.situacoes-matricula.show' || $name == 'api.situacoes-matricula.store' || $name == 'api.situacoes-matricula.destroy'){
@@ -156,7 +162,7 @@ class PermissionService
             $url = '/school/classes';
         }
         if(
-            $name=='api.matriculas.index' || $name == 'api.matriculas.update' || $name == 'api.matriculas.show' || $name == 'api.matriculas.store' || $name == 'api.matriculas.destroy' || $name == 'api.matriculas.all'
+            $name=='api.matriculas.index' || $name == 'api.event-logs.index' || $name == 'api.matriculas.update' || $name == 'api.matriculas.show' || $name == 'api.matriculas.store' || $name == 'api.matriculas.destroy' || $name == 'api.matriculas.all'
             ){
             $url = '/sales';
         }

@@ -36,6 +36,10 @@ import UserProfiles from "./pages/settings/UserProfiles";
 import SystemSettings from "./pages/settings/SystemSettings";
 import Stages from "./pages/settings/Stages";
 import TableInstallment from "./pages/settings/TableInstallment";
+import Workflows from "./pages/settings/Workflows";
+import WorkflowRules from "./pages/settings/WorkflowRules";
+import WorkflowActions from "./pages/settings/WorkflowActions";
+import WorkflowDesigner from "./pages/settings/WorkflowDesigner";
 import Login from "./pages/auth/Login";
 import Metrics from "./pages/settings/Metrics";
 import AircraftsSettings from "./pages/settings/AircraftsSettings";
@@ -56,6 +60,7 @@ import FinancialCategories from "./pages/FinancialCategories";
 import PublicClientForm from "@/pages/PublicClientForm";
 import ProposalSignature from "@/pages/ProposalSignature";
 import ProposalApproval from "@/pages/ProposalApproval";
+import ProposalApproved from "@/pages/ProposalApproved";
 import PointsStore from "@/pages/loja/PointsStore";
 import ProductDetails from "./pages/loja/ProductDetails";
 import MyRedemptions from "./pages/loja/MyRedemptions";
@@ -177,6 +182,7 @@ const App = () => {
               <Route path="/aluno/matricula/:compositeId/1" element={<ProposalSignature />} />
               <Route path="/aluno/assinatura/:compositeId/1" element={<ProposalSignature />} />
               <Route path="/aluno/matricula/:compositeId/2" element={<ProposalApproval />} />
+              <Route path="/aluno/matricula/:compositeId/2/aprovado" element={<ProposalApproved />} />
               
               {/* Rotas da loja - protegidas */}
               <Route path={link_loja} element={
@@ -669,6 +675,34 @@ const App = () => {
                     >
                       <SystemSettings />
                     </PermissionGuard>
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/workflows" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <Workflows />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/rules" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <WorkflowRules />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/actions" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <WorkflowActions />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/workflows/designer" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <WorkflowDesigner />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

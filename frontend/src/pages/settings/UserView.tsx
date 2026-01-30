@@ -7,6 +7,7 @@ import { useUser } from '@/hooks/users';
 import { usePermissionsList } from '@/hooks/permissions';
 import { phoneApplyMask } from '@/lib/masks/phone-apply-mask';
 import { UserRecord } from '@/types/users';
+import ClientEventLogsCard from '@/components/clients/ClientEventLogsCard';
 
 export default function UserView() {
   const { id } = useParams<{ id: string }>();
@@ -220,6 +221,8 @@ export default function UserView() {
                )}
            </CardContent>
         </Card>
+        {/* Event Logs do Usuário */}
+        {id && <ClientEventLogsCard clientId={id} />}
       </div>
 
       <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

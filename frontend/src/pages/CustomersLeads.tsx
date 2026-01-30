@@ -9,7 +9,7 @@ import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useFunnelsList, useStagesList } from '@/hooks/funnels';
+import { useFunnelsList, useStagesList, useUpdateStage } from '@/hooks/funnels';
 import { useUsersList } from '@/hooks/users';
 import { useAuth } from '@/contexts/AuthContext';
 import { FunnelRecord, StageRecord } from '@/types/pipelines';
@@ -1045,44 +1045,41 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
 
   // console.log('clientsByStage', clientsByStage);
   return (
-    <div className="container mx-auto space-y-6 pb-24">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Layers className="h-5 w-5" /> {place === 'vendas' ? 'Funis de Vendas' : 'Leads de Atendimento'}
-          </CardTitle>
-          <CardDescription>
-            {`Funis e etapas da área de ${place === 'vendas' ? 'vendas' : 'atendimento'}, para acompanhamento.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {/* Controls: selecionar funil de atendimento */}
-          <div className="flex items-center gap-3 mb-4 w-full max-w-xs">
-            <div className="w-full max-w-xs">
-              <label className="text-xs text-muted-foreground">{place === 'vendas' ? 'Funil de Vendas' : 'Funil de Atendimento'}</label>
+    <div className="container mx-auto max-w-[1600px] space-y-8 pb-32 pt-6">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          {place === 'vendas' ? 'Funis de Vendas' : 'Leads de Atendimento'}
+        </h1>
+        <p className="text-muted-foreground text-lg">
+          {`Gerencie seus ${place === 'vendas' ? 'processos de vendas' : 'leads de atendimento'} de forma visual e intuitiva.`}
+        </p>
+      </div>
+      
+      <Card className="border-none shadow-none bg-transparent">
+        <CardContent className="p-0">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-8 bg-card p-4 rounded-xl border shadow-sm">
+            {/* Controls: selecionar funil de atendimento */}
+            <div className="w-full max-w-sm">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block uppercase tracking-wider">
+                {place === 'vendas' ? 'Selecione o Funil' : 'Selecione o Funil'}
+              </label>
               <Select value={selectedFunnelId ?? undefined} onValueChange={setSelectedFunnelId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um funil" />
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Selecione um funil..." />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredFunnels.map(f => (
-                    <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
+                    <SelectItem key={f.id} value={String(f.id)} className="cursor-pointer">{f.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-          {/* <div className="ml-auto">
-            <Button className="flex items-center gap-2" disabled>
-              <Plus className="h-4 w-4" /> Criar
-            </Button>
-          </div> */}
-
             {/* Toggle de densidade */}
-            <div className="flex items-center gap-2 ml-4">
+            <div className="flex items-center gap-3 bg-muted/50 p-2 rounded-lg border">
               <Switch id="kanban-density" checked={dense} onCheckedChange={setDense} />
-              <Label htmlFor="kanban-density" className="text-xs select-none">
-                {dense ? 'Compacto' : 'Confortável'}
+              <Label htmlFor="kanban-density" className="text-sm cursor-pointer select-none font-medium">
+                {dense ? 'Modo Compacto' : 'Modo Confortável'}
               </Label>
             </div>
           </div>
@@ -1421,7 +1418,8 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
                       setLocalClients((prev) => [created, ...prev]);
                       setAddLeadDialogOpen(false);
                       setAddLeadName(''); setAddLeadEmail(''); setAddLeadPhone(''); setAddLeadConsultantId('');
-                      toast({ title: 'Lead criado', description: `Cliente ${created.name} adicionado em ${addLeadStageId}.` });
+                      const stageName = stages.find(s => String(s.id) === String(addLeadStageId))?.name || addLeadStageId;
+                      toast({ title: 'Lead criado', description: `Cliente ${created.name} adicionado em ${stageName}.` });
                     } catch (e: any) {
                       // Trata erros de validação (ex.: email já utilizado) e outras falhas da API
                       handleLeadCreationError(e);
@@ -1491,6 +1489,38 @@ function StageColumn({
     onAddLeadClick(String(funnelId), String(stage.id));
   };
 
+  /**
+   * Title editing state
+   */
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(stage.name);
+  const updateStageMutation = useUpdateStage(funnelId);
+
+  useEffect(() => {
+    setEditName(stage.name);
+  }, [stage.name]);
+
+  const handleSaveTitle = () => {
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === stage.name) {
+      setEditName(stage.name);
+      setIsEditing(false);
+      return;
+    }
+    updateStageMutation.mutate({
+      stageId: String(stage.id),
+      data: { name: trimmed }
+    }, {
+      onSuccess: () => {
+        setIsEditing(false);
+      },
+      onError: () => {
+        setEditName(stage.name);
+        setIsEditing(false);
+      }
+    });
+  };
+
   const totalCards = clients.length;
   const totalAmount = clients.reduce((sum, c) => sum + getClientAmountBRL(c), 0);
   const totalAmountBRL = formatBRL(totalAmount);
@@ -1500,9 +1530,9 @@ function StageColumn({
 
   return (
     <div
-      className={`flex flex-col rounded-md border bg-background ${
+      className={`flex flex-col rounded-xl border-none bg-muted/40 transition-colors ${
         // Drag-over visual feedback
-        dropActive ? 'ring-2 ring-primary/50 bg-muted/20' : ''
+        dropActive ? 'ring-2 ring-primary/50 bg-primary/5' : ''
       }`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -1517,20 +1547,42 @@ function StageColumn({
        * pt-BR: Mantém apenas a cor na borda inferior do header.
        * en-US: Keep only color on the header bottom border.
        */}
-      <div className="sticky top-0 z-10 bg-background">
-        {/* pt-BR: Barrinha superior que reflete a cor da etapa; en-US: Top bar reflecting stage color */}
-        <div className="h-1 w-full rounded-t-md" style={{ backgroundColor: stageColor }} />
+      <div className="sticky top-0 z-10 rounded-t-xl overflow-hidden glass-header backdrop-blur-sm bg-background/80 border-b border-border/50 supports-[backdrop-filter]:bg-background/60">
+        <div className="h-1.5 w-full" style={{ backgroundColor: stageColor }} />
         <div
-          className="flex items-center justify-between p-3 border-b"
-          style={{ borderBottomColor: '#E5E7EB' }}
+          className="flex items-center justify-between p-3.5"
         >
-          <div className="flex items-center gap-2">
-            {/* pt-BR: Indicador de cor ao lado do nome; en-US: Color swatch beside the name */}
+          <div className="flex items-center gap-2.5">
             <span
-              className="inline-block h-3 w-3 rounded-sm"
-              style={{ backgroundColor: stageColor }}
+              className="inline-block h-3.5 w-3.5 rounded-full ring-2 ring-offset-1"
+              style={{ backgroundColor: stageColor, '--tw-ring-color': stageColor + '40' } as any}
             />
-            <span className="font-medium text-sm">{stage.name}</span>
+            {/* Inline edit title */}
+            {isEditing ? (
+              <input
+                autoFocus
+                className="h-6 w-full max-w-[140px] rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm transition-colors md:text-sm"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={handleSaveTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveTitle();
+                  if (e.key === 'Escape') {
+                    setEditName(stage.name);
+                    setIsEditing(false);
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span 
+                className="font-semibold text-sm tracking-tight cursor-pointer hover:underline hover:decoration-dotted hover:underline-offset-4"
+                onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+                title="Clique para editar"
+              >
+                {stage.name}
+              </span>
+            )}
             <Badge variant="secondary">{totalCards}</Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -1567,9 +1619,11 @@ function StageColumn({
        * pt-BR: Define uma altura máxima responsiva e rolagem suave.
        * en-US: Sets a responsive max height and smooth scrolling.
        */}
-      <div className={`p-3 min-h-[360px] max-h-[70vh] overflow-y-auto ${dense ? 'space-y-1.5' : 'space-y-2'}`}>
+      <div className={`p-3 min-h-[360px] max-h-[75vh] overflow-y-auto custom-scrollbar ${dense ? 'space-y-2' : 'space-y-3'}`}>
         {clients.length === 0 ? (
-          <div className="text-xs text-muted-foreground rounded-md border border-dashed p-3">Nenhum lead nesta etapa.</div>
+          <div className="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-muted-foreground/10 rounded-xl bg-muted/20">
+            <p className="text-xs font-medium text-muted-foreground">Nenhum lead</p>
+          </div>
         ) : (
           clients.map((client) => (
             <ClientKanbanCard
@@ -1661,20 +1715,20 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
 
   return (
     <div
-      className={`rounded-md border bg-card transition-all cursor-pointer ${dense ? 'p-2' : 'p-3'} shadow-sm ${
-        isRecentlyMoved ? 'animate-[fadeIn_0.3s_ease-in] shadow-md' : ''
-      } hover:bg-muted/50 hover:shadow-md active:scale-[0.97]`}
+      className={`group relative rounded-xl border border-border/40 bg-card transition-all duration-200 cursor-grab active:cursor-grabbing ${dense ? 'p-3' : 'p-4'} shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-primary/20 ${
+        isRecentlyMoved ? 'ring-2 ring-primary ring-offset-2' : ''
+      }`}
       onClick={goToView}
       title={`Visualizar cliente ${client.name}`}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <div className="flex items-center justify-between">
-        <div className="font-medium text-sm truncate">{client.name}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="font-semibold text-sm leading-tight text-card-foreground break-words line-clamp-2 pr-1">{client.name}</div>
         {/* Right-side actions: status + dropdown */}
-        <div className="flex items-center gap-1">
-          <Badge variant="outline" className="text-xs">{statusLabel}</Badge>
+        <div className="flex items-start gap-1 shrink-0 -mt-0.5">
+          <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal tracking-wide bg-secondary/50 text-secondary-foreground/80 hover:bg-secondary/70">{statusLabel}</Badge>
           {/*
            * DropdownMenu on card
            * pt-BR: Menu com opções Detalhes, Conversas, Propostas.
@@ -1683,7 +1737,7 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-muted"
+                className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100"
                 onClick={(e) => e.stopPropagation()}
                 title="Ações"
               >
@@ -1712,24 +1766,50 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
           </DropdownMenu>
         </div>
       </div>
-      <div className="text-xs text-muted-foreground truncate mt-1">{client.email || 'Sem email'}</div>
-      {lastAttendanceTimestamp && (
-        <div className="text-[11px] text-muted-foreground mt-1">Último atendimento: {new Date(lastAttendanceTimestamp).toLocaleString('pt-BR')}</div>
-      )}
-      {client.autor_name && (
-        <div className="text-[11px] text-muted-foreground mt-1">Owner: {client.autor_name}</div>
-      )}
-      <div className="mt-2 flex items-center justify-end">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7"
-          onClick={(e) => { e.stopPropagation(); onRegisterAttendance && onRegisterAttendance(); }}
-          title="Registrar atendimento"
-        >
-          <NotebookPen className="h-4 w-4 mr-1" /> Registrar
-        </Button>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2.5">
+         {/* Adicionar icone de email se quiser */}
+         <span className="truncate max-w-full opacity-80">{client.email || 'Sem email'}</span>
       </div>
+      
+      {lastAttendanceTimestamp && (
+        <div className="mt-2.5 pt-2 border-t border-border/30 flex items-center justify-between">
+            <div className="text-[10px] font-medium text-muted-foreground/70">
+              {(() => {
+                 const d = new Date(lastAttendanceTimestamp);
+                 const now = new Date();
+                 const diff = now.getTime() - d.getTime();
+                 const days = Math.floor(diff / (1000 * 3600 * 24));
+                 if (days === 0) return 'Hoje';
+                 if (days === 1) return 'Ontem';
+                 return `${days}d atrás`;
+              })()}
+            </div>
+            
+             <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2 ml-auto -mr-1 text-primary/80 hover:text-primary hover:bg-primary/5"
+                onClick={(e) => { e.stopPropagation(); onRegisterAttendance && onRegisterAttendance(); }}
+                title="Registrar atendimento"
+            >
+                <NotebookPen className="h-3 w-3 mr-1.5" /> Registrar
+            </Button>
+        </div>
+      )}
+
+      {(!lastAttendanceTimestamp) && (
+          <div className="mt-3 flex justify-end">
+             <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[10px] px-2.5 bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground w-full justify-start transition-all"
+                onClick={(e) => { e.stopPropagation(); onRegisterAttendance && onRegisterAttendance(); }}
+            >
+                <NotebookPen className="h-3.5 w-3.5 mr-2 opacity-70" /> 
+                <span className="opacity-90">Registrar atendimento</span>
+            </Button>
+          </div>
+      )}
     </div>
   );
 }
@@ -1776,20 +1856,20 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
 
   return (
     <div
-      className={`rounded-md border bg-card transition-all ${dense ? 'p-2' : 'p-3'} shadow-sm hover:bg-muted/50 cursor-pointer ${isRecentlyMoved ? 'animate-[fadeIn_0.3s_ease-in] shadow-md' : ''}`}
+      className={`group relative rounded-xl border border-border/40 bg-card transition-all duration-200 cursor-grab active:cursor-grabbing ${dense ? 'p-3' : 'p-4'} shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-primary/20 ${isRecentlyMoved ? 'ring-2 ring-primary ring-offset-2' : ''}`}
       onClick={goToView}
       title={`Visualizar matrícula ${enrollment.id}`}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div className="font-medium text-sm truncate" title={title}>{title}</div>
         <div className="flex items-center gap-1">
-          <Badge variant="outline" className="text-xs">{status}</Badge>
+          <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal tracking-wide bg-muted text-muted-foreground">{status}</Badge>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex h-7 w-7 items-center justify-center rounded-md border hover:bg-muted" onClick={(e) => e.stopPropagation()} title="Ações">
+              <button className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()} title="Ações">
                 <MoreHorizontal className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
@@ -1804,11 +1884,13 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
           </DropdownMenu>
         </div>
       </div>
-      <div className="text-xs text-muted-foreground truncate mt-1" title={course}>{course || 'Curso não informado'}</div>
+      <div className="text-xs font-medium text-muted-foreground/80 truncate mt-2.5" title={course}>{course || 'Curso não informado'}</div>
       {turma && (
         <div className="text-[11px] text-muted-foreground truncate mt-1" title={turma}>{turma}</div>
       )}
-      <div className="text-xs text-muted-foreground mt-1">{amountBRL}</div>
+      <div className="mt-3 pt-2.5 border-t border-border/40 flex items-center justify-between">
+         <span className="text-sm font-semibold text-primary">{amountBRL}</span>
+      </div>
     </div>
   );
 }
@@ -1846,10 +1928,15 @@ function StageColumnSales({
   // useNavigate/useLocation para permitir abrir criação de propostas e retornar ao funil
   // pt-BR: Navega para a página de criação de propostas, carregando o estado atual para voltar.
   // en-US: Navigates to the proposal creation page, carrying current location to enable going back.
+  // en-US: Navigates to the proposal creation page, carrying current location to enable going back.
   const navigate = useNavigate();
   const location = useLocation();
 
-  const stageColor = stage.color || funnelColor || '#CBD5E1';
+  // Garante que funnelColor seja uma string válida, fallback se necessário.
+  const validFunnelColor = typeof funnelColor === 'string' && funnelColor ? funnelColor : '#CBD5E1';
+  // Use a cor válida SE stage.color não existir.
+  const stageColor = stage.color || validFunnelColor;
+
   const totalCards = enrollments.length;
   const totalAmount = enrollments.reduce((sum, e) => sum + getEnrollmentAmountBRL(e), 0);
   const totalAmountBRL = formatBRL(totalAmount);
@@ -1868,26 +1955,82 @@ function StageColumnSales({
     });
   }
 
+  /**
+   * Title editing state (Sales)
+   */
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(stage.name);
+  const updateStageMutation = useUpdateStage(funnelId);
+
+  useEffect(() => {
+    setEditName(stage.name);
+  }, [stage.name]);
+
+  const handleSaveTitle = () => {
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === stage.name) {
+      setEditName(stage.name);
+      setIsEditing(false);
+      return;
+    }
+    updateStageMutation.mutate({
+      stageId: String(stage.id),
+      data: { name: trimmed }
+    }, {
+      onSuccess: () => {
+        setIsEditing(false);
+      },
+      onError: () => {
+        setEditName(stage.name);
+        setIsEditing(false);
+      }
+    });
+  };
+
   return (
     <div
-      className={`flex flex-col rounded-md border bg-background ${dropActive ? 'ring-2 ring-primary/50 bg-muted/20' : ''}`}
+      className={`flex flex-col rounded-xl border-none bg-muted/40 transition-colors ${dropActive ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDropTargetStageId(stage.id); }}
       onDragLeave={() => setDropTargetStageId(null)}
       onDrop={() => onDropEnrollmentOnStage(String(stage.id))}
     >
-      <div className="sticky top-0 z-10 bg-background">
-        <div className="h-1 w-full rounded-t-md" style={{ backgroundColor: stageColor }} />
-        <div className="flex items-center justify-between p-3 border-b" style={{ borderBottomColor: '#E5E7EB' }}>
-          <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: stageColor }} />
-            <span className="font-medium text-sm">{stage.name}</span>
-            <Badge variant="secondary">{totalCards}</Badge>
+      <div className="sticky top-0 z-10 rounded-t-xl overflow-hidden glass-header backdrop-blur-sm bg-background/80 border-b border-border/50 supports-[backdrop-filter]:bg-background/60">
+        <div className="h-1.5 w-full" style={{ backgroundColor: stageColor }} />
+        <div className="flex items-center justify-between p-3.5">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-block h-3.5 w-3.5 rounded-full ring-2 ring-offset-1" style={{ backgroundColor: stageColor, '--tw-ring-color': stageColor + '40' } as any} />
+            {isEditing ? (
+              <input
+                autoFocus
+                className="h-6 w-full max-w-[140px] rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm transition-colors md:text-sm"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={handleSaveTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveTitle();
+                  if (e.key === 'Escape') {
+                    setEditName(stage.name);
+                    setIsEditing(false);
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span 
+                className="font-semibold text-sm tracking-tight cursor-pointer hover:underline hover:decoration-dotted hover:underline-offset-4"
+                onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+                title="Clique para editar"
+              >
+                {stage.name}
+              </span>
+            )}
+            <Badge variant="secondary" className="bg-secondary/50">{totalCards}</Badge>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{totalAmountBRL}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-muted-foreground">{totalAmountBRL}</span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 px-2">
+                <Button variant="ghost" size="sm" className="h-7 px-2 hover:bg-muted/80">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1900,9 +2043,11 @@ function StageColumnSales({
           </div>
         </div>
       </div>
-      <div className={`p-3 min-h-[360px] max-h-[70vh] overflow-y-auto ${dense ? 'space-y-1.5' : 'space-y-2'}`}>
+      <div className={`p-3 min-h-[360px] max-h-[75vh] overflow-y-auto custom-scrollbar ${dense ? 'space-y-2' : 'space-y-3'}`}>
         {enrollments.length === 0 ? (
-          <div className="text-xs text-muted-foreground rounded-md border border-dashed p-3">Nenhuma matrícula nesta etapa.</div>
+          <div className="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-muted-foreground/10 rounded-xl bg-muted/20">
+            <p className="text-xs font-medium text-muted-foreground">Nenhuma matrícula</p>
+          </div>
         ) : (
           enrollments.map((e) => (
             <EnrollmentKanbanCard

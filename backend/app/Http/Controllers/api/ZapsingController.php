@@ -4,7 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\MatriculasController;
-use App\Http\Controllers\ZapguruController;
+use App\Http\Controllers\api\ZapguruController;
 use App\Jobs\GeraPdfContratoJoub;
 use App\Jobs\SendZapsingJoub;
 use App\Models\User;
@@ -115,34 +115,30 @@ class ZapsingController extends Controller
             return $ret;
         }
     }
-    public function webhook(){
+    public function webhook($payload=[]){
         $ret['exec'] = false;
-		@header("Content-Type: application/json");
-		$json = file_get_contents('php://input');
-        $d = [];
-        if($json){
+        $d = $payload;
+        if(empty($payload)){
+            $json = file_get_contents('php://input');
             $d = Qlib::lib_json_array($json);
         }
         Log::info('Webhook zapsing:', $d);
         $ret['exec'] = false;
         $token = isset($d['external_id']) ? $d['external_id'] : false;
         $tk_periodo = false;
+        $id_matricula = false;
         if($token){
             $arr_token = explode('_',$token);
-            $token = isset($arr_token[0]) ? $arr_token[0] : false;
+            $id_matricula = isset($arr_token[0]) ? $arr_token[0] : false;
             $tk_periodo = isset($arr_token[1]) ? $arr_token[1] : false;
         }
         $signed_file = isset($d['signed_file']) ? $d['signed_file'] : false;
-        if($token && $signed_file){
+        if($id_matricula && $signed_file){
             //baixar e salver
             $ret = $this->baixar_assinados($d,$tk_periodo);
             //salvar hisorico do webhook
-            $post_id = Qlib::get_matricula_id_by_token($token);
-            if($tk_periodo){
-                $ret['salvar_webhook'] = Qlib::update_matriculameta($post_id, 'processo_assinatura_'.$tk_periodo,$json);
-            }else{
-                $ret['salvar_webhook'] = Qlib::update_matriculameta($post_id, $this->campo_processo,$json);
-            }
+            $ret['salvar_webhook'] = Qlib::update_matriculameta($id_matricula, $this->campo_processo,json_encode($d));
+
         }
         return $ret;
     }
@@ -182,15 +178,16 @@ class ZapsingController extends Controller
         $name = isset($config['name']) ? $config['name'] : false;
         $extra_docs = isset($config['extra_docs']) ? $config['extra_docs'] : [];
         $arr_token = explode('_',$token);
+        $id_matricula = '';
         if(isset($arr_token[0])){
-            $token = $arr_token[0];
+            $id_matricula = $arr_token[0];
         }
         if(isset($arr_token[1])){
             $tk_periodo = $arr_token[1];
         }
-        $mc = new MatriculasController;
+        $mc = new MatriculaController;
         $name = str_replace('.pdf', '', $name);
-        $ret = $mc->baixar_arquivo($token, $signed_file,$name,false,$tk_periodo);
+        $ret = $mc->baixar_arquivo($id_matricula, $signed_file,$name,false,$tk_periodo);
         if(isset($ret['link'])){
             $arr = [
                 'principal' => ['nome'=>$name,'link'=>$ret['link']],
@@ -200,24 +197,24 @@ class ZapsingController extends Controller
                     $name = isset($v['name']) ? $v['name'] : false;
                     $name = str_replace('.pdf', '', $name);
                     $signed_file = isset($v['signed_file']) ? $v['signed_file'] : false;
-                    $ba = $mc->baixar_arquivo($token, $signed_file,$name,false,$tk_periodo);
+                    $ba = $mc->baixar_arquivo($id_matricula, $signed_file,$name,false,$tk_periodo);
                     if(isset($ba['link'])){
                         $open_id = isset($v['open_id']) ? $v['open_id'] : 0;
                         $arr['extra'][$open_id] = ['nome'=>$name, 'link'=>$ba['link']];
                     }
                 }
             }
-            $post_id = Qlib::get_matricula_id_by_token($token);
+            //Replace $post_id with $id_matricula to use the same variable for matricula identification
             //salvar o array com todos o links dos contratos assinados..
             // dd($tk_periodo);
             $ret['arr'] = $arr;
             if($tk_periodo){
                 $slug = $this->campo_links.'_'.$tk_periodo;
-                $ret['salvar_links_assinados'] = Qlib::update_matriculameta($post_id,$slug,Qlib::lib_array_json($arr));
+                $ret['salvar_links_assinados'] = Qlib::update_matriculameta($id_matricula,$slug,Qlib::lib_array_json($arr));
                 $ret['slug'] = $slug;
 
             }else{
-                $ret['salvar_links_assinados'] = Qlib::update_matriculameta($post_id,$this->campo_links,Qlib::lib_array_json($arr));
+                $ret['salvar_links_assinados'] = Qlib::update_matriculameta($id_matricula,$this->campo_links,Qlib::lib_array_json($arr));
             }
         }
         return $ret;
@@ -456,11 +453,11 @@ class ZapsingController extends Controller
      * Metodo para adiminstrar um envio de mensagem do zapsing
      * @param string $token
      */
-    public function enviar_link_assinatura($id_matricula=null,$tk_periodo=false){
+    public function enviar_link_assinatura($id_matricula=null){
         $d = (new MatriculaController())->dm($id_matricula);
         $processo = [];
-        if($tk_periodo && isset($d['id']) && ($id_matricula = $d['id'])){
-            $campo_processo = 'processo_assinatura';
+        if(isset($d['id']) && ($id_matricula = $d['id'])){
+            $campo_processo = $this->campo_processo;
             $json_processo = Qlib::get_matriculameta($id_matricula,$campo_processo);
             if($json_processo){
                 $processo = Qlib::lib_json_array($json_processo);
@@ -480,13 +477,13 @@ class ZapsingController extends Controller
         $temm = 'Olá *{nome}* sua assinatura foi solicitada, pelo *{app}*, para o documento, *{nome_doc}* segue o link de assinatura {link}';
         $i = 0;
         $zgc = new ZapguruController();
-        if($tk_periodo){
-            $tk = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
-            $arr_tk = explode('_',$tk);
-            $external_id = isset($arr_tk[0]) ? $arr_tk[0] : false;
-        }else{
+        // if($tk_periodo){
+        //     $tk = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
+        //     $arr_tk = explode('_',$tk);
+        //     $external_id = isset($arr_tk[0]) ? $arr_tk[0] : false;
+        // }else{
             $external_id = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
-        }
+        // }
         $nome_doc = isset($webhook_zapsing['name']) ? $webhook_zapsing['name'] : '';
         if(isset($webhook_zapsing['signers'][$i]['sign_url']) && is_string($webhook_zapsing['signers'][$i]['sign_url']) && ($signers=$webhook_zapsing['signers'])){
             if(is_array($signers)){

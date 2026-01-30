@@ -10,7 +10,11 @@ import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
 import ProposalContractsTab from './ProposalContractsTab';
+import ProposalLogsTab from './ProposalLogsTab';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { CheckCircle, Clock } from 'lucide-react';
 
 interface ProposalViewContentProps {
   /**
@@ -38,10 +42,10 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
    */
   const getInitialTab = useMemo(() => {
     const hash = String(location.hash || '').replace('#', '');
-    if (hash === 'overview' || hash === 'contracts') return hash;
+    if (hash === 'overview' || hash === 'contracts' || hash === 'logs') return hash;
     const qs = new URLSearchParams(location.search || '');
     const t = qs.get('tab');
-    if (t === 'overview' || t === 'contracts') return t;
+    if (t === 'overview' || t === 'contracts' || t === 'logs') return t;
     return 'overview';
   }, [location.hash, location.search]);
 
@@ -163,21 +167,52 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
     return ((enrollment as any)?.orc?.parcelamento ?? null) as any;
   }, [enrollment]);
 
+  const meta = (enrollment as any)?.meta || {};
+  const statusAssinatura = meta?.status_assinatura;
+  const hasLinksAssinados = Boolean(meta?.salvar_links_assinados) || Object.keys(meta || {}).some((k) => k.startsWith('salvar_links_assinados_'));
+  const contratoAceito = String((enrollment as any)?.contrato?.aceito_contrato || '').toLowerCase() === 'on';
+  const isAssinado = hasLinksAssinados || contratoAceito;
+  const status = isAssinado ? 'assinado' : (statusAssinatura === 'aprovado' ? 'aprovado' : '');
+  const statusMessage = isAssinado
+    ? 'Está proposta ja está aprovada e assinada'
+    : (status === 'aprovado' ? 'A proposta foi aprovada e está aguardando assinatura digital.' : '');
+
   return (
     <div className="space-y-6">
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
            <TabsTrigger value="overview" asChild><a href="#overview">Visão Geral</a></TabsTrigger>
            <TabsTrigger value="contracts" asChild><a href="#contracts">Contratos</a></TabsTrigger>
+           <TabsTrigger value="logs" asChild><a href="#logs">Logs</a></TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-4">
             <Card>
                 <CardHeader>
-                <CardTitle>Visualizar Proposta</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>Visualizar Proposta</CardTitle>
+                  {status && (
+                    <Badge
+                      variant={isAssinado ? 'default' : 'secondary'}
+                      className={isAssinado ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {isAssinado ? <CheckCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                        {isAssinado ? 'Assinada' : 'Aprovada'}
+                      </span>
+                    </Badge>
+                  )}
+                </div>
                 </CardHeader>
                 <CardContent>
                 <div className="space-y-4">
+                    {statusMessage && (
+                      <Alert className={isAssinado ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}>
+                        {isAssinado ? <CheckCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                        <AlertTitle>Status da Proposta</AlertTitle>
+                        <AlertDescription>{statusMessage}</AlertDescription>
+                      </Alert>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div>
                         <div className="font-medium">Cliente</div>
@@ -232,6 +267,15 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                     Carregando dados da matrícula...
                 </div>
              )}
+        </TabsContent>
+        <TabsContent value="logs" className="mt-4">
+          {id ? (
+            <ProposalLogsTab enrollmentId={id} />
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">
+              Carregando dados da matrícula...
+            </div>
+          )}
         </TabsContent>
       </Tabs>
       

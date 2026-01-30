@@ -59,19 +59,70 @@
     "title": "Configurações",
     "icon": "Cog",
     "submenu": [
-        { "title": "Usuários", "url": "/settings/users" },
-        { "title": "Dados da empresa", "url": "/settings/dados_conta" },
-        { "title": "Aeronaves", "url": "/settings/aircrafts" },
-        { "title": "Permissões", "url": "/settings/permissions" },
-        { "title": "Cupom de desconto", "url": "/settings/cupom_desconto" },
-        { "title": "Tabelas de preço", "url": "/settings/table-price" },
-        { "title": "Funil e etapas", "url": "/settings/stages" },
-        { "title": "Categorias", "url": "/categories" },
-        { "title": "Tabelas de parcelamento", "url": "/settings/table-installment" },
-        { "title": "Tabelas de desconto", "url": "/settings/table-discount" },
-        { "title": "Contratos e termos", "url": "/school/contracts" },
-        { "title": "Períodos", "url": "/school/periods" },
-        { "title": "Sistema", "url": "/settings/system"}
+        {
+            "title": "Usuários",
+             "url": "/settings/users"
+        },
+        {
+            "title": "Dados da empresa",
+            "url": "/settings/dados_conta"
+        },
+        {
+            "title": "Aeronaves",
+            "url": "/settings/aircrafts"
+        },
+        {
+            "title": "Permissões",
+            "url": "/settings/permissions"
+        },
+        {
+            "title": "Cupom de desconto",
+            "url": "/settings/cupom_desconto"
+        },
+        {
+            "title": "Tabelas de preço",
+            "url": "/settings/table-price"
+        },
+        {
+            "title": "Funil e etapas",
+            "url": "/settings/stages"
+        },
+        {
+            "title": "Categorias",
+            "url": "/categories"
+        },
+        {
+            "title": "Tabelas de parcelamento",
+            "url": "/settings/table-installment"
+        },
+        {
+            "title": "Tabelas de desconto",
+            "url": "/settings/table-discount"
+        },
+        {
+            "title": "Contratos e termos",
+            "url": "/school/contracts"
+        },
+        {
+            "title": "Períodos",
+            "url": "/school/periods"
+        },
+        {
+            "title": "Sistema",
+            "url": "/settings/system"
+        },
+        {
+            "title": "Workflows",
+            "url": "/admin/settings/workflows"
+        },
+        {
+            "title": "Regras",
+            "url": "/admin/settings/rules"
+        },
+        {
+            "title": "Ações",
+            "url": "/admin/settings/actions"
+        }
     ]
   }
 ]

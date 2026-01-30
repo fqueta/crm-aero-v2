@@ -2401,7 +2401,7 @@ class Ead {
 				...
 			);
 			$item = array(
-				'tab'=>$tab12,
+				'tab'=>$GLOBALS['tab12'],
 				'titulo'=>'Encontrar '.$relacionado['local'],
 				'id'=>'id',
 				'label_campo'=>'nome',

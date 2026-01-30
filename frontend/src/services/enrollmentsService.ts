@@ -66,6 +66,15 @@ class EnrollmentsService extends BaseApiService {
   }
 
   /**
+   * updateEnrollmentStage
+   * pt-BR: Atualiza rapidamente a etapa da matrícula.
+   * en-US: Quickly updates the enrollment stage.
+   */
+  async updateEnrollmentStage(id: string, stageId: number): Promise<EnrollmentRecord> {
+    return this.patch<EnrollmentRecord>(`/matriculas/${id}/etapa`, { stage_id: stageId });
+  }
+
+  /**
    * deleteEnrollment
    * pt-BR: Exclui matrícula.
    * en-US: Deletes an enrollment.

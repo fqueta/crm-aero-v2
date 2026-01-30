@@ -173,9 +173,7 @@ const clientSchema = z.object({
     numero: z.string().nullable().optional(),
     complemento: z.string().nullable().optional(),
     bairro: z.string().nullable().optional(),
-    cidade: z.string().nullable().optional().refine((val) => {
-      return !val || /^[a-zA-ZÀ-ÿ\s]+$/.test(val);
-    }, "Cidade deve conter apenas letras e espaços"),
+    cidade: z.string().nullable().optional(),
     uf: z.string().nullable().optional(),
     observacoes: z.string().nullable().optional().refine((val) => {
       return !val || val.length <= 500;
@@ -750,8 +748,46 @@ export default function ClientEdit() {
       </Card>
       <EditFooterBar
         onBack={handleCancel}
-        onContinue={() => { finishAfterSaveRef.current = false; form.handleSubmit(onSubmit)(); }}
-        onFinish={() => { finishAfterSaveRef.current = true; form.handleSubmit(onSubmit)(); }}
+        onContinue={() => { 
+          finishAfterSaveRef.current = false; 
+          form.handleSubmit(onSubmit, (errors) => {
+            console.error("Erro de validação (Salvar e Continuar):", errors);
+            toast({
+              title: "Erro de validação",
+              description: "Verifique os campos obrigatórios destacados em vermelho.",
+              variant: "destructive",
+            });
+            // Opcional: focar no primeiro erro
+            const firstError = Object.keys(errors)[0];
+            if (firstError) {
+              const element = document.querySelector(`[name="${firstError}"]`);
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                (element as HTMLElement).focus();
+              }
+            }
+          })(); 
+        }}
+        onFinish={() => { 
+          finishAfterSaveRef.current = true; 
+          form.handleSubmit(onSubmit, (errors) => {
+             console.error("Erro de validação (Salvar e Finalizar):", errors);
+             toast({
+              title: "Erro de validação",
+              description: "Verifique os campos obrigatórios destacados em vermelho.",
+              variant: "destructive",
+            });
+             // Opcional: focar no primeiro erro
+            const firstError = Object.keys(errors)[0];
+            if (firstError) {
+              const element = document.querySelector(`[name="${firstError}"]`);
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                (element as HTMLElement).focus();
+              }
+            }
+          })(); 
+        }}
         disabled={isLoading || updateClientMutation.isPending}
         fixed
       />

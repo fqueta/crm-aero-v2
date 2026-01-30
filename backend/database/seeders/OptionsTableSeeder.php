@@ -63,21 +63,12 @@ class OptionsTableSeeder extends Seeder
                     ]),
                     'url'   => 'credenciais_zapsign',
                 ],
-                // [
-                //     'name'  => 'Id do contatada',
-                //     'value' => 'id_contatada',
-                //     'url'   => 'id_contatada',
-                // ],
-                // [
-                //     'name'  => 'Id do testemunha 1',
-                //     'value' => 'id_testemunha1',
-                //     'url'   => 'id_testemunha1',
-                // ],
-                // [
-                //     'name'  => 'Id do testemunha 2',
-                //     'value' => 'id_testemunha2',
-                //     'url'   => 'id_testemunha2',
-                // ],
+                [
+                    'name'=> 'Enviar link assinatura zap',
+                    'value'=> 'n',
+                    'url'=> 'enviar_link_assinatura_zap',
+                ]
+                
             ];
         }else{
             $data = [

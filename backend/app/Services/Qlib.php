@@ -1755,7 +1755,7 @@ class Qlib
         $tab = 'matriculameta';
         if($matricula_id){
             if($meta_key){
-                $d = DB::table($tab)->where('matricula_id',$matricula_id)->where('meta_key',$meta_key)->get();
+                $d = DB::table($tab)->where('matricula_id',(int)$matricula_id)->where('meta_key',$meta_key)->get();
                 // dump($matricula_id,$meta_key,$d);
                 if($d->count()){
                     if($string){

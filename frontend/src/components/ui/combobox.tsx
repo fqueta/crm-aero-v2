@@ -45,6 +45,7 @@ interface ComboboxProps {
    * Debounce time in ms for search (default: 250ms)
    */
   debounceMs?: number
+  footer?: React.ReactNode | ((params: { setOpen: (open: boolean) => void }) => React.ReactNode)
 }
 
 /**
@@ -64,6 +65,7 @@ export function Combobox({
   onSearch,
   searchTerm,
   debounceMs = 250,
+  footer,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [searchValue, setSearchValue] = React.useState(searchTerm || "")
@@ -156,6 +158,11 @@ export function Combobox({
                 </CommandItem>
               ))}
             </CommandGroup>
+            {footer && (
+              <div className="p-1 border-t bg-muted/20">
+                {typeof footer === 'function' ? footer({ setOpen }) : footer}
+              </div>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
