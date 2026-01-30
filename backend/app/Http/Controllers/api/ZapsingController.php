@@ -145,29 +145,29 @@ class ZapsingController extends Controller
     /**
      * aciona as filas para gerar os contratos PDF e para enviar para o zapsing
      */
-    public function gerar_doc_envia_zapsing($token){
-        $ret['exec']=false;
-        if($token){
-            //verificar envio de envelope
-            $id_matricula = Qlib::get_matricula_id_by_token($token);
-            $verificar = false;
-            if($id_matricula){
-                $verificar = Qlib::get_matriculameta($id_matricula,'enviar_envelope');
-                $ret['mens'] = 'Ja foi enviado um envelope com esse conteúdo!';
-            }
-            if(!$verificar){
-                try {
-                    GeraPdfContratoJoub::dispatch($token);
-                    SendZapsingJoub::dispatch($token)->delay(now()->addSeconds(5));
-                    $ret = ['exec'=>true,'mens'=>'Enviado com sucesso!'];
-                } catch (\Throwable $th) {
-                    //throw $th;
-                    $ret = ['exec'=>false,'mens'=>'Erro ao enviar!','error'=>$th->getMessage()];
-                }
-            }
-        }
-        return $ret;
-    }
+    // public function gerar_doc_envia_zapsing($token){
+    //     $ret['exec']=false;
+    //     if($token){
+    //         //verificar envio de envelope
+    //         $id_matricula = Qlib::get_matricula_id_by_token($token);
+    //         $verificar = false;
+    //         if($id_matricula){
+    //             $verificar = Qlib::get_matriculameta($id_matricula,'enviar_envelope');
+    //             $ret['mens'] = 'Ja foi enviado um envelope com esse conteúdo!';
+    //         }
+    //         if(!$verificar){
+    //             try {
+    //                 GeraPdfContratoJoub::dispatch($token);
+    //                 SendZapsingJoub::dispatch($token)->delay(now()->addSeconds(5));
+    //                 $ret = ['exec'=>true,'mens'=>'Enviado com sucesso!'];
+    //             } catch (\Throwable $th) {
+    //                 //throw $th;
+    //                 $ret = ['exec'=>false,'mens'=>'Erro ao enviar!','error'=>$th->getMessage()];
+    //             }
+    //         }
+    //     }
+    //     return $ret;
+    // }
     /**
      * metodo para baixar todos documentos assinados atravez da webhook
      */
