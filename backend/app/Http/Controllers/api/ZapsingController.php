@@ -122,7 +122,7 @@ class ZapsingController extends Controller
             $json = file_get_contents('php://input');
             $d = Qlib::lib_json_array($json);
         }
-        Log::info('Webhook zapsing:', $d);
+        Log::info('Webhook zapsing', ['payload' => $d]);
         $ret['exec'] = false;
         $token = isset($d['external_id']) ? $d['external_id'] : false;
         $tk_periodo = false;
@@ -422,7 +422,7 @@ class ZapsingController extends Controller
                 'docs' => $docs,
                 'lang' => 'pt-br',
             ];
-            dd($body);
+            // dd removido para não interromper execução em produção
             $response = $this->post([
                 'endpoint' => 'docs',
                 'body' => $body
