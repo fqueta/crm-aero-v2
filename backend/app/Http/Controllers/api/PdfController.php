@@ -271,11 +271,13 @@ class PdfController extends Controller
         @ini_set('max_execution_time', '300');
 
         // Buscar matrícula com curso, turma e cliente
-        $matricula = Matricula::join('cursos', 'matriculas.id_curso', '=', 'cursos.id')
-            ->join('turmas', 'matriculas.id_turma', '=', 'turmas.id')
-            ->leftJoin('users', 'matriculas.id_cliente', '=', 'users.id')
-            ->select('matriculas.*', 'cursos.nome as curso_nome','cursos.tipo as curso_tipo', 'turmas.nome as turma_nome', 'users.name as cliente_nome')
-            ->findOrFail($id);
+        // $matricula = Matricula::join('cursos', 'matriculas.id_curso', '=', 'cursos.id')
+        //     ->join('turmas', 'matriculas.id_turma', '=', 'turmas.id')
+        //     ->leftJoin('users', 'matriculas.id_cliente', '=', 'users.id')
+        //     ->select('matriculas.*', 'cursos.nome as curso_nome','cursos.tipo as curso_tipo', 'turmas.nome as turma_nome', 'users.name as cliente_nome')
+        //     ->findOrFail($id);
+        $matricula = (new MatriculaController)->dm($id);
+        // dd($matricula);
         // Function-level comment: Fast dev toggles and caching.
         // PT: Atalhos de performance no ambiente de desenvolvimento.
         // - fast_dev: pula conversões pesadas e limpeza; favorece velocidade.
@@ -286,27 +288,27 @@ class PdfController extends Controller
         $skipExtras = $request->boolean('skip_extra_pages', env('PDF_SKIP_EXTRA_PAGES', false));
         $force = $request->boolean('force', false);
         $cacheTtl = (int)($request->input('cache_ttl', env('PDF_CACHE_TTL', 300)));
-        $token = $matricula->id_cliente . '_' . $matricula->id;
+        $token = $matricula['id_cliente'] . '_' . $matricula['id'];
 
         // Metacampos
-        $meta = $this->getAllMatriculaMeta($matricula->id);
+        $meta = $this->getAllMatriculaMeta($matricula['id']);
 
         // Dados do cliente e consultor
-        $cliente = $matricula->id_cliente ? User::find($matricula->id_cliente) : null;
-        $consultor = $matricula->id_consultor ? User::find($matricula->id_consultor) : null;
-        $cliente_email = $cliente?->email ?? null;
-        $cliente_telefone = $cliente->telefone ?? ($cliente->phone ?? null);
-        $cliente_zapsint = $matricula->id ?? null;
+        $cliente = $matricula['cliente'] ? User::find($matricula['cliente']['id']) : null;
+        $consultor = $matricula['consultor'] ? User::find($matricula['consultor']['id']) : null;
+        $cliente_email = $cliente['email'] ?? null;
+        $cliente_telefone = $cliente['celular'] ?? ($cliente['phone'] ?? null);
+        $cliente_zapsint = $matricula['id'] ?? null;
         $cliente_zapsint = Qlib::zerofill($cliente_zapsint, 5);
         // Datas formatadas
-        $dataCadastro = $matricula->data ? Carbon::parse($matricula->data) : now();
+        $dataCadastro = $matricula['data'] ? Carbon::parse($matricula['data']) : now();
         $validadeDias = (int)($meta['validade'] ?? 0);
         $validadeData = (clone $dataCadastro)->addDays($validadeDias);
 
         // Números formatados
-        $subtotalFormatado = number_format((float)$matricula->subtotal, 2, ',', '.');
-        $totalFormatado = number_format((float)$matricula->total, 2, ',', '.');
-        $desconto = $matricula->desconto;
+        $subtotalFormatado = number_format((float)$matricula['subtotal'], 2, ',', '.');
+        $totalFormatado = number_format((float)$matricula['total'], 2, ',', '.');
+        $desconto = $matricula['desconto'];
 
         // Renderiza HTML via Blade usando os dados do método show()
         // background_url: imagem de fundo opcional para personalizar o PDF
@@ -324,7 +326,7 @@ class PdfController extends Controller
         //         um fundo específico por página via 'background_url' ou 'background_data_uri'.
         // Lista de páginas via shortcode 'fundo_proposta_plano'
         $listaPaginas = [];
-        $galerias  = Qlib::get_post_by_shortcode('fundo_proposta_plano', $matricula->id_curso);
+        $galerias  = Qlib::get_post_by_shortcode('fundo_proposta_plano', $matricula['id_curso']);
         // Normaliza o retorno de Qlib (array/objeto) para obter a lista
         if (is_array($galerias)) {
             $listaPaginas = isset($galerias['galeria']) && is_array($galerias['galeria']) ? $galerias['galeria'] : [];
@@ -447,17 +449,17 @@ class PdfController extends Controller
         $cta_url = Qlib::getFrontUrl() . '/aluno/matricula/' . $token ?? '';
 
         $html = View::make('pdf.matricula', [
-            'cliente_nome' => $matricula->cliente_nome,
-            'cliente_email' => $cliente_email,
-            'cliente_telefone' => $cliente_telefone,
-            'cliente_zapsint' => $cliente_zapsint,
-            'consultor_nome' => $consultor?->name,
+            'cliente_nome' => $matricula['cliente']['name'] ?? ($matricula['cliente']['nome'] ?? ''),
+            'cliente_email' => $matricula['cliente']['email'] ?? '',
+            'cliente_telefone' => $matricula['cliente']['celular'] ?? '',
+            'cliente_zapsint' => Qlib::zerofill($matricula['id'], 5),
+            'consultor_nome' => $matricula['consultor']['name'] ?? ($matricula['consultor']['nome'] ?? ''),
             'data_formatada' => $dataCadastro->format('d/m/Y'),
             'validade_formatada' => $validadeData->format('d/m/Y'),
-            'desconto' => $desconto,
+            'desconto' => $matricula['desconto'],
             'subtotal_formatado' => $subtotalFormatado,
             'total_formatado' => $totalFormatado,
-            'orc' => is_array($matricula->orc) ? $matricula->orc : [],
+            'orc' => is_array($matricula['orc']) ? $matricula['orc'] : [],
             'generatedAt' => now(),
             'background_url' => $backgroundUrl,
             'background_data_uri' => $backgroundDataUri,
@@ -473,6 +475,7 @@ class PdfController extends Controller
             'cta_url' => $cta_url,
             'cta_text' => (string)$request->input('cta_text', ''),
             'extra_pages' => $extraPages,
+            'matricula' => $matricula,
         ])->render();
         // return $html;
         // Reescreve hosts locais para evitar HostNotFound no wkhtmltopdf
@@ -486,10 +489,10 @@ class PdfController extends Controller
         // Gera nome do arquivo e caminho, incluindo cliente e curso, SEM timestamp.
         // PT: Usamos um nome estável para sobrescrever a mesma proposta.
         // EN: Use a stable filename to overwrite the same proposal.
-        $clienteSlug = Str::slug((string)($matricula->cliente_nome ?? 'cliente'));
+        $clienteSlug = Str::slug((string)($matricula['cliente_nome'] ?? 'cliente'));
         $clienteSlug = Str::limit($clienteSlug, 40, ''); // evitar nomes muito longos
-        $cursoId = (string)($matricula->id_curso ?? 'curso');
-        $slug = 'matricula-' . $matricula->id . '-' . $cursoId . '-' . $clienteSlug;
+        $cursoId = (string)($matricula['id_curso'] ?? 'curso');
+        $slug = 'matricula-' . $matricula['id'] . '-' . $cursoId . '-' . $clienteSlug;
         $filename = $slug . '.pdf';
         $relative = 'uploads/matriculas/' . $filename; // caminho relativo
         $absolute = storage_path('app/public/' . $relative);
@@ -505,7 +508,7 @@ class PdfController extends Controller
         if (!$fastDev) {
             try {
                 foreach ($disk->files('uploads/matriculas') as $path) {
-                    if ($path !== $relative && Str::startsWith($path, 'uploads/matriculas/matricula-' . $matricula->id . '-')) {
+                    if ($path !== $relative && Str::startsWith($path, 'uploads/matriculas/matricula-' . $matricula['id'] . '-')) {
                         // Function-level comment: Remove debug dump and quietly delete old files.
                         // PT: Remove dd() e apaga versões antigas sem interromper a geração.
                         // EN: Remove dd() and delete old versions without interrupting generation.
@@ -577,7 +580,7 @@ class PdfController extends Controller
                 }
             } catch (\Throwable $e) {
                 \Log::warning('Browsershot PDF generation failed, falling back to wkhtmltopdf', [
-                    'matricula_id' => $matricula->id ?? null,
+                    'matricula_id' => $matricula['id'] ?? null,
                     'exception' => $e->getMessage(),
                 ]);
                 $engine = 'wkhtmltopdf'; // fallback
@@ -662,7 +665,7 @@ class PdfController extends Controller
                 }
             } catch (\Throwable $e) {
                 \Log::error('Snappy PDF generation failed', [
-                    'matricula_id' => $matricula->id ?? null,
+                    'matricula_id' => $matricula['id'] ?? null,
                     'exception' => $e->getMessage(),
                 ]);
                 if (!$noStore && !$disk->exists($relative)) {
@@ -685,7 +688,7 @@ class PdfController extends Controller
         // Persistente: mantém comportamento anterior (salva e retorna metadados JSON)
         $post = Post::where('post_type','files_uload')->where('guid',$relative)->first() ?? new Post();
         $post->post_type = 'files_uload';
-        $post->post_title = 'PDF Matrícula #' . Qlib::zeroFill($matricula->id, 6);
+        $post->post_title = 'PDF Matrícula #' . Qlib::zeroFill($matricula['id'], 6);
         $post->post_name = Str::slug($slug);
         $post->post_status = 'publish';
         $post->menu_order = 0;
@@ -701,7 +704,7 @@ class PdfController extends Controller
         // Sanitiza possíveis vírgulas acidentais
         $publicUrl = rtrim((string)$publicUrl, ", \t\n\r\0\x0B");
         //Gravar campo meta com o link do PDF
-        $saveLink = Qlib::update_matriculameta($matricula->id, 'proposta_pdf', $publicUrl);
+        $saveLink = Qlib::update_matriculameta($matricula['id'], 'proposta_pdf', $publicUrl);
 
         return response()->json([
             'data' => [

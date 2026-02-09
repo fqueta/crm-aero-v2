@@ -1,3 +1,8 @@
+@php
+    $tipo = $matricula['curso']['tipo'] ?? null;
+    $curso = $matricula['curso_nome'] ?? null;
+    $turma = $matricula['turma_nome'] ?? null;
+@endphp
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -203,47 +208,49 @@
                     <div style="margin-top: 40mm;">
                     <!-- PT/EN: Page 1 = Budget table -->
                         <h1>Orçamento</h1>
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Descrição</th>
-                                        <th>Etapa</th>
-                                        <th class="right">H. Teóricas</th>
-                                        <th class="right">H. Práticas</th>
-                                        <th class="right">Valor</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach(($orc['modulos'] ?? []) as $m)
+                            @if($tipo == 4)
+                                <table>
+                                    <thead>
                                         <tr>
-                                            <td>{{ $m['titulo'] ?? '-' }}</td>
-                                            <td class="muted">{{ $m['etapa'] ?? '—' }}</td>
-                                            <td class="right">{{ $m['limite'] ?? '0' }}</td>
-                                            <td class="right">{{ $m['limite_pratico'] ?? '0' }}</td>
-                                            <td class="right">{{ $m['valor'] ?? '0,00' }}</td>
+                                            <th>Descrição</th>
+                                            {{-- <th>Etapa</th> --}}
+                                            <th class="right">H. Teóricas</th>
+                                            <th class="right">H. Práticas</th>
+                                            <th class="right">Valor</th>
                                         </tr>
-                                    @endforeach
-                                    @if(isset($desconto) && $desconto !== null)
+                                    </thead>
+                                    <tbody>
+                                        @foreach(($orc['modulos'] ?? []) as $m)
+                                            <tr>
+                                                <td>{{ $curso . ' - ' . $m['nome'] ?? '-' }}</td>
+                                                {{-- <td class="muted">{{ $m['etapa'] ?? '—' }}</td> --}}
+                                                <td class="right">{{ $m['h_praticas'] ?? '0' }}</td>
+                                                <td class="right">{{ $m['h_teoricas'] ?? '0' }}</td>
+                                                <td class="right">{{ App\Services\Qlib::valor_moeda($m['valor'],'R$') ?? '0,00' }}</td>
+                                            </tr>
+                                        @endforeach
+                                        @if(isset($desconto) && $desconto !== null)
+                                            <tr>
+                                                <td class="accent">Desconto</td>
+                                                <td></td>
+                                                <td></td>
+                                                <td></td>
+                                                <td class="right accent">- R$ {{ number_format((float)$desconto, 2, ',', '.') }}</td>
+                                            </tr>
+                                        @endif
+                                    </tbody>
+                                    <tfoot>
                                         <tr>
-                                            <td class="accent">Desconto</td>
-                                            <td></td>
-                                            <td></td>
-                                            <td></td>
-                                            <td class="right accent">- R$ {{ number_format((float)$desconto, 2, ',', '.') }}</td>
+                                            <td colspan="4" class="right">Subtotal</td>
+                                            <td class="right">R$ {{ $subtotal_formatado }}</td>
                                         </tr>
-                                    @endif
-                                </tbody>
-                                <tfoot>
-                                    <tr>
-                                        <td colspan="4" class="right">Subtotal</td>
-                                        <td class="right">R$ {{ $subtotal_formatado }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td colspan="4" class="right">Total do Orçamento</td>
-                                        <td class="right">R$ {{ $total_formatado }}</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
+                                        <tr>
+                                            <td colspan="4" class="right">Total do Orçamento</td>
+                                            <td class="right">R$ {{ $total_formatado }}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            @endif
                             <div class="section-title">Parceliamento</div>
                             <div class="chips">
                                 @php

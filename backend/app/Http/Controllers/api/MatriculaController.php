@@ -538,44 +538,55 @@ class MatriculaController extends Controller
         return response()->json($data);
     }
     /**
-     * Metodo para retornar dados da matricula atravez do id da matricula se o campo id_cliente for informado varifica se o cliente existe
-     * Show single enrollment.
-     * @param string $id
+     * PT-BR: Retorna dados completos da matrícula (Matricula) com aliases úteis para o front-end,
+     * incluindo metadados, parcelamentos e links públicos. Se o parâmetro $id_cliente for informado,
+     * valida a existência do cliente.
+     * EN: Returns full enrollment (Matricula) data with helpful aliases for the frontend,
+     * including metadata, installments and public links. If $id_cliente is provided, validates
+     * the client existence.
+     *
+     * @param int|string $id Identificador da matrícula
+     * @param int|null $id_cliente Identificador do cliente (opcional)
+     * @return array Dados agregados e normalizados da matrícula
      */
-    public function dm($id,$id_cliente=false){
-        if($id_cliente){
+    public function dm(int|string $id, ?int $id_cliente = null): array
+    {
+        $cliente = null;
+        if (!is_null($id_cliente)) {
             $cliente = User::findOrFail($id_cliente);
         }
-        $matricula = Matricula::join('cursos', 'matriculas.id_curso', '=', 'cursos.id')
-            ->join('turmas', 'matriculas.id_turma', '=', 'turmas.id')
-            ->leftJoin('users', 'matriculas.id_cliente', '=', 'users.id')
-            ->select('matriculas.*', 'cursos.nome as curso_nome','cursos.tipo as curso_tipo', 'turmas.nome as turma_nome', 'users.name as cliente_nome')
+
+        // Consulta principal usando relacionamentos Eloquent e eager loading
+        $matricula = Matricula::with([
+                'curso:id,nome,tipo',
+                'turma:id,nome',
+                'cliente:id,name,email,cpf,celular,config,preferencias,ativo,permission_id,created_at,updated_at,autor',
+                'funnel:id,name',
+                'stage:id,name,funnel_id',
+                'situacao:ID,post_title',
+                'parcelamentos'
+            ])
             ->findOrFail($id);
+
         $data = $matricula->toArray();
-        /**
-         * cliente
-         * pt-BR: Inclui um nó com dados básicos do cliente associado à matrícula.
-         *        Evita expor campos sensíveis retornando apenas id, name e email.
-         * en-US: Adds a node with basic client data associated with the enrollment.
-         *        Avoids exposing sensitive fields by returning only id, name and email.
-         */
-        $cliente = null;
-        if (!empty($matricula->id_cliente)) {
-            // Buscar registro completo do cliente para permitir mapeamento estendido
-            $cliente = User::find($matricula->id_cliente);
-        }
-        // PT-BR: Mapear nó de cliente com os mesmos aliases/camelCase usados em ClientController->mapIndexItemOutput.
-        // EN: Map client node using the same aliases/camelCase as ClientController->mapIndexItemOutput.
-        $data['cliente'] = $cliente ? $this->mapClientNodeOutput($cliente) : null;
-        $data['meta'] = $this->getAllMatriculaMeta($matricula->id);
-        // Expor parcelamentos vinculados via pivot
-        $data['parcelamentos'] = Parcelamento::join('matricula_parcelamento', 'parcelamentos.id', '=', 'matricula_parcelamento.parcelamento_id')
-            ->where('matricula_parcelamento.matricula_id', $matricula->id)
-            ->select('parcelamentos.*')
-            ->get()
-            ->toArray();
+        // Aliases de nomes para compatibilidade com o front
+        $data['curso_nome'] = $matricula->curso->nome ?? null;
+        $data['curso_tipo'] = $matricula->curso->tipo ?? null;
+        $data['turma_nome'] = $matricula->turma->nome ?? null;
+        $data['cliente_nome'] = $matricula->cliente->name ?? null;
+        $data['funnel_nome'] = $matricula->funnel->name ?? null;
+        $data['stage_nome'] = $matricula->stage->name ?? null;
+        $data['situacao_nome'] = $matricula->situacao->post_title ?? null;
+
+        // Nó de cliente estruturado
+        $data['cliente'] = $matricula->cliente ? $this->mapClientNodeOutput($matricula->cliente) : null;
+        $data['meta'] = $this->getAllMatriculaMeta($matricula['id']);
+        $data['consultor'] = $this->mapClientNodeOutput(User::find($matricula['id_consultor']));
+        // Parcelamentos via relação Eloquent para manter consistência com sync()
+        // Parcelamentos já carregados via relação
+        $data['parcelamentos'] = $matricula->parcelamentos ? $matricula->parcelamentos->toArray() : [];
         //incluir o campo com link publico da proposta
-        $link = '/aluno/matricula/'.$matricula->id_cliente.'_'.Qlib::zeroFill($matricula->id,5).'/1';
+        $link = '/aluno/matricula/'.$matricula['id_cliente'].'_'.Qlib::zeroFill($matricula['id'],5).'/1';
         $data['link_orcamento'] = Qlib::qoption('front_url') . $link;
         $data['link_assinatura'] = Qlib::qoption('front_url') . str_replace('matricula','assinatura',$link);
         return $data;

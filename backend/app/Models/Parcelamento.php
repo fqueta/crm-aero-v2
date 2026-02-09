@@ -116,6 +116,6 @@ class Parcelamento extends Model
      */
     public function matriculas()
     {
-        return $this->belongsToMany(Matricula::class, 'matricula_parcelamento', 'parcelamento_id', 'matricula_id')->withTimestamps();
+        return $this->belongsToMany(Matricula::class, 'matricula_parcelamento', 'parcelamento_id', 'matricula_id');
     }
 }

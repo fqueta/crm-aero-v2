@@ -42,7 +42,7 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
         try {
             // Instantiate the controller
             $controller = new \App\Http\Controllers\api\PdfController();
-            
+
             // Create a mock request with desired parameters
             $request = new \Illuminate\Http\Request();
             $request->merge([
@@ -50,17 +50,17 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
                 'no_store' => false,  // Save to disk
                 'debug_html' => false // Generate actual PDF
             ]);
-            
+
             // Call the matricula method to generate the PDF
             $controller->matricula($request, $this->id_matricula);
-            
+
             // Optional: Log success
             // \Log::info("PDF Proposal generated for Matricula ID: {$this->id_matricula}");
-            
+
         } catch (\Throwable $e) {
             \Log::error("Error generating PDF Proposal for Matricula ID: {$this->id_matricula}: " . $e->getMessage());
             // Optionally rethrow to fail the job
-            // throw $e; 
+            // throw $e;
         }
     }
 }

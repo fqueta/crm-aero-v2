@@ -96,6 +96,60 @@ class Matricula extends Model
      */
     public function parcelamentos()
     {
-        return $this->belongsToMany(Parcelamento::class, 'matricula_parcelamento', 'matricula_id', 'parcelamento_id')->withTimestamps();
+        return $this->belongsToMany(Parcelamento::class, 'matricula_parcelamento', 'matricula_id', 'parcelamento_id');
+    }
+
+    /**
+     * Relacionamento: curso associado à matrícula.
+     * EN: Course related to the enrollment.
+     */
+    public function curso()
+    {
+        return $this->belongsTo(Curso::class, 'id_curso');
+    }
+
+    /**
+     * Relacionamento: turma associada à matrícula.
+     * EN: Class group related to the enrollment.
+     */
+    public function turma()
+    {
+        return $this->belongsTo(Turma::class, 'id_turma');
+    }
+
+    /**
+     * Relacionamento: cliente (usuário) associado à matrícula.
+     * EN: Client (user) related to the enrollment.
+     */
+    public function cliente()
+    {
+        return $this->belongsTo(User::class, 'id_cliente');
+    }
+
+    /**
+     * Relacionamento: funil (pipeline) associado.
+     * EN: Funnel related to the enrollment.
+     */
+    public function funnel()
+    {
+        return $this->belongsTo(Funnel::class, 'funnel_id');
+    }
+
+    /**
+     * Relacionamento: etapa (stage) associada.
+     * EN: Stage related to the enrollment.
+     */
+    public function stage()
+    {
+        return $this->belongsTo(Stage::class, 'stage_id');
+    }
+
+    /**
+     * Relacionamento: situação associada (posts.situacao_matricula).
+     * EN: Enrollment situation related to the enrollment.
+     */
+    public function situacao()
+    {
+        return $this->belongsTo(EnrollmentSituation::class, 'situacao_id', 'ID');
     }
 }
