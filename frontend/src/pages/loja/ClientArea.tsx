@@ -15,7 +15,6 @@ import { useCep } from '@/hooks/useCep';
 import { cepApplyMask, cepRemoveMask } from '@/lib/masks/cep-apply-mask';
 import { cpfApplyMask } from '@/lib/masks/cpf-apply-mask';
 import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
-import MyRedemptionsContent from '@/components/loja/MyRedemptionsContent';
 import { PointsStoreProps } from '@/types/products';
 import { formatPoints } from '@/lib/utils';
 
@@ -642,7 +641,17 @@ const ClientArea: React.FC<PointsStoreProps> = ({ linkLoja }) => {
 
           {/* Aba Histórico */}
           <TabsContent value="history">
-            <MyRedemptionsContent showHeader={false} showStats={true} linkLoja={linkLoja} />
+            <Card className="bg-white rounded-2xl shadow-xl border-2 border-purple-100">
+              <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 border-b-2 border-purple-100 rounded-t-2xl">
+                <CardTitle className="flex items-center space-x-2 text-purple-800">
+                  <History className="w-5 h-5 text-purple-600" />
+                  <span>Histórico</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <p className="text-sm text-gray-600">Histórico indisponível.</p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Aba Configurações */}

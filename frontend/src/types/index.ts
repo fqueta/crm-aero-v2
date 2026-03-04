@@ -304,4 +304,3 @@ export interface ApiDeleteResponse {
 // Export product types
 export * from './products';
 export * from './serviceOrders';
-export * from './redemptions';

@@ -161,6 +161,11 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const clientEmail = client?.email || '';
   const curso_tipo = String((enrollment as any)?.curso_tipo || '');
   const modulo = computeModulo(enrollment as any, curso_tipo);
+  const modulesList = useMemo(() => {
+    const list = (enrollment as any)?.orc?.modulos;
+    return Array.isArray(list) ? list : undefined;
+  }, [enrollment]);
+
   const linkAssinatura = (enrollment as any)?.link_assinatura || '';
 
   const parcelamento = useMemo(() => {
@@ -245,6 +250,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                         clientEmail={clientEmail}
                         course={course as any}
                         module={modulo}
+                        modules={modulesList}
                         discountLabel="Desconto"
                         discountAmountMasked={descontoMasked}
                         subtotalMasked={subtotalMasked}

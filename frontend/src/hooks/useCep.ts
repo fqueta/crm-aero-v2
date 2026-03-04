@@ -73,35 +73,60 @@ export const useCep = () => {
     setError(null);
 
     try {
-      const response = await fetch(`https://viacep.com.br/ws/${cleanedCep}/json/`);
-      
-      if (!response.ok) {
-        throw new Error('Erro na consulta do CEP');
+      // 1) ViaCEP
+      const respVia = await fetch(`https://viacep.com.br/ws/${cleanedCep}/json/`);
+      if (respVia.ok) {
+        const dataVia: CepData = await respVia.json();
+        if (!dataVia.erro) {
+          const formattedVia: AddressData = {
+            endereco: dataVia.logradouro || '',
+            bairro: dataVia.bairro || '',
+            cidade: dataVia.localidade || '',
+            uf: dataVia.uf || ''
+          };
+          setAddressData(formattedVia);
+          toast.success('CEP encontrado (ViaCEP)');
+          return formattedVia;
+        }
       }
-
-      const data: CepData = await response.json();
-
-      if (data.erro) {
-        setError('CEP não encontrado');
-        toast.error('CEP não encontrado');
-        return null;
+      // 2) BrasilAPI fallback
+      const respBra = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanedCep}`);
+      if (respBra.ok) {
+        const dataBra = await respBra.json() as any;
+        if (dataBra && (dataBra.street || dataBra.city || dataBra.state)) {
+          const formattedBra: AddressData = {
+            endereco: dataBra.street || '',
+            bairro: dataBra.neighborhood || '',
+            cidade: dataBra.city || '',
+            uf: dataBra.state || ''
+          };
+          setAddressData(formattedBra);
+          toast.success('CEP encontrado (BrasilAPI)');
+          return formattedBra;
+        }
       }
-
-      const formattedData: AddressData = {
-        endereco: data.logradouro || '',
-        bairro: data.bairro || '',
-        cidade: data.localidade || '',
-        uf: data.uf || ''
-      };
-
-      setAddressData(formattedData);
-      toast.success('CEP encontrado com sucesso!');
-      return formattedData;
-
+      // 3) API CEP fallback
+      const respApiCep = await fetch(`https://apicep.com/api/cep/${cleanedCep}.json`);
+      if (respApiCep.ok) {
+        const dataApiCep = await respApiCep.json() as any;
+        if (dataApiCep && dataApiCep.status === 200) {
+          const formattedApi: AddressData = {
+            endereco: dataApiCep.address || '',
+            bairro: dataApiCep.district || '',
+            cidade: dataApiCep.city || '',
+            uf: dataApiCep.state || ''
+          };
+          setAddressData(formattedApi);
+          toast.success('CEP encontrado (API CEP)');
+          return formattedApi;
+        }
+      }
+      setError('CEP não encontrado nas fontes disponíveis');
+      toast.error('CEP não encontrado nas fontes disponíveis');
+      return null;
     } catch (err) {
-      const errorMessage = 'Erro ao buscar CEP. Verifique sua conexão.';
-      setError(errorMessage);
-      toast.error(errorMessage);
+      setError('Erro ao buscar CEP nas fontes disponíveis.');
+      toast.error('Erro ao buscar CEP nas fontes disponíveis.');
       return null;
     } finally {
       setLoading(false);

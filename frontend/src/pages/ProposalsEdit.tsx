@@ -27,6 +27,9 @@ import SelectGeraValor from '@/components/school/SelectGeraValor';
 import { currencyApplyMask, currencyRemoveMaskToNumber, currencyRemoveMaskToString } from '@/lib/masks/currency';
 import BudgetPreview from '@/components/school/BudgetPreview';
 
+import { useAircraftList } from '@/hooks/aircraft';
+import CourseModulesSelector from '@/components/school/CourseModulesSelector';
+
 /**
  * ProposalEditSchema
  * pt-BR: Esquema do formulário de edição de proposta.
@@ -58,6 +61,8 @@ const proposalEditSchema = z.object({
   // Novo campo do formulário para meta.texto_desconto
   // New form field backing meta.texto_desconto
   meta_texto_desconto: z.string().optional(),
+  // Campo para desconto específico da Etapa 1 (não persistido diretamente no model, mas via meta/orc)
+  etapa1_desconto: z.number().optional(),
   id: z.string().optional(),
 });
 
@@ -135,6 +140,8 @@ export default function ProposalsEdit() {
     },
   });
 
+
+
   // Data sources
   const { data: clientsData, isLoading: isLoadingClients } = useClientsList(
     { per_page: 20, search: clientSearch || undefined },
@@ -145,6 +152,11 @@ export default function ProposalsEdit() {
   // Consultants: widen per_page to increase chance the selected consultant is present
   const { data: consultantsData, isLoading: isLoadingConsultants } = useUsersList({ consultores: true, per_page: 200, sort: 'name', search: consultantSearch || undefined });
   const { data: responsiblesData, isLoading: isLoadingResponsibles } = useClientsList({ per_page: 50, search: responsibleSearch || undefined, permission_id: 8 } as any);
+  // Lista de todas as aeronaves para cálculo do curso tipo 2
+  const { data: allAircraftData } = useAircraftList({ per_page: 200, active: true });
+  const allAircraft = useMemo(() => {
+    return Array.isArray(allAircraftData) ? allAircraftData : (allAircraftData as any)?.data || (allAircraftData as any)?.items || [];
+  }, [allAircraftData]);
 
   const { data: enrollment, isLoading: isLoadingEnrollment } = useEnrollment(String(id || ''), { enabled: !!id });
 
@@ -426,6 +438,34 @@ export default function ProposalsEdit() {
   }, [coursesList, selectedCourseId]);
 
   /**
+   * getAircraftHourlyRate
+   * pt-BR: Obtém o valor da hora da aeronave a partir dos pacotes configurados.
+   * en-US: Gets the aircraft hourly rate from configured packages.
+   */
+  function getAircraftHourlyRate(aircraft: any): number {
+    if (!aircraft?.pacotes) return 0;
+    try {
+        const pacotes = typeof aircraft.pacotes === 'string' ? JSON.parse(aircraft.pacotes) : aircraft.pacotes;
+        // Pega o primeiro pacote disponível (geralmente "1")
+        const firstPkgKey = Object.keys(pacotes)[0];
+        if (!firstPkgKey) return 0;
+        const pkg = pacotes[firstPkgKey];
+        
+        // Tenta encontrar o valor da hora em chaves comuns
+        const keysToCheck = ['piloto-privado-aviao', 'instrutor-de-voo', 'hora-seca', 'custo_real'];
+        for (const key of keysToCheck) {
+            if (pkg[key]) {
+                const val = currencyRemoveMaskToNumber(String(pkg[key]));
+                if (val > 0) return val;
+            }
+        }
+        return 0;
+    } catch {
+        return 0;
+    }
+  }
+
+  /**
    * normalizeModuleForTipo4
    * pt-BR: Normaliza módulo de períodos (tipo=4) para o formato esperado
    *        pelo preview/Select (título e horas).
@@ -444,16 +484,178 @@ export default function ProposalsEdit() {
   /**
    * selectedCourseNormalized
    * pt-BR: Para tipo=4, ajusta módulos para incluir `titulo`, `limite` e `limite_pratico`.
+   *        Quando é tipo=2, normaliza módulos para permitir seleção de aeronave.
    * en-US: For type=4, adjusts modules to include `titulo`, `limite`, and `limite_pratico`.
+   *        When type=2, normalizes modules to allow aircraft selection.
    */
   const selectedCourseNormalized = useMemo(() => {
     if (!selectedCourse) return selectedCourse;
-    const isTipo4 = String(selectedCourse?.tipo ?? '') === '4';
-    if (!isTipo4) return selectedCourse;
-    const mods = Array.isArray(selectedCourse?.modulos) ? selectedCourse!.modulos : [];
-    const modsNorm = mods.map((m: any) => normalizeModuleForTipo4(m));
-    return { ...selectedCourse, modulos: modsNorm };
+    const tipo = String(selectedCourse?.tipo ?? '');
+    const isTipo4 = tipo === '4';
+    const isTipo2 = tipo === '2';
+
+    if (isTipo4) {
+      const mods = Array.isArray(selectedCourse?.modulos) ? selectedCourse!.modulos : [];
+      const modsNorm = mods.map((m: any) => normalizeModuleForTipo4(m));
+      return { ...selectedCourse, modulos: modsNorm };
+    }
+
+    if (isTipo2) {
+      const mods = Array.isArray(selectedCourse?.modulos) ? selectedCourse!.modulos : [];
+      const modsNorm = mods.map((m: any) => ({
+        ...m,
+        titulo: m?.titulo || m?.nome || 'Módulo',
+        // Para tipo 2, preserva o valor original se existir (ex: Etapa 1), senão null
+        valor: m?.valor !== undefined && m?.valor !== null && m?.valor !== '' ? m.valor : null,
+        limite: String(m?.limite || ''),
+        aviao: m?.aviao || []
+      }));
+      return { ...selectedCourse, modulos: modsNorm };
+    }
+
+    return selectedCourse;
   }, [selectedCourse]);
+
+  // Observa o orc_json para garantir reatividade na hidratação
+  const orcJsonWatched = form.watch('orc_json');
+
+  const initialEtapa1Discount = useMemo(() => {
+      try {
+          const enrollmentCourseId = String((enrollment as any)?.id_curso || '');
+          const currentCourseId = String(selectedCourseNormalized?.id || '');
+          
+          // Se estamos editando o curso original, usa o valor salvo
+          if (enrollmentCourseId === currentCourseId) {
+             const orc = (enrollment as any)?.orc;
+             return Number(orc?.meta?.etapa1_desconto || 0);
+          }
+          return 0;
+      } catch {
+          return 0;
+      }
+  }, [enrollment, selectedCourseNormalized]);
+
+  const initialType2Selections = useMemo(() => {
+      // Tenta hidratar as seleções iniciais a partir do orc salvo no banco (apenas se for o mesmo curso)
+      try {
+          const enrollmentCourseId = String((enrollment as any)?.id_curso || '');
+          const currentCourseId = String(selectedCourseNormalized?.id || '');
+
+          if (enrollmentCourseId !== currentCourseId) return undefined;
+
+          const orc = (enrollment as any)?.orc;
+          if (!orc || !Array.isArray(orc.modulos)) return undefined;
+          
+          // Mapeia os módulos salvos para o formato esperado pelo seletor
+          const modsNorm = Array.isArray(selectedCourseNormalized?.modulos) ? selectedCourseNormalized!.modulos : [];
+          const selections: Record<number, any> = {};
+          
+          // Helper para normalizar strings para comparação
+          const normalizeStr = (s: string) => s ? s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : '';
+          // Helper para extrair número da etapa (ex: "etapa2" -> "2")
+          const extractStageNum = (s: any) => String(s || '').replace(/\D/g, '');
+
+          // Cria um mapa de contadores para cada etapa do curso para rastrear qual índice dentro da etapa estamos processando
+          // Isso é necessário porque o loop no orc.modulos pode não estar na mesma ordem do curso
+          // Vamos fazer o inverso: iterar sobre os módulos do CURSO e ver se tem correspondente no ORC
+          
+          modsNorm.forEach((courseMod: any, courseIdx: number) => {
+              // Tenta achar no ORC um módulo que corresponda a este do curso
+              const courseTitle = normalizeStr(courseMod.titulo || courseMod.nome || '');
+              const courseStageNum = extractStageNum(courseMod.etapa);
+              
+              // 1. Tenta por título exato
+              let foundInOrc = orc.modulos.find((savedMod: any) => {
+                  const savedTitle = normalizeStr(savedMod.titulo || savedMod.nome || '');
+                  return savedTitle === courseTitle;
+              });
+
+              // 2. Se não achou por título, tenta por ordem na etapa
+              if (!foundInOrc && courseStageNum) {
+                  // Pega todos os módulos desta etapa no curso
+                  const courseStageMods = modsNorm.filter((m: any) => extractStageNum(m.etapa) === courseStageNum);
+                  // Encontra o índice relativo deste módulo dentro da etapa (0, 1, 2...)
+                  const relativeIdx = courseStageMods.findIndex((m: any) => m === courseMod);
+                  
+                  // Pega todos os módulos desta etapa no ORC salvo
+                  // IMPORTANTE: Aqui devemos filtrar apenas os módulos que realmente correspondem à etapa
+                  // e que estão em ordem. O problema é que o savedStageMods pode ter "buracos" se o usuário pulou fases.
+                  // Se o usuário selecionou Fase 1 e Fase 3, savedStageMods terá 2 itens.
+                  // O relativeIdx 0 (Fase 1) vai pegar o item 0 (Fase 1) -> OK
+                  // O relativeIdx 1 (Fase 2) vai pegar o item 1 (Fase 3) -> ERRADO! Isso causa o deslocamento.
+                  
+                  // CORREÇÃO: Não podemos confiar apenas no índice relativo do array filtrado se houver saltos.
+                  // Precisamos tentar encontrar por "título aproximado" ou desistir se não for exato.
+                  // Mas como fallback para estruturas rígidas, vamos tentar verificar se o título "contém" algo similar.
+                  
+                  // Nova estratégia: Se falhou por título exato, e estamos na etapa 2 (prática),
+                  // onde os nomes são bem definidos ("Fase 1...", "Fase 2..."), vamos tentar extrair o número da fase do título.
+                  
+                  const extractPhaseNum = (t: string) => {
+                      const match = t.match(/fase\s*(\d+)/i);
+                      return match ? match[1] : null;
+                  };
+                  
+                  const coursePhaseNum = extractPhaseNum(courseTitle);
+                  
+                  if (coursePhaseNum) {
+                      foundInOrc = orc.modulos.find((savedMod: any) => {
+                          const savedTitle = normalizeStr(savedMod.titulo || savedMod.nome || '');
+                          const savedPhaseNum = extractPhaseNum(savedTitle);
+                          return savedPhaseNum === coursePhaseNum && extractStageNum(savedMod.etapa) === courseStageNum;
+                      });
+                  }
+                  
+                  // Se ainda não achou e NÃO é baseado em fases numeradas (ex: etapa 1),
+                  // aí sim usamos a lógica posicional, mas com muito cuidado.
+                  // Para etapa 1, geralmente seleciona-se tudo, então a lógica posicional funciona bem.
+                  // MAS, se o usuário desmarcar um item, a contagem muda e o posicional quebra (shift).
+                  // Portanto, só usamos posicional se a contagem de itens na etapa for igual (todos selecionados ou estrutura 1:1).
+                  if (!foundInOrc && courseStageNum === '1') {
+                      const savedStageMods = orc.modulos.filter((m: any) => extractStageNum(m.etapa) === courseStageNum);
+                      const courseStageMods = modsNorm.filter((m: any) => extractStageNum(m.etapa) === courseStageNum);
+                      
+                      if (savedStageMods.length === courseStageMods.length && savedStageMods[relativeIdx]) {
+                          foundInOrc = savedStageMods[relativeIdx];
+                      }
+                  }
+              }
+              // console.log('courseMod:', courseMod);
+              // console.log('foundInOrc Etapa:', foundInOrc.etapa);
+              // Verifica se a etapa do módulo encontrado bate com a do curso
+              // Isso previne que um módulo da etapa 2 seja usado para hidratar um da etapa 1 se houver confusão
+              if (foundInOrc) {
+                  const savedStageNum = extractStageNum(foundInOrc.etapa);
+                  if (savedStageNum && courseStageNum && savedStageNum !== courseStageNum) {
+                      foundInOrc = undefined;
+                  }
+              }
+
+              // Se achou correspondência no ORC, verifica se está "selecionado"
+              if (foundInOrc) {
+                  const price = Number(foundInOrc.valor || 0);
+                  const aircraftId = String(foundInOrc.aircraft_id || foundInOrc.aviao_id || '');
+                  // Considera selecionado se tem valor > 0 OU se é da etapa 1 (teórica/preliminar) que pode não ter valor nem aeronave
+                  // No JSON do usuário, etapa 1 tem valor 0 e aircraft_name "Aeronave undefined", mas existe no array modulos, então foi selecionado.
+                  const isEtapa1 = courseStageNum === '1';
+                  const isSelected = price > 0 || (aircraftId && aircraftId !== 'undefined' && aircraftId !== 'null' && aircraftId !== '') || isEtapa1;
+                  
+                  if (isSelected) {
+                      selections[courseIdx] = {
+                          selected: true,
+                          credits: Number(foundInOrc.limite || courseMod.limite || 0),
+                          aircraftId: aircraftId,
+                          price: price
+                      };
+                  }
+              }
+          });
+          
+          return selections;
+      } catch {
+          return undefined;
+      }
+  }, [enrollment, selectedCourseNormalized]);
 
   const selectedGeraValor = form.watch('gera_valor');
   const selectedModule = useMemo(() => {
@@ -465,6 +667,18 @@ export default function ProposalsEdit() {
   // Módulo derivado da matrícula carregada (fallback quando não há seleção atual)
   const cursoTipoFromEnrollment = String((enrollment as any)?.curso_tipo || '');
   const moduleFromEnrollment = useMemo(() => computeModulo(enrollment as any, cursoTipoFromEnrollment), [enrollment, cursoTipoFromEnrollment]);
+
+  // Modules list for preview (Type 2)
+  const previewModules = useMemo(() => {
+    try {
+        const orcStr = form.watch('orc_json');
+        const orc = JSON.parse(orcStr || '{}');
+        if (Array.isArray(orc.modulos) && orc.modulos.length > 0) {
+            return orc.modulos;
+        }
+    } catch {}
+    return undefined;
+  }, [form.watch('orc_json')]);
 
   const selectedClient = useMemo(() => {
     if (clientDetailData && String(clientDetailData?.id || '') === String(selectedClientId || '')) {
@@ -556,14 +770,74 @@ export default function ProposalsEdit() {
   }, [subtotalWatched, inscricaoWatched, descontoWatched]);
 
   /**
+   * handleModulesSelectionChange
+   * pt-BR: Handler para o seletor de módulos (checklist) de curso Tipo 2. Atualiza subtotal e JSON.
+   * en-US: Handler for Type 2 course module selector (checklist). Updates subtotal and JSON.
+   */
+  function handleModulesSelectionChange({ modules, total, etapa1Discount }: { modules: any[]; total: number; etapa1Discount: number }) {
+    form.setValue('subtotal', formatCurrencyBRL(total));
+    form.setValue('etapa1_desconto', etapa1Discount);
+    
+    // Atualiza gera_valor com string dummy se houver seleção, para validação visual se necessário
+    if (modules.length > 0) {
+      form.setValue('gera_valor', 'multiple_modules');
+    } else {
+      form.setValue('gera_valor', '');
+    }
+
+    // Monta orc_json com todos os módulos selecionados
+    if (modules.length > 0) {
+      const currentOrcStr = form.getValues('orc_json') || '{}';
+      let currentOrc: any = {};
+      try {
+        currentOrc = JSON.parse(currentOrcStr);
+      } catch {}
+      
+      const orc = {
+        ...currentOrc,
+        token: currentOrc.token || Math.random().toString(16).slice(2),
+        id_curso: form.getValues('id_curso'),
+        id_cliente: form.getValues('id_cliente'),
+        campo_id: 'id',
+        modulos: modules,
+        meta: {
+            ...(currentOrc.meta || {}),
+            etapa1_desconto: etapa1Discount
+        }
+      };
+      try {
+        form.setValue('orc_json', JSON.stringify(orc));
+      } catch {}
+    } else {
+      // Se não houver módulos, talvez devêssemos limpar orc_json ou manter metadados?
+      // Mantendo lógica similar ao create, mas preservando token se existir
+      const currentOrcStr = form.getValues('orc_json') || '{}';
+      try {
+        const currentOrc = JSON.parse(currentOrcStr);
+        currentOrc.modulos = [];
+        form.setValue('orc_json', JSON.stringify(currentOrc));
+      } catch {
+        form.setValue('orc_json', '');
+      }
+    }
+  }
+
+  /**
    * handleGeraValorChange
    * pt-BR: Atualiza campos ao escolher módulo/valor.
    * en-US: Updates fields when choosing module/value.
    */
   function handleGeraValorChange(val: string) {
-    form.setValue('gera_valor', val);
-    const [price, idxStr] = String(val).split('::');
+    const idxStr = String(val).split('::')[1];
     const idx = Number(idxStr);
+
+    // Se for tipo 2, usamos o CourseModulesSelector, então esta função não deve ser chamada para tipo 2
+    if (String(selectedCourse?.tipo) === '2') {
+        return;
+    }
+
+    form.setValue('gera_valor', val);
+    const [price] = String(val).split('::');
     const priceNormalized = normalizeMonetaryToPlain(price || '');
     const priceNumber = Number(priceNormalized || '0');
     form.setValue('subtotal', formatCurrencyBRL(priceNumber));
@@ -679,7 +953,7 @@ export default function ProposalsEdit() {
       total: normalizeMonetaryToPlain(values.total || '') || '',
       // pt-BR: Envia o novo campo situacao_id conforme seleção do usuário
       // en-US: Sends the new situacao_id field as selected by the user
-      situacao_id: values.situacao_id || '',
+      situacao_id: values.situacao_id ? String(values.situacao_id) : undefined,
       // pt-BR: Envia a validade (em dias) conforme valor do formulário
       // en-US: Sends validity (in days) as provided by the form
       meta: {
@@ -700,6 +974,9 @@ export default function ProposalsEdit() {
          * en-US: Mirror of installment table ID (optional).
          */
         parcelamento_id: values.parcelamento_id,
+        // pt-BR: Persiste o desconto da Etapa 1
+        // en-US: Persists Etapa 1 discount
+        etapa1_desconto: values.etapa1_desconto || 0,
       },
       id: values.id || '',
     };
@@ -789,7 +1066,7 @@ export default function ProposalsEdit() {
       gera_valor: metaSafe('gera_valor', safe('gera_valor', form.getValues('gera_valor'))),
       // pt-BR: Preenche situacao_id se existir no registro
       // en-US: Fills situacao_id if present in the record
-      situacao_id: safe('situacao_id', ''),
+      situacao_id: String(safe('situacao_id', '')),
       id_responsavel: safe('id_responsavel', form.getValues('id_responsavel')),
       orc_json: JSON.stringify((enrollment as any)?.orc ?? {}),
       desconto: descontoMaskedInit,
@@ -802,6 +1079,7 @@ export default function ProposalsEdit() {
       // pt-BR: Recupera meta.texto_desconto para preencher o novo campo do formulário
       // en-US: Restores meta.texto_desconto to populate the new form field
       meta_texto_desconto: metaSafe('texto_desconto', ''),
+      etapa1_desconto: Number(metaSafe('etapa1_desconto', '0')),
       id: String(id || ''),
     });
   }, [enrollment, id]);
@@ -1280,23 +1558,38 @@ export default function ProposalsEdit() {
               {/* SelectGeraValor — renderiza quando turma selecionada */}
               {form.watch('id_turma') && (
                 <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="gera_valor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Gerar Valor</FormLabel>
-                        <SelectGeraValor
-                          course={selectedCourse}
-                          value={field.value}
-                          onChange={handleGeraValorChange}
-                          name="gera_valor"
-                          disabled={!selectedCourse}
+                  {String(selectedCourse?.tipo) === '2' ? (
+                    <div className="space-y-2">
+                        <FormLabel>Módulos do Curso (Selecione as fases)</FormLabel>
+                        <CourseModulesSelector
+                            course={selectedCourseNormalized}
+                            aircrafts={allAircraft}
+                            onChange={handleModulesSelectionChange}
+                            getAircraftHourlyRate={getAircraftHourlyRate}
+                            formatCurrencyBRL={formatCurrencyBRL}
+                            initialSelections={initialType2Selections}
+                            initialEtapa1Discount={initialEtapa1Discount}
                         />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    </div>
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="gera_valor"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gerar Valor</FormLabel>
+                          <SelectGeraValor
+                            course={selectedCourse}
+                            value={field.value}
+                            onChange={handleGeraValorChange}
+                            name="gera_valor"
+                            disabled={!selectedCourse}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
               )}
 
@@ -1606,11 +1899,13 @@ export default function ProposalsEdit() {
                 clientEmail={selectedClient?.email || ''}
                 course={selectedCourseNormalized as any}
                 module={normalizeModuleForTipo4(selectedModule ?? moduleFromEnrollment) as any}
+                modules={previewModules}
                 discountLabel="Desconto"
                 discountAmountMasked={form.watch('desconto') || ''}
                 subtotalMasked={form.watch('subtotal') || ''}
                 totalMasked={form.watch('total') || ''}
                 validityDate={computeValidityDate(form.watch('validade'))}
+                etapa1Discount={form.watch('etapa1_desconto') || 0}
               />
 
               {/* Espaço para o rodapé fixo não cobrir o conteúdo */}

@@ -1331,6 +1331,15 @@ class Qlib
         }
         return $ret;
     }
+    static function delete_postmeta($post_id,$meta_key=null)
+    {
+        $ret = false;
+        $tab = 'postmeta';
+        if($post_id && $meta_key){
+            $ret = DB::table($tab)->where('post_id',$post_id)->where('meta_key',$meta_key)->delete();
+        }
+        return $ret;
+    }
     /**
      * Metodo para pegar os meta posts
      */

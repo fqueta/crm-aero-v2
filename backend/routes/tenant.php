@@ -461,6 +461,12 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::apiResource('permissions', PermissionController::class,['parameters' => [
             'permissions' => 'id'
         ]]);
+        Route::apiResource('integracoes', \App\Http\Controllers\api\ApiCredentialController::class, ['parameters' => [
+            'integracoes' => 'id'
+        ]]);
+        Route::get('integracoes/trash', [\App\Http\Controllers\api\ApiCredentialController::class, 'trash'])->name('integracoes.trash');
+        Route::put('integracoes/{id}/restore', [\App\Http\Controllers\api\ApiCredentialController::class, 'restore'])->name('integracoes.restore');
+        Route::delete('integracoes/{id}/force', [\App\Http\Controllers\api\ApiCredentialController::class, 'forceDelete'])->name('integracoes.forceDelete');
         Route::prefix('permissions')->group(function () {
             Route::get('{id}/menu-permissions', [MenuPermissionController::class, 'show'])->name('menu-permissions.show');
             Route::put('{id}/menu-permissions', [MenuPermissionController::class, 'updatePermissions'])->name('menu-permissions.update');

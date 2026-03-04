@@ -8,7 +8,11 @@ export interface Aircraft {
   client_id: string;
   client?: Client;
   matricula: string;
+  nome?: string; // Nome da aeronave (ex: Cessna 172)
+  codigo?: string; // Código (ex: C172)
+  tipo?: string;
   config?: string;
+  pacotes?: string | object; // JSON string or object with pricing packages
   description?: string;
   active: boolean;
   created_at: string;

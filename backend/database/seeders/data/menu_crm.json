@@ -122,6 +122,10 @@
         {
             "title": "Ações",
             "url": "/admin/settings/actions"
+        },
+        {
+            "title": "Integrações",
+            "url": "/admin/settings/integrations"
         }
     ]
   }

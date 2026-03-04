@@ -542,7 +542,19 @@ export default function ProposalSignature() {
                           <FormItem>
                             <FormLabel>Altura (m)</FormLabel>
                             <FormControl>
-                              <Input type="number" step="0.01" {...field} />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                {...field}
+                                onBlur={(e) => {
+                                  const raw = (e.target.value || '').toString().replace(',', '.');
+                                  const num = parseFloat(raw);
+                                  if (!isNaN(num)) {
+                                    const normalized = num >= 3 ? (num / 100) : num; // aceita cm (ex.: 180)
+                                    field.onChange(normalized.toFixed(2));
+                                  }
+                                }}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -555,7 +567,18 @@ export default function ProposalSignature() {
                           <FormItem>
                             <FormLabel>Peso (kg)</FormLabel>
                             <FormControl>
-                              <Input type="number" step="0.1" {...field} />
+                              <Input
+                                type="number"
+                                step="0.1"
+                                {...field}
+                                onBlur={(e) => {
+                                  const raw = (e.target.value || '').toString().replace(',', '.');
+                                  const num = parseFloat(raw);
+                                  if (!isNaN(num)) {
+                                    field.onChange(num.toString());
+                                  }
+                                }}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>

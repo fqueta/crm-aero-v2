@@ -120,6 +120,8 @@ export function SelectGeraValor({ course, value, onChange, disabled, name }: Sel
   };
 
   const isTipo4 = (course?.tipo ?? '').toString() === '4';
+  const isTipo2 = (course?.tipo ?? '').toString() === '2';
+  const shouldRenderModules = (isTipo4 || isTipo2) && Array.isArray(course?.modulos);
   const modulos = Array.isArray(course?.modulos) ? course!.modulos : [];
   // Removido log de depuração para evitar ruído no console em produção
   return (
@@ -135,7 +137,7 @@ export function SelectGeraValor({ course, value, onChange, disabled, name }: Sel
           <SelectValue placeholder="Gerar valor a partir dos módulos" />
         </SelectTrigger>
         <SelectContent>
-          {isTipo4 && modulos.length > 0 ? (
+          {shouldRenderModules && modulos.length > 0 ? (
             modulos.map((m, idx) => (
               <SelectItem key={`${course?.id || 'c'}-m${idx}`} value={getItemValue(m, idx)}>
                 {getModuleLabel(m)}

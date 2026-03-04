@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\api\ApiCredentialController;
 use App\Services\Qlib;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,7 @@ class ZapguruController extends Controller
 
     public $url;
     public $origem_padrao;
+    public $phone_id;
 	function __construct(){
         global $tab15,$tab88;
 		$this->credenciais();
@@ -102,13 +104,20 @@ class ZapguruController extends Controller
 
 
 	function credenciais(){
-
-		$this->url = 'https://s4.chatguru.app/api/v1?key=FQXSYNB8GPSPALZ3MIC5O618HDP0OVUBRFCZ2LAZ4XCLVA44ZA8FPOJM8UG08IJ9&account_id=5f36da757e786f40069aa881&';
-
+        $cfg = (new ApiCredentialController())->get('zapguru');
+        if (!empty($cfg) && !empty($cfg['config']) && is_array($cfg['config'])) {
+            $base = rtrim($cfg['config']['url'] ?? 'https://s4.chatguru.app/api/v1', '/');
+            $key = $cfg['config']['key'] ?? '';
+            $account = $cfg['config']['account_id'] ?? '';
+            $this->phone_id = $cfg['config']['phone_id'] ?? null;
+            $this->url = $base.'?key='.$key.'&account_id='.$account.'&';
+        } else {
+            $this->url = 'https://s4.chatguru.app/api/v1?key=FQXSYNB8GPSPALZ3MIC5O618HDP0OVUBRFCZ2LAZ4XCLVA44ZA8FPOJM8UG08IJ9&account_id=5f36da757e786f40069aa881&';
+        }
 	}
 
 	public function phone_id(){
-		$ret = '628d294cc5ef6cb21b445e47';
+		$ret = $this->phone_id ?: '628d294cc5ef6cb21b445e47';
 		return $ret;
 	}
     /**

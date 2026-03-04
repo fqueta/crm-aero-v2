@@ -44,13 +44,13 @@ class TesteController extends Controller
         // $ret = (new MatriculaController)->contratos_periodos($id??'');
         // $ret = (new MatriculaController)->contratos_periodos_pdf($id??'');
         // $ret = (new \App\Http\Controllers\api\ZapsingController)->enviar_envelope($id??'');
-        // $ret = (new MatriculaController)->send_to_zapSing($id??'');
-        
+        $ret = (new MatriculaController)->send_to_zapSing($id??'');
+
         // $ret['enviar_link_assinatura'] = (new ZapsingController())->enviar_link_assinatura($id);
         // $ret = (new MenuController)->getMenus(1);
         // $ret = Qlib::token();
         // $telefonezap = $zgc->get_telefonezap_by_id_matricula($id);
-        $ret = (new ZapsingController())->enviar_link_assinatura($id);
+        // $ret = (new ZapsingController())->enviar_link_assinatura($id);
         return $ret;
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\MatriculasController;
 use App\Http\Controllers\api\ZapguruController;
+use App\Http\Controllers\api\ApiCredentialController;
 use App\Jobs\GeraPdfContratoJoub;
 use App\Jobs\SendZapsingJoub;
 use App\Models\User;
@@ -35,13 +36,20 @@ class ZapsingController extends Controller
         // dd($this->url_api);
     }
     private function credenciais(){
+        $cfg = (new ApiCredentialController())->get('zapsign');
+        if (!empty($cfg) && !empty($cfg['config']) && is_array($cfg['config'])) {
+            $conf = $cfg['config'];
+            $url = $conf['url'] ?? ($conf['url_api'] ?? null);
+            $id = $conf['id_api'] ?? ($conf['pass'] ?? null);
+            if ($url || $id) {
+                return ['url_api' => $url, 'id_api' => $id];
+            }
+        }
         $d = Qlib::qoption('credenciais_zapsign');
-        // dd($d);
         if($d){
             return Qlib::lib_json_array($d);
-        }else{
-            return false;
         }
+        return false;
     }
     /**
      * Metodo para realizar as requisições post na api
@@ -85,6 +93,7 @@ class ZapsingController extends Controller
             // $body["disable_signers_get_original_file"] = isset($body["disable_signers_get_original_file"]) ? $body["disable_signers_get_original_file"] : false;
             // dd($body,$endpoint);
             try {
+                // dd($this->url_api,$endpoint,$this->api_id);
                 $urlEndpoint = $this->url_api.'/'.$endpoint;
                 // dd($urlEndpoint,$body,$this->api_id);
                 $response = Http::withHeaders([

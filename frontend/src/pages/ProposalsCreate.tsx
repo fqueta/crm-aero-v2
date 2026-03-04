@@ -30,6 +30,9 @@ import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
 import { clientsService } from '@/services/clientsService';
 import BudgetPreview from '@/components/school/BudgetPreview';
 
+import { useAircraftList } from '@/hooks/aircraft';
+import CourseModulesSelector from '@/components/school/CourseModulesSelector';
+
 /**
  * ProposalFormData
  * pt-BR: Tipos do formulário de proposta. Todos os campos são strings para facilitar binding.
@@ -56,6 +59,8 @@ const proposalSchema = z.object({
   id_responsavel: z.string().optional(),
   orc_json: z.string().optional(),
   desconto: z.string().optional(),
+  // Campo para desconto específico da Etapa 1 (não persistido diretamente no model, mas via meta/orc)
+  etapa1_desconto: z.number().optional(),
   inscricao: z.string().optional(),
   subtotal: z.string().optional(),
   total: z.string().optional(),
@@ -100,6 +105,8 @@ export default function ProposalsCreate() {
   // Responsible: visibility toggle and search term
   const [showResponsible, setShowResponsible] = useState(false);
   const [responsibleSearch, setResponsibleSearch] = useState('');
+
+
   
   /**
    * finishAfterSaveRef
@@ -194,7 +201,7 @@ export default function ProposalsCreate() {
       // en-US: Optional field to link an installment table.
       parcelamento_id: '',
       obs: '',
-      id_consultor: '',
+      id_consultor: user?.id ? String(user.id) : '',
       // tag, stage_id e funell_id removidos temporariamente
       // gera_valor inicia vazio; será definido quando usuário escolher a turma
       gera_valor: '',
@@ -225,7 +232,24 @@ export default function ProposalsCreate() {
   // Responsáveis: clientes com permission_id = 8
   // Responsibles: clients filtered by permission_id = 8
   const { data: responsiblesData, isLoading: isLoadingResponsibles } = useClientsList({ per_page: 50, search: responsibleSearch || undefined, permission_id: 8 } as any);
+  // Lista de todas as aeronaves para cálculo do curso tipo 2
+  const { data: allAircraftData } = useAircraftList({ per_page: 200, active: true });
+  const allAircraft = useMemo(() => {
+    return Array.isArray(allAircraftData) ? allAircraftData : (allAircraftData as any)?.data || (allAircraftData as any)?.items || [];
+  }, [allAircraftData]);
+
   // Removido: fontes de dados para funis/etapas enquanto campos não são usados
+  // Pré-seleciona consultor com usuário logado, se ainda não houver valor
+  useEffect(() => {
+    const current = form.getValues('id_consultor');
+    if (!current && user?.id) {
+      form.setValue('id_consultor', String(user.id));
+      if (!consultantSearch && user?.name) {
+        setConsultantSearch(user.name);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Courses and classes
   // Cursos: busca remota com paginação
@@ -361,8 +385,16 @@ export default function ProposalsCreate() {
    *        as requested (GET /situacoes-matricula?page=1&per_page=1).
    */
   const { data: enrollmentSituationsData, isLoading: isLoadingEnrollmentSituations } =
-    useEnrollmentSituationsList({ page: 1, per_page: 1 });
+    useEnrollmentSituationsList({ page: 1, per_page: 1, slug: 'int' });
   const enrollmentSituations = useMemo(() => normalizeSituationsList(enrollmentSituationsData), [enrollmentSituationsData]);
+  useEffect(() => {
+    const current = form.getValues('situacao_id');
+    const first = Array.isArray(enrollmentSituations) ? enrollmentSituations[0] : undefined;
+    if (!current && first?.id) {
+      form.setValue('situacao_id', String(first.id));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrollmentSituations]);
 
   /**
    * selectedCourse
@@ -392,19 +424,68 @@ export default function ProposalsCreate() {
   }
 
   /**
+   * getAircraftHourlyRate
+   * pt-BR: Obtém o valor da hora da aeronave a partir dos pacotes configurados.
+   * en-US: Gets the aircraft hourly rate from configured packages.
+   */
+  function getAircraftHourlyRate(aircraft: any): number {
+    if (!aircraft?.pacotes) return 0;
+    try {
+        const pacotes = typeof aircraft.pacotes === 'string' ? JSON.parse(aircraft.pacotes) : aircraft.pacotes;
+        // Pega o primeiro pacote disponível (geralmente "1")
+        const firstPkgKey = Object.keys(pacotes)[0];
+        if (!firstPkgKey) return 0;
+        const pkg = pacotes[firstPkgKey];
+        
+        // Tenta encontrar o valor da hora em chaves comuns
+        const keysToCheck = ['piloto-privado-aviao', 'instrutor-de-voo', 'hora-seca', 'custo_real'];
+        for (const key of keysToCheck) {
+            if (pkg[key]) {
+                const val = currencyRemoveMaskToNumber(String(pkg[key]));
+                if (val > 0) return val;
+            }
+        }
+        return 0;
+    } catch {
+        return 0;
+    }
+  }
+
+  /**
    * normalizeCourseForSelect
    * pt-BR: Quando o curso é tipo=4, mapeia cada módulo (período) para incluir
    *        campos `titulo`, `limite` e `limite_pratico`.
+   *        Quando é tipo=2, normaliza módulos para permitir seleção de aeronave.
    * en-US: When course is type=4, maps each module (period) to include
    *        `titulo`, `limite`, and `limite_pratico` fields.
+   *        When type=2, normalizes modules to allow aircraft selection.
    */
   const selectedCourseNormalized = useMemo(() => {
     if (!selectedCourse) return selectedCourse;
-    const isTipo4 = String(selectedCourse?.tipo ?? '') === '4';
-    if (!isTipo4) return selectedCourse;
-    const mods = Array.isArray(selectedCourse?.modulos) ? selectedCourse!.modulos : [];
-    const modsNorm = mods.map((m: any) => normalizeModuleForTipo4(m));
-    return { ...selectedCourse, modulos: modsNorm };
+    const tipo = String(selectedCourse?.tipo ?? '');
+    const isTipo4 = tipo === '4';
+    const isTipo2 = tipo === '2';
+
+    if (isTipo4) {
+      const mods = Array.isArray(selectedCourse?.modulos) ? selectedCourse!.modulos : [];
+      const modsNorm = mods.map((m: any) => normalizeModuleForTipo4(m));
+      return { ...selectedCourse, modulos: modsNorm };
+    }
+
+    if (isTipo2) {
+      const mods = Array.isArray(selectedCourse?.modulos) ? selectedCourse!.modulos : [];
+      const modsNorm = mods.map((m: any) => ({
+        ...m,
+        titulo: m?.titulo || m?.nome || 'Módulo',
+        // Para tipo 2, preserva o valor original se existir (ex: Etapa 1), senão null
+        valor: m?.valor !== undefined && m?.valor !== null && m?.valor !== '' ? m.valor : null,
+        limite: String(m?.limite || ''),
+        aviao: m?.aviao || []
+      }));
+      return { ...selectedCourse, modulos: modsNorm };
+    }
+
+    return selectedCourse;
   }, [selectedCourse]);
 
   /**
@@ -528,6 +609,43 @@ export default function ProposalsCreate() {
   }, [subtotalWatched, inscricaoWatched, descontoWatched]);
 
   /**
+   * handleModulesSelectionChange
+   * pt-BR: Handler para o seletor de módulos (checklist). Atualiza subtotal e JSON.
+   * en-US: Handler for module selector (checklist). Updates subtotal and JSON.
+   */
+  function handleModulesSelectionChange({ modules, total, etapa1Discount }: { modules: any[]; total: number; etapa1Discount: number }) {
+    form.setValue('subtotal', formatCurrencyBRL(total));
+    // Salva o desconto da etapa 1 no estado do form para persistência
+    form.setValue('etapa1_desconto', etapa1Discount);
+    
+    // Atualiza gera_valor com string dummy se houver seleção, para validação visual se necessário
+    if (modules.length > 0) {
+      form.setValue('gera_valor', 'multiple_modules');
+    } else {
+      form.setValue('gera_valor', '');
+    }
+
+    // Monta orc_json com todos os módulos selecionados
+    if (modules.length > 0) {
+      const orc = {
+        token: Math.random().toString(16).slice(2),
+        id_curso: form.getValues('id_curso'),
+        id_cliente: form.getValues('id_cliente'),
+        campo_id: 'id',
+        modulos: modules,
+        meta: {
+            etapa1_desconto: etapa1Discount
+        }
+      };
+      try {
+        form.setValue('orc_json', JSON.stringify(orc));
+      } catch {}
+    } else {
+      form.setValue('orc_json', '');
+    }
+  }
+
+  /**
    * handleGeraValorChange
    * pt-BR: Quando o usuário seleciona uma opção em "Gerar Valor", atualiza o
    *        campo do Select (gera_valor), preenche o campo "subtotal" com o preço
@@ -538,10 +656,15 @@ export default function ProposalsCreate() {
    *        builds a minimal budget (orc_json) including the selected module.
    */
   function handleGeraValorChange(val: string) {
-    // Expect format "<price>::<idx>"; e.g., "23.820,00::1"
     form.setValue('gera_valor', val);
     const [price, idxStr] = String(val).split('::');
     const idx = Number(idxStr);
+
+    // Se for tipo 2, usamos o CourseModulesSelector, então esta função não deve ser chamada para tipo 2
+    // Mas por segurança mantemos um return vazio ou limpamos
+    if (String(selectedCourse?.tipo) === '2') {
+        return;
+    }
 
     // Atualiza subtotal com o preço escolhido (mascarado para exibição)
     const priceNormalized = normalizeMonetaryToPlain(price || '');
@@ -750,6 +873,9 @@ export default function ProposalsCreate() {
         // pt-BR: Preço normalizado (sem máscara), útil para processamento no backend
         // en-US: Normalized price (unmasked), useful for backend processing
         gera_valor_preco: geraValorPreco,
+        // pt-BR: Persiste o desconto da Etapa 1
+        // en-US: Persists Etapa 1 discount
+        etapa1_desconto: values.etapa1_desconto || 0,
       },
       id: values.id || '',
     };
@@ -894,6 +1020,18 @@ export default function ProposalsCreate() {
     }
     navigate('/admin/sales');
   }
+
+  // Modules list for preview (Type 2)
+  const previewModules = useMemo(() => {
+    try {
+        const orcStr = form.watch('orc_json');
+        const orc = JSON.parse(orcStr || '{}');
+        if (Array.isArray(orc.modulos) && orc.modulos.length > 0) {
+            return orc.modulos;
+        }
+    } catch {}
+    return undefined;
+  }, [form.watch('orc_json')]);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -1184,23 +1322,36 @@ export default function ProposalsCreate() {
               {/* SelectGeraValor — renderiza quando turma selecionada */}
               {form.watch('id_turma') && (
                 <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="gera_valor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Gerar Valor</FormLabel>
-                        <SelectGeraValor
-                          course={selectedCourse}
-                          value={field.value}
-                          onChange={handleGeraValorChange}
-                          name="gera_valor"
-                          disabled={!selectedCourse}
+                  {String(selectedCourse?.tipo) === '2' ? (
+                    <div className="space-y-2">
+                        <FormLabel>Módulos do Curso (Selecione as fases)</FormLabel>
+                        <CourseModulesSelector
+                            course={selectedCourseNormalized}
+                            aircrafts={allAircraft}
+                            onChange={handleModulesSelectionChange}
+                            getAircraftHourlyRate={getAircraftHourlyRate}
+                            formatCurrencyBRL={formatCurrencyBRL}
                         />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    </div>
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="gera_valor"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Gerar Valor</FormLabel>
+                          <SelectGeraValor
+                            course={selectedCourseNormalized}
+                            value={field.value}
+                            onChange={handleGeraValorChange}
+                            name="gera_valor"
+                            disabled={!selectedCourse}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
                 </div>
               )}
 
@@ -1319,11 +1470,13 @@ export default function ProposalsCreate() {
                 clientEmail={selectedClient?.email || ''}
                 course={selectedCourseNormalized as any}
                 module={normalizeModuleForTipo4(selectedModule) as any}
+                modules={previewModules}
                 discountLabel="Desconto"
                 discountAmountMasked={form.watch('desconto') || ''}
                 subtotalMasked={form.watch('subtotal') || ''}
                 totalMasked={form.watch('total') || ''}
                 validityDate={computeValidityDate(form.watch('validade'))}
+                etapa1Discount={form.watch('etapa1_desconto') || 0}
               />
 
               {/* Espaço para o rodapé fixo não cobrir o conteúdo */}

@@ -288,8 +288,8 @@ class PdfController extends Controller
         $skipExtras = $request->boolean('skip_extra_pages', env('PDF_SKIP_EXTRA_PAGES', false));
         $force = $request->boolean('force', false);
         $cacheTtl = (int)($request->input('cache_ttl', env('PDF_CACHE_TTL', 300)));
-        $token = $matricula['id_cliente'] . '_' . $matricula['id'];
-
+        $token = $matricula['id_cliente'] . '_' . Qlib::zerofill($matricula['id'], 5);
+        $token .= '/1';
         // Metacampos
         $meta = $this->getAllMatriculaMeta($matricula['id']);
 
@@ -446,7 +446,7 @@ class PdfController extends Controller
         // Function-level comment: Data URI conversion disabled globally.
         // PT: Conversão para base64/Data URI desativada; wkhtmltopdf tem 'enable-local-file-access'.
         // EN: Data URI conversion disabled; wkhtmltopdf uses 'enable-local-file-access'.
-        $cta_url = Qlib::getFrontUrl() . '/aluno/matricula/' . $token ?? '';
+        $cta_url = Qlib::getFrontUrl() . '/aluno/assinatura/' . $token ?? '';
 
         $html = View::make('pdf.matricula', [
             'cliente_nome' => $matricula['cliente']['name'] ?? ($matricula['cliente']['nome'] ?? ''),
@@ -688,7 +688,7 @@ class PdfController extends Controller
         // Persistente: mantém comportamento anterior (salva e retorna metadados JSON)
         $post = Post::where('post_type','files_uload')->where('guid',$relative)->first() ?? new Post();
         $post->post_type = 'files_uload';
-        $post->post_title = 'PDF Matrícula #' . Qlib::zeroFill($matricula['id'], 6);
+        $post->post_title = 'PDF Matrícula #' . Qlib::zerofill($matricula['id'], 6);
         $post->post_name = Str::slug($slug);
         $post->post_status = 'publish';
         $post->menu_order = 0;

@@ -33,6 +33,8 @@ class DatabaseSeeder extends Seeder
                     CategorySeeder::class,
                     FinancialCategoriesSeeder::class,
                     OptionsTableSeeder::class,
+                    ZapsignIntegrationSeeder::class,
+                    ZapguruIntegrationSeeder::class,
                     ProductUnitsSeeder::class,
                     EnrollmentSituationsSeeder::class,
                     FunnelStageSeeder::class,
@@ -42,6 +44,7 @@ class DatabaseSeeder extends Seeder
                     TurmasSeeder::class,
                     PeriodosSeeder::class,
                     TipoConteudoSeeder::class,
+                    ContratosSeeder::class,
                     // QoptionSeeder::class,
             ];
 
@@ -53,12 +56,15 @@ class DatabaseSeeder extends Seeder
                     CategorySeeder::class,
                     FinancialCategoriesSeeder::class,
                     OptionsTableSeeder::class,
+                    ZapsignIntegrationSeeder::class,
+                    ZapguruIntegrationSeeder::class,
                     ProductUnitsSeeder::class,
                     EnrollmentSituationsSeeder::class,
                     FunnelStageSeeder::class,
                     AeronavesSeeder::class,
                     AircraftAttendanceSeeder::class,
                     PeriodosSeeder::class,
+                    ContratosSeeder::class,
                     TipoConteudoSeeder::class,
             ];
 

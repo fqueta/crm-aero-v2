@@ -549,7 +549,7 @@ class MatriculaController extends Controller
      * @param int|null $id_cliente Identificador do cliente (opcional)
      * @return array Dados agregados e normalizados da matrícula
      */
-    public function dm(int|string $id, ?int $id_cliente = null): array
+    public function dm(int|string $id, int|string|null $id_cliente = null): array
     {
         $cliente = null;
         if (!is_null($id_cliente)) {
@@ -586,7 +586,7 @@ class MatriculaController extends Controller
         // Parcelamentos já carregados via relação
         $data['parcelamentos'] = $matricula->parcelamentos ? $matricula->parcelamentos->toArray() : [];
         //incluir o campo com link publico da proposta
-        $link = '/aluno/matricula/'.$matricula['id_cliente'].'_'.Qlib::zeroFill($matricula['id'],5).'/1';
+        $link = '/aluno/matricula/'.$matricula['id_cliente'].'_'.Qlib::zerofill($matricula['id'],5).'/1';
         $data['link_orcamento'] = Qlib::qoption('front_url') . $link;
         $data['link_assinatura'] = Qlib::qoption('front_url') . str_replace('matricula','assinatura',$link);
         return $data;
@@ -859,6 +859,8 @@ class MatriculaController extends Controller
     public function publicShow($client_id, $matricula_id)
     {
         try {
+            // Normaliza id da matrícula para inteiro (aceita '00002')
+            $matricula_id = (int) $matricula_id;
             $matricula = Matricula::where('id', $matricula_id)
                 ->where('id_cliente', $client_id)
                 ->firstOrFail();
@@ -950,6 +952,26 @@ class MatriculaController extends Controller
             // Ensure we handle config correctly regardless of cast
             $currentConfig = is_array($client->config) ? $client->config : (is_string($client->config) ? (json_decode($client->config, true) ?? []) : []);
 
+            // Normaliza altura (m) e peso (kg) recebidos em formatos diversos
+            // Accepts values like "1,80", "1.80", "180" (cm) for altura; "64", "64,5" for peso
+            $alturaInput = (string)$request->input('altura', '');
+            $pesoInput   = (string)$request->input('peso', '');
+            $alturaSan   = preg_replace('/[^\d\.,]/', '', $alturaInput ?? '');
+            $pesoSan     = preg_replace('/[^\d\.,]/', '', $pesoInput ?? '');
+            $alturaNum   = (float)str_replace(',', '.', $alturaSan ?? '');
+            $pesoNum     = (float)str_replace(',', '.', $pesoSan ?? '');
+            // Se altura >= 3, assume centímetros e converte para metros
+            if ($alturaNum >= 3) {
+                $alturaNum = $alturaNum / 100.0;
+            }
+            // Grava valores normalizados em config
+            if ($alturaNum > 0) {
+                $currentConfig['altura'] = $alturaNum;
+            }
+            if ($pesoNum > 0) {
+                $currentConfig['peso'] = $pesoNum;
+            }
+
             // Map specific fields to config if they don't exist in users table columns
             // Assuming users table has basic fields, others go to config
             // Based on User model fillable: name, email, cpf, cnpj, celular(maybe via cast/accessors?), genero, etc.
@@ -965,6 +987,10 @@ class MatriculaController extends Controller
 
             foreach ($configFields as $field) {
                 if ($request->has($field)) {
+                    // Evita sobrescrever altura/peso já normalizados acima
+                    if (in_array($field, ['altura','peso'])) {
+                        continue;
+                    }
                     $currentConfig[$field] = $request->input($field);
                 }
             }
@@ -1435,6 +1461,7 @@ class MatriculaController extends Controller
         if(!$dm && $id_matricula){
             $dm = $this->dm($id_matricula);
         }
+        // dd($dm);
         $ret['exec'] = false;
         // $ret['dm'] = $dm;
         $ret['mens'] = 'Matricula de id '.$id_matricula.' não foi encontrada';
@@ -1468,7 +1495,7 @@ class MatriculaController extends Controller
                 $contratos = json_decode($contratosMeta,true);
             }
         }
-        // dd($arr_contratos);
+        // dd($contratos);
         // if($id){
         //     if(!$contratosMeta)
         //         $contratos = $this->contratos_periodos_pdf($id??'');
@@ -1652,8 +1679,11 @@ class MatriculaController extends Controller
                         $nome = $nome_arquivo;
                         // dump($token_envelope,$link,$nome);
                         $ret['anexo'][$k] = $zp->enviar_anexo($token_envelope,$link,$nome);
-                        if(isset($ret['anexo'][$k]['exec']))
+                        if(isset($ret['anexo'][$k]['exec'])){
                             $ret['exec'] = true;
+                            $ret['mens'] = 'Enviado o contrato '.$nome_arquivo.' para a matricula '.$id;
+                        }
+
                     }
 
                 }

@@ -54,4 +54,5 @@ export interface EnrollmentSituationListParams {
   search?: string;
   order?: 'asc' | 'desc';
   sort?: string;
+  slug?: string;
 }

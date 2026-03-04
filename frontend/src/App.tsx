@@ -40,6 +40,9 @@ import Workflows from "./pages/settings/Workflows";
 import WorkflowRules from "./pages/settings/WorkflowRules";
 import WorkflowActions from "./pages/settings/WorkflowActions";
 import WorkflowDesigner from "./pages/settings/WorkflowDesigner";
+import Integrations from "./pages/settings/Integrations";
+import IntegrationsNew from "./pages/settings/IntegrationsNew";
+import IntegrationsEdit from "./pages/settings/IntegrationsEdit";
 import Login from "./pages/auth/Login";
 import Metrics from "./pages/settings/Metrics";
 import AircraftsSettings from "./pages/settings/AircraftsSettings";
@@ -61,10 +64,6 @@ import PublicClientForm from "@/pages/PublicClientForm";
 import ProposalSignature from "@/pages/ProposalSignature";
 import ProposalApproval from "@/pages/ProposalApproval";
 import ProposalApproved from "@/pages/ProposalApproved";
-import PointsStore from "@/pages/loja/PointsStore";
-import ProductDetails from "./pages/loja/ProductDetails";
-import MyRedemptions from "./pages/loja/MyRedemptions";
-import RedemptionDetails from "./pages/loja/RedemptionDetails";
 import ClientArea from "./pages/loja/ClientArea";
 import LandingPage from "./pages/LandingPage";
 /**
@@ -185,26 +184,6 @@ const App = () => {
               <Route path="/aluno/matricula/:compositeId/2/aprovado" element={<ProposalApproved />} />
               
               {/* Rotas da loja - protegidas */}
-              <Route path={link_loja} element={
-                <ProtectedRoute>
-                  <PointsStore linkLoja={link_loja} />
-                </ProtectedRoute>
-              } />
-              <Route path={link_loja + "/produto/:productId"} element={
-                <ProtectedRoute>
-                  <ProductDetails linkLoja={link_loja} />
-                </ProtectedRoute>
-              } />
-              <Route path={link_loja + "/meus-resgates"} element={
-                <ProtectedRoute>
-                  <MyRedemptions linkLoja={link_loja} />
-                </ProtectedRoute>
-              } />
-              <Route path={link_loja + "/resgate/:id"} element={
-                <ProtectedRoute>
-                  <RedemptionDetails linkLoja={link_loja} />
-                </ProtectedRoute>
-              } />
               <Route path={link_loja + "/area-cliente"} element={ 
                 <ProtectedRoute>
                   <ClientArea linkLoja={link_loja} />
@@ -675,6 +654,27 @@ const App = () => {
                     >
                       <SystemSettings />
                     </PermissionGuard>
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/integrations" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <Integrations />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/integrations/new" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <IntegrationsNew />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/integrations/:id/edit" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <IntegrationsEdit />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

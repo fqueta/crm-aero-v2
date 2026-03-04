@@ -145,10 +145,12 @@ export abstract class BaseApiService {
    */
   protected async get<T>(endpoint: string, params?: Record<string, any>): Promise<T> {
     const url = this.buildUrlWithParams(`${this.API_BASE_URL}${endpoint}`, params);
+    console.log('API GET', url);
     const response = await fetch(url, {
       method: 'GET',
       headers: this.getHeaders(),
     });
+    try { console.log('API GET status', response.status); } catch {}
     return this.handleResponse<T>(response);
   }
 
