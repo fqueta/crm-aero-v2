@@ -313,9 +313,9 @@ export default function CourseModulesSelector({
                         />
                       </TableHead>
                       <TableHead>Fase / Módulo</TableHead>
-                      <TableHead className="w-[120px]">Créditos</TableHead>
+                      {!isEtapa1 && <TableHead className="w-[120px]">Créditos</TableHead>}
                       {!isEtapa1 && <TableHead className="w-[350px]">Aeronave</TableHead>}
-                      <TableHead className="w-[120px] text-right">Valor</TableHead>
+                      {!isEtapa1 && <TableHead className="w-[120px] text-right">Valor</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -335,6 +335,7 @@ export default function CourseModulesSelector({
                           <TableCell className="font-medium">
                             {module.titulo || module.nome}
                           </TableCell>
+                          {!isEtapa1 && (
                           <TableCell>
                             <Input 
                               type="number" 
@@ -344,6 +345,7 @@ export default function CourseModulesSelector({
                               disabled={!sel.selected}
                             />
                           </TableCell>
+                          )}
                           {!isEtapa1 && (
                             <TableCell>
                               {hasAircraftOption ? (
@@ -373,6 +375,7 @@ export default function CourseModulesSelector({
                               )}
                             </TableCell>
                           )}
+                          {!isEtapa1 && (
                           <TableCell className="text-right font-medium">
                             {isEtapa1 ? (
                                 <Input
@@ -388,6 +391,7 @@ export default function CourseModulesSelector({
                                 formatCurrencyBRL(sel.price)
                             )}
                           </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}
@@ -397,7 +401,7 @@ export default function CourseModulesSelector({
             </Card>
 
             {/* Campo de Desconto para Etapa 1 */}
-            {isEtapa1 && (
+            {/* {isEtapa1 && (
               <div className="flex justify-end pr-4">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-muted-foreground">Desconto Etapa 1:</span>
@@ -412,7 +416,7 @@ export default function CourseModulesSelector({
                   />
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         );
       })}

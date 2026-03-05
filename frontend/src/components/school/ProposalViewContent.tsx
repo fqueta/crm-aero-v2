@@ -166,6 +166,15 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
     return Array.isArray(list) ? list : undefined;
   }, [enrollment]);
 
+  const etapa1Discount = useMemo(() => {
+    try {
+        const orc = (enrollment as any)?.orc;
+        return Number(orc?.meta?.etapa1_desconto || 0);
+    } catch {
+        return 0;
+    }
+  }, [enrollment]);
+
   const linkAssinatura = (enrollment as any)?.link_assinatura || '';
 
   const parcelamento = useMemo(() => {
@@ -185,15 +194,15 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   return (
     <div className="space-y-6">
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
+        <TabsList className="grid w-full grid-cols-3 lg:w-[600px] print:hidden">
            <TabsTrigger value="overview" asChild><a href="#overview">Visão Geral</a></TabsTrigger>
            <TabsTrigger value="contracts" asChild><a href="#contracts">Contratos</a></TabsTrigger>
            <TabsTrigger value="logs" asChild><a href="#logs">Logs</a></TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6 mt-4">
-            <Card>
-                <CardHeader>
+        <TabsContent value="overview" className="space-y-6 mt-4 print:mt-0 print:space-y-0">
+            <Card className="print:border-0 print:shadow-none">
+                <CardHeader className="print:hidden">
                 <div className="flex items-center justify-between gap-3">
                   <CardTitle>Visualizar Proposta</CardTitle>
                   {status && (
@@ -209,16 +218,16 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                   )}
                 </div>
                 </CardHeader>
-                <CardContent>
-                <div className="space-y-4">
+                <CardContent className="print:p-0">
+                <div className="space-y-4 print:space-y-0">
                     {statusMessage && (
-                      <Alert className={isAssinado ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}>
+                      <Alert className={`print:hidden ${isAssinado ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
                         {isAssinado ? <CheckCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                         <AlertTitle>Status da Proposta</AlertTitle>
                         <AlertDescription>{statusMessage}</AlertDescription>
                       </Alert>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm hidden">
                     <div>
                         <div className="font-medium">Cliente</div>
                         <div>{clientName || '—'}</div>
@@ -239,7 +248,9 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
                     {/* Link para assinatura */}
                     {linkAssinatura && (
+                    <div className="print:hidden">
                     <SignatureLinkCard link={linkAssinatura} />
+                    </div>
                     )}
 
                     <BudgetPreview
@@ -256,6 +267,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                         subtotalMasked={subtotalMasked}
                         totalMasked={totalMasked}
                         validityDate={computeValidityDate(validadeDias)}
+                        etapa1Discount={etapa1Discount}
                     />
 
                     {/* Card de Parcelamento abaixo do card de Proposta Comercial */}

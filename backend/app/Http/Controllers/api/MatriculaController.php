@@ -1867,4 +1867,99 @@ class MatriculaController extends Controller
         }
         return $ret;
     }
+    /**
+     * Metodo para gerar uma simução do valor do comustivel no orçamento
+     */
+    public function simuladorCombustivel($token = null,$dados=false)
+	{
+
+		$ret['exec'] = false;
+		$ret['valor'] = 0;
+		$ret['valor_litro'] = null;
+		$ret['tipo_pagamento'] = '';
+		$ret['color_tipo_pagamento'] = '';
+
+		if($token){
+
+			if(!$dados){
+
+				$dados = $this->dm($token);
+
+			}
+			if(!isset($dados['modulos']) && isset($dados['orc'])){
+				$arr_mod = Qlib::lib_json_array($dados['orc']);
+				if(isset($arr_mod['modulos'])){
+					$dados['modulos'] = $arr_mod['modulos'];
+				}
+			}
+
+			if(isset($dados['modulos']) && is_array($dados['modulos'])){
+
+				$arr_mod = $dados['modulos'];
+
+				$previsao_consumo = NULL;
+				$preco_litro = null;
+				foreach ($arr_mod as $k => $v) {
+					$v['aviao'] = isset($v['aviao'])?$v['aviao']:0;
+					$dAviao = Qlib::buscaValorDb0($GLOBALS['tab54'],'id',$v['aviao'],'config');
+
+					if($dAviao){
+
+						$arr_dAv = Qlib::lib_json_array($dAviao);
+
+						if(isset($arr_dAv['combustivel']['consumo_hora']) && isset($arr_dAv['combustivel']['preco_litro']) && isset($arr_dAv['combustivel']['ativar']) && $arr_dAv['combustivel']['ativar']=='s'){
+
+							$p_litro = Qlib::qoption('preco_litro')?Qlib::qoption('preco_litro'): $arr_dAv['combustivel']['preco_litro'];
+							$preco_litro = Qlib::precoDbdase($p_litro);
+							$consumo = ((int)$arr_dAv['combustivel']['consumo_hora'] * (int)$v['horas']); //
+							$previsao_consumo += ($preco_litro * $consumo);
+						}
+
+					}
+
+				}
+
+				if($previsao_consumo){
+
+					$ret['valor'] = $previsao_consumo;
+					$ret['valor_litro'] = $preco_litro;
+					$ret['tipo_pagamento'] = $this->pagamento_combustivel($token,@$dados['orc']);
+					$ret['exec'] = true;
+					if($ret['tipo_pagamento']=='antecipado'){
+						$ret['color_tipo_pagamento'] = 'text-success';
+					}else{
+						$ret['color_tipo_pagamento'] = 'text-danger';
+					}
+					// if(Qlib::isAdmin(1)){
+					// 	dd($ret);
+					// }
+				}
+
+
+
+			}
+
+		}
+		return $ret;
+	}
+    /**
+	 * Metodo para veridicar a forma de pagamento de comustivel escolhido
+	 * uso $ret = (new Orcamentos)->pagamento_combustivel($token,$org);
+	 */
+	public function pagamento_combustivel($token,$orc=false){
+		$ret = false;
+		if(!$orc && $token){
+            $dm = $this->dm($token);
+            if(isset($dm['orc'])){
+                $orc = $dm['orc'];
+            }
+		}
+		if($orc){
+			$arr_orc = Qlib::lib_json_array($orc);
+			if(isset($arr_orc['sele_pag_combustivel'])){
+				$ret = $arr_orc['sele_pag_combustivel'];
+			}
+		}
+		return $ret;
+	}
 }

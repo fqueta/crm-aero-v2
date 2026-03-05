@@ -109,28 +109,38 @@ export default function BudgetPreview({
       return acc + parseToNumber(mod.valor);
     }, 0);
 
-    const stageTotal = Math.max(0, stageSubtotal - (isEtapa1 ? etapa1Discount : 0));
+    let stageDiscount = 0;
+    let stageTotal = 0;
+
+    if (isEtapa1) {
+        stageDiscount = etapa1Discount;
+        stageTotal = Math.max(0, stageSubtotal - stageDiscount);
+    } else {
+        // Para outras etapas (Etapa 2), aplicamos o desconto global
+        // Assumindo que o desconto global se aplica à Etapa 2 (parte prática)
+        stageDiscount = parseToNumber(discountAmountMasked);
+        stageTotal = Math.max(0, stageSubtotal - stageDiscount);
+    }
 
     return (
       <div key={stageName} className="mb-6">
-        <h3 className="font-semibold text-lg mb-2 pl-1">{stageName}</h3>
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/50">
+            <TableRow className="bg-[#003366] hover:bg-[#003366]">
               {isEtapa1 ? (
                 <>
-                  <TableHead className="w-[50px] text-center">{stageName}</TableHead>
-                  <TableHead>Conteúdo</TableHead>
-                  <TableHead>Aula</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="w-[100px] text-center text-white font-bold whitespace-nowrap">{stageName}</TableHead>
+                  <TableHead className="text-white font-bold">Conteúdo</TableHead>
+                  <TableHead className="text-white font-bold">Aula</TableHead>
+                  {/* <TableHead className="text-right text-white font-bold">Valor</TableHead> */}
                 </>
               ) : (
                 <>
-                  <TableHead>Conteúdo</TableHead>
-                  <TableHead>Etapa</TableHead>
-                  <TableHead>Créditos (Horas)</TableHead>
-                  <TableHead>Aeronave</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="w-[100px] text-white font-bold pl-4 whitespace-nowrap">{stageName}</TableHead>
+                  <TableHead className="text-white font-bold">Conteúdo</TableHead>
+                  <TableHead className="text-white font-bold">Aeronave</TableHead>
+                  <TableHead className="text-center text-white font-bold">Créditos</TableHead>
+                  <TableHead className="text-right text-white font-bold pr-4">Valor</TableHead>
                 </>
               )}
             </TableRow>
@@ -142,59 +152,55 @@ export default function BudgetPreview({
               
               if (isEtapa1) {
                  return (
-                  <TableRow key={`${stageName}-${idx}`}>
+                  <TableRow key={`${stageName}-${idx}`} className="even:bg-muted/10">
                     <TableCell className="text-center font-medium">{idx + 1}</TableCell>
                     <TableCell>{modTitle}</TableCell>
                     <TableCell>Ground School</TableCell>
-                    <TableCell className="text-right">{modValor}</TableCell>
+                    {/* <TableCell className="text-right">{modValor}</TableCell> */}
                   </TableRow>
                  );
               } else {
                 const modCreditos = parseToNumber(mod?.limite);
                 const modAircraft = mod?.aircraft_name || mod?.aviao_nome || '—';
-                const modEtapa = mod?.etapa || '—';
                 return (
-                  <TableRow key={`${stageName}-${idx}`}>
-                    <TableCell className="font-medium">{modTitle}</TableCell>
-                    <TableCell>{modEtapa}</TableCell>
-                    <TableCell>{modCreditos}</TableCell>
+                  <TableRow key={`${stageName}-${idx}`} className="even:bg-muted/10">
+                    <TableCell className="font-medium pl-4">{idx + 8}</TableCell> {/* Numeração continua fictícia ou baseada em index? Imagem mostra 8,9,10... */}
+                    <TableCell>{modTitle}</TableCell>
                     <TableCell>{modAircraft}</TableCell>
-                    <TableCell className="text-right">{modValor}</TableCell>
+                    <TableCell className="text-center">{modCreditos}</TableCell>
+                    <TableCell className="text-right pr-4">{modValor}</TableCell>
                   </TableRow>
                 );
               }
             })}
             
-            {/* Subtotal da Etapa */}
-            <TableRow className="bg-muted/20">
-              <TableCell colSpan={isEtapa1 ? 3 : 4} className="text-right font-medium">
-                Subtotal {stageName}:
-              </TableCell>
-              <TableCell className="text-right font-medium">
-                {formatValue(stageSubtotal)}
-              </TableCell>
+            {/* Footer da Etapa */}
+            {!isEtapa1 && (
+            <TableRow className="bg-[#22c55e] hover:bg-[#22c55e] border-t-0">
+               <TableCell colSpan={isEtapa1 ? 3 : 5} className="p-0 border-0">
+                   <div className="flex flex-col w-full bg-white">
+                        {/* Subtotal */}
+                        <div className="flex justify-end items-center py-1 pr-4 border-b">
+                            <span className="font-bold mr-4 text-sm">Subtotal:</span>
+                            <span className="font-bold text-sm">{formatValue(stageSubtotal)}</span>
+                        </div>
+                        {/* Desconto */}
+                        {stageDiscount > 0 && (
+                            <div className="flex justify-end items-center py-1 pr-4 border-b">
+                                <span className="font-bold mr-4 text-sm text-red-600 uppercase">
+                                    {isEtapa1 ? 'Desconto especial' : (discountLabel || 'Desconto')}:
+                                </span>
+                                <span className="font-bold text-sm text-red-600">- {formatValue(stageDiscount)}</span>
+                            </div>
+                        )}
+                        {/* Total Etapa */}
+                        <div className="flex justify-end items-center py-1 pr-4 bg-muted/10">
+                            <span className="font-bold mr-4 text-sm text-green-600 uppercase">Total {stageName}:</span>
+                            <span className="font-bold text-sm text-green-600">{formatValue(stageTotal)}</span>
+                        </div>
+                   </div>
+               </TableCell>
             </TableRow>
-
-            {/* Desconto específico da Etapa 1 */}
-            {isEtapa1 && etapa1Discount > 0 && (
-              <>
-                <TableRow className="bg-muted/20">
-                  <TableCell colSpan={3} className="text-right font-medium text-red-600">
-                    Desconto especial:
-                  </TableCell>
-                  <TableCell className="text-right font-medium text-red-600">
-                    - {formatValue(etapa1Discount)}
-                  </TableCell>
-                </TableRow>
-                <TableRow className="bg-muted/20">
-                  <TableCell colSpan={3} className="text-right font-bold">
-                    Total {stageName}:
-                  </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatValue(stageTotal)}
-                  </TableCell>
-                </TableRow>
-              </>
             )}
           </TableBody>
         </Table>
@@ -251,34 +257,24 @@ export default function BudgetPreview({
               renderStageTable(stageName, stageModules)
             )}
 
-            {/* Resumo Financeiro Global */}
-             <div className="mt-4 pt-4 border-t">
-               <Table>
-                 <TableBody>
-                   {subtotalMasked && (
-                    <TableRow className="border-b-0">
-                      <TableCell className="font-medium text-right w-full pt-1 pb-1">Subtotal Geral:</TableCell>
-                      <TableCell className="text-right font-medium w-[150px] whitespace-nowrap pt-1 pb-1">{subtotalMasked}</TableCell>
-                    </TableRow>
-                   )}
-                   {discountAmountMasked && (
-                    <TableRow className="border-b-0">
-                      <TableCell className="font-medium text-right w-full pt-1 pb-1">
-                         <span className="text-red-600">{discountLabel}:</span>
-                      </TableCell>
-                      <TableCell className="text-right text-red-600 w-[150px] whitespace-nowrap pt-1 pb-1">
-                        - {discountAmountMasked}
-                      </TableCell>
-                    </TableRow>
-                   )}
-                   {totalMasked && (
-                    <TableRow className="border-b-0">
-                      <TableCell className="font-bold text-right text-lg w-full pt-2">Total do Orçamento:</TableCell>
-                      <TableCell className="text-right font-bold text-lg w-[150px] whitespace-nowrap pt-2">{totalMasked}</TableCell>
-                    </TableRow>
-                   )}
-                 </TableBody>
-               </Table>
+            {/* Resumo Financeiro Global / Total Final */}
+             <div className="mt-0">
+               <div className="bg-[#003366] text-white p-3 flex justify-between items-center rounded-b-lg shadow-md">
+                    <span className="font-bold text-lg pl-2">Valor Total com estimado de combustível:</span>
+                    <span className="font-bold text-xl pr-2">{totalMasked}</span>
+               </div>
+               
+               <div className="mt-4 p-4 border rounded-lg bg-blue-50 text-sm text-blue-900">
+                    <p className="font-bold mb-2">Observações Importantes</p>
+                    <p>Este orçamento possui validade de 7 (sete) dias a contar da data de envio. O valor apresentado poderá ser pago:</p>
+                    <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>À vista, <strong>com desconto</strong> (já aplicado se houver);</li>
+                        <li>Parcelado em até 12x no cartão de crédito (consulte condições).</li>
+                    </ul>
+                    <p className="mt-2">
+                        O custo estimado de combustível para esta proposta é variável. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento.
+                    </p>
+               </div>
              </div>
           </>
         ) : (
