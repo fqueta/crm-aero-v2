@@ -536,7 +536,7 @@
                                         $diasValidade = isset($meta['validade']) && is_numeric($meta['validade']) ? (int)$meta['validade'] : 7;
                                     @endphp
                                      <p style="font-weight: 700; margin: 0 0 4px;">Observações Importantes</p>
-                                     <p style="margin: 0 0 4px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::valor_por_extenso($diasValidade, false, false) }}) dias. O valor apresentado poderá ser pago:</p>
+                                     <p style="margin: 0 0 4px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::convert_number_to_words($diasValidade) }}) dias. O valor apresentado poderá ser pago:</p>
                                      <ul style="margin: 0 0 4px; padding-left: 16px;">
                                          <li>À vista, <strong>com desconto</strong> (já aplicado se houver);</li>
                                          <li>Parcelado em até 12x no cartão de crédito.</li>

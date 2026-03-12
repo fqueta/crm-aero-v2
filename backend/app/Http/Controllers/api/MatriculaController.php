@@ -889,6 +889,7 @@ class MatriculaController extends Controller
             //Verificar se a assinatura ja foi registrada
             $status_assintura_atual = Qlib::get_matriculameta($matricula_id,$this->campos_status_assinatura);
             $is_assinado = Escola::contrato_assinado($matricula_id);
+            // dd($is_assinado);
             $config = is_array($matricula->config) ? $matricula->config : (is_string($matricula->config) ? (json_decode($matricula->config, true) ?? []) : []);
             $step1Done = !empty($config['step1_done']);
             // Redireciona para etapa 2 somente se já concluiu a etapa 1 (para evitar loop)
@@ -1034,6 +1035,15 @@ class MatriculaController extends Controller
 
             $client->fill($fillableUpdates);
             $client->config = $currentConfig; // Laravel will cast to JSON
+
+            // Verifica se tem CPF mas não tem senha
+            if (!empty($client->cpf) && empty($client->password)) {
+                $rawCpf = preg_replace('/[^0-9]/', '', $client->cpf);
+                if (!empty($rawCpf)) {
+                    $client->password = bcrypt($rawCpf);
+                }
+            }
+
             $client->save();
 
             // Mark Step 1 as done in Matricula config

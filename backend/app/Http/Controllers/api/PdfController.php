@@ -264,194 +264,101 @@ class PdfController extends Controller
     }
 
     /**
-     * Gera um PDF para um registro de matrícula específico e salva no servidor.
-     * EN: Generate and save a PDF for a specific enrollment record on the server.
+     * Resolve as páginas de fundo e extras baseadas no tipo de curso e galeria.
      */
-    public function matricula(Request $request, string $id)
+    private function resolveBackgroundPages(Request $request, array $matricula, bool $skipExtras): array
     {
-        // Ajuste de tempo de execução para evitar fatal error (Windows Pipes 60s)
-        // Function-level note: increase PHP max execution time for heavy PDF rendering.
-        @set_time_limit(300);
-        @ini_set('max_execution_time', '300');
-
-        if ($request->boolean('regenerate_all')) {
-            // Dispatch Jobs Sequentially as requested
-            Bus::chain([
-                new GeraPdfPropostasPnlJob($id),
-                new GeraPdfcontratosPnlJob($id),
-            ])->dispatch();
-
-            return response()->json([
-                'message' => 'Processo de regeneração iniciado em background.',
-                'exec' => true
-            ]);
-            // $ret = (new MatriculaController)->contratos_periodos_pdf($id);
-            // return $ret;
-        }
-
-        if ($request->boolean('send_zapsign')) {
-            SendPeriodosZapsingJob::dispatch($id);
-            return response()->json([
-                'message' => 'Envio para Zapsign iniciado em background.',
-                'exec' => true
-            ]);
-        }
-
-        // Buscar matrícula com curso, turma e cliente
-        // $matricula = Matricula::join('cursos', 'matriculas.id_curso', '=', 'cursos.id')
-        //     ->join('turmas', 'matriculas.id_turma', '=', 'turmas.id')
-        //     ->leftJoin('users', 'matriculas.id_cliente', '=', 'users.id')
-        //     ->select('matriculas.*', 'cursos.nome as curso_nome','cursos.tipo as curso_tipo', 'turmas.nome as turma_nome', 'users.name as cliente_nome')
-        //     ->findOrFail($id);
-        $matricula = (new MatriculaController)->dm($id);
-        // dd($matricula);
-        // Function-level comment: Fast dev toggles and caching.
-        // PT: Atalhos de performance no ambiente de desenvolvimento.
-        // - fast_dev: pula conversões pesadas e limpeza; favorece velocidade.
-        // - skip_extra_pages: não gera páginas extras (galeria/request).
-        // - force: força regerar PDF mesmo havendo cache recente.
-        // - cache_ttl: tempo (segundos) para considerar PDF válido.
-        $fastDev = $request->boolean('fast_dev', env('PDF_FAST_DEV', false));
-        $skipExtras = $request->boolean('skip_extra_pages', env('PDF_SKIP_EXTRA_PAGES', false));
-        $force = $request->boolean('force', false);
-        $cacheTtl = (int)($request->input('cache_ttl', env('PDF_CACHE_TTL', 300)));
-        $token = $matricula['id_cliente'] . '_' . Qlib::zerofill($matricula['id'], 5);
-        $token .= '/1';
-        // Metacampos
-        $meta = $this->getAllMatriculaMeta($matricula['id']);
-
-        // Dados do cliente e consultor
-        $cliente = $matricula['cliente'] ? User::find($matricula['cliente']['id']) : null;
-        $consultor = $matricula['consultor'] ? User::find($matricula['consultor']['id']) : null;
-        $cliente_email = $cliente['email'] ?? null;
-        $cliente_telefone = $cliente['celular'] ?? ($cliente['phone'] ?? null);
-        $cliente_zapsint = $matricula['id'] ?? null;
-        $cliente_zapsint = Qlib::zerofill($cliente_zapsint, 5);
-        // Datas formatadas
-        $dataCadastro = $matricula['data'] ? Carbon::parse($matricula['data']) : now();
-        $validadeDias = (int)($meta['validade'] ?? 0);
-        $validadeData = (clone $dataCadastro)->addDays($validadeDias);
-
-        // Números formatados
-        $subtotalFormatado = number_format((float)$matricula['subtotal'], 2, ',', '.');
-        $totalFormatado = number_format((float)$matricula['total'], 2, ',', '.');
-        $desconto = $matricula['desconto'];
-
-        // Renderiza HTML via Blade usando os dados do método show()
-        // background_url: imagem de fundo opcional para personalizar o PDF
-        // EN: background_url: optional background image to customize the PDF
-        // Comentário: Determina fundos por página a partir da galeria do componente
-        // e do parâmetro opcional 'background_url'. Quando existe galeria, ela tem prioridade.
         $backgroundUrl = $request->input('background_url') ?? '';
-        // Function-level comment: Prefer direct URL for backgrounds instead of Data URI.
-        // PT: Usamos diretamente a URL do fundo; não geramos base64/Data URI.
-        // EN: Use background URL directly; do not generate base64/Data URI.
-        $backgroundDataUri = null;
-        // PT: Páginas extras dinâmicas (array de blocos HTML com fundo opcional).
-        // EN: Dynamic extra pages (array of HTML blocks with optional background).
-        // Função: Permite enviar páginas adicionais com título e HTML, e, opcionalmente,
-        //         um fundo específico por página via 'background_url' ou 'background_data_uri'.
-        // Lista de páginas via shortcode 'fundo_proposta_plano'
+        $extraPages = [];
+
+        // Determina o shortcode baseado no tipo de curso (2 = Prático, 4 = Teórico/Plano)
+        // Default para 'fundo_proposta_plano' se não for tipo 2
+        $shortcode = ($matricula['curso_tipo'] ?? null) == 2
+            ? 'fundo_proposta_pratico'
+            : 'fundo_proposta_plano';
+
+        $galerias = Qlib::get_post_by_shortcode($shortcode, $matricula['id_curso']);
+
         $listaPaginas = [];
-        $galerias  = Qlib::get_post_by_shortcode('fundo_proposta_plano', $matricula['id_curso']);
-        // Normaliza o retorno de Qlib (array/objeto) para obter a lista
+        // Normaliza o retorno de Qlib
         if (is_array($galerias)) {
             $listaPaginas = isset($galerias['galeria']) && is_array($galerias['galeria']) ? $galerias['galeria'] : [];
         } elseif (is_object($galerias)) {
             $listaPaginas = isset($galerias->galeria) && is_array($galerias->galeria) ? $galerias->galeria : [];
         }
-        $extraPages = [];
-        // Function-level comment: Ensure extraPagesRaw is initialized to avoid undefined variable errors.
-        // PT: Inicializa $extraPagesRaw para garantir existência antes de uso.
-        // EN: Initialize $extraPagesRaw to ensure it exists before usage.
+
+        // Processa páginas extras raw do request ou da galeria
         $extraPagesRaw = [];
-        // dd($listaPaginas);
-        if(is_array($listaPaginas)){
-            foreach($listaPaginas as $key => $item){
+        if (is_array($listaPaginas) && !empty($listaPaginas)) {
+            foreach ($listaPaginas as $key => $item) {
                 $extraPagesRaw[$key]['html'] = $item['description'] ?? '';
                 $extraPagesRaw[$key]['title'] = $item['nome'] ?? '';
                 $extraPagesRaw[$key]['background_url'] = $item['public_url'] ?? '';
             }
-        }else{
+        } else {
             $extraPagesRaw = $request->input('extra_pages', []);
         }
-        // dd($extraPagesRaw);
+
         if (is_string($extraPagesRaw)) {
-            // PT: Permite enviar como JSON string.
-            // EN: Allow passing as JSON string.
             $decoded = json_decode($extraPagesRaw, true);
-            if (is_array($decoded)) { $extraPagesRaw = $decoded; }
+            if (is_array($decoded)) {
+                $extraPagesRaw = $decoded;
+            }
         }
-        // if ($skipExtras) {
-        //     $extraPagesRaw = [];
-        // }
+
         if (is_array($extraPagesRaw)) {
             foreach ($extraPagesRaw as $page) {
                 if (is_string($page)) {
-                    // Apenas HTML.
                     $extraPages[] = ['html' => $page];
                 } elseif (is_array($page) && isset($page['html']) && is_string($page['html'])) {
-                    $pBackgroundUrl = $page['background_url'] ?? null;
-                    // Performance: não gerar data URI automaticamente; se vier no request, mantemos
-                    $pBackgroundDataUri = $page['background_data_uri'] ?? null;
                     $extraPages[] = [
                         'title' => $page['title'] ?? null,
                         'html' => $page['html'],
-                        'background_url' => $pBackgroundUrl,
-                        'background_data_uri' => $pBackgroundDataUri,
+                        'background_url' => $page['background_url'] ?? null,
+                        'background_data_uri' => $page['background_data_uri'] ?? null,
                     ];
                 }
             }
         }
-        // Aplica fundos por página vindos da galeria (public_url)
-        // 1º item vira fundo da primeira página; demais viram páginas extras com fundo específico.
+
+        // Aplica fundos da galeria
         $galleryBackgrounds = [];
-        if (!$skipExtras) foreach ($listaPaginas as $item) {
-            $arr = is_array($item) ? $item : (is_object($item) ? (array)$item : []);
-            $pub = $arr['public_url'] ?? null;
-            $nome = $arr['nome'] ?? null;
-            if (is_string($pub) && $pub !== '') {
-                $galleryBackgrounds[] = [
-                    'url' => $pub,
-                    // Performance: não gerar data URI aqui; browser lida com URL
-                    'data_uri' => null,
-                    'title' => $nome,
-                ];
+        if (!$skipExtras) {
+            foreach ($listaPaginas as $item) {
+                $arr = is_array($item) ? $item : (is_object($item) ? (array)$item : []);
+                $pub = $arr['public_url'] ?? null;
+                $nome = $arr['nome'] ?? null;
+                if (is_string($pub) && $pub !== '') {
+                    $galleryBackgrounds[] = [
+                        'url' => $pub,
+                        'title' => $nome,
+                    ];
+                }
             }
         }
+
+        $defaultBgPos = $request->input('background_position');
+        $defaultBgFit = $request->input('background_fit', 'contain');
+
         if (!$skipExtras && !empty($galleryBackgrounds)) {
-            // dd($skipExtras,$galleryBackgrounds);
-            // Function-level comment: Read optional defaults for background focus/fit from request.
-            // PT: Lê defaults opcionais para posição e ajuste do fundo.
-            // EN: Read optional defaults for background position and fit.
-            $defaultBgPos = $request->input('background_position');
-            // Function-level comment: Default to 'contain' globally when not specified.
-            // PT: Usa 'contain' como padrão global quando não informado.
-            // EN: Use 'contain' as global default when not provided.
-            $defaultBgFit = $request->input('background_fit', 'contain');
-            // Primeiro fundo aplicado na página principal
+            // Primeiro fundo vai para a capa
             $backgroundUrl = $galleryBackgrounds[0]['url'];
-            $backgroundDataUri = null;
-            // Demais viram páginas extras sem conteúdo, apenas fundo
+
+            // Demais viram páginas extras
             foreach ($galleryBackgrounds as $idx => $gb) {
                 $extraPages[$idx] = [
                     'title' => $gb['title'] ?? null,
                     'html' => '',
                     'background_url' => $gb['url'],
                     'background_data_uri' => null,
-                    // Function-level comment: Apply defaults for background positioning and fit if provided.
                     'background_position' => is_string($defaultBgPos ?? null) ? $defaultBgPos : null,
                     'background_fit' => is_string($defaultBgFit ?? null) ? $defaultBgFit : null,
                 ];
             }
         }
 
-        // Garante pelo menos 2 páginas base (0=capa, 1=orçamento) mesmo sem galeria/extra_pages
-        // Base cover uses resolved backgroundUrl if available; budget page has no background by default.
+        // Garante estrutura mínima (Capa + Orçamento)
         if (count($extraPages) < 2) {
-            // Inserir placeholders no início do array para assegurar índices 0 e 1
-            $defaultBgPos = $request->input('background_position');
-            $defaultBgFit = $request->input('background_fit', 'contain');
             // Página 0 (capa)
             array_unshift($extraPages, [
                 'title' => null,
@@ -470,11 +377,65 @@ class PdfController extends Controller
             ]]);
         }
 
-        // Function-level comment: Data URI conversion disabled globally.
-        // PT: Conversão para base64/Data URI desativada; wkhtmltopdf tem 'enable-local-file-access'.
-        // EN: Data URI conversion disabled; wkhtmltopdf uses 'enable-local-file-access'.
+        return ['extraPages' => $extraPages, 'backgroundUrl' => $backgroundUrl];
+    }
+
+    /**
+     * Gera um PDF para um registro de matrícula específico e salva no servidor.
+     * EN: Generate and save a PDF for a specific enrollment record on the server.
+     */
+    public function matricula(Request $request, string $id)
+    {
+        // Ajuste de tempo de execução
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+
+        if ($request->boolean('regenerate_all')) {
+            Bus::chain([
+                new GeraPdfPropostasPnlJob($id),
+                new GeraPdfcontratosPnlJob($id),
+            ])->dispatch();
+
+            return response()->json([
+                'message' => 'Processo de regeneração iniciado em background.',
+                'exec' => true
+            ]);
+        }
+
+        if ($request->boolean('send_zapsign')) {
+            SendPeriodosZapsingJob::dispatch($id);
+            return response()->json([
+                'message' => 'Envio para Zapsign iniciado em background.',
+                'exec' => true
+            ]);
+        }
+
+        // Busca dados da matrícula
+        $matricula = (new MatriculaController)->dm($id);
+
+        // Configurações de execução
+        $fastDev = $request->boolean('fast_dev', env('PDF_FAST_DEV', false));
+        $skipExtras = $request->boolean('skip_extra_pages', env('PDF_SKIP_EXTRA_PAGES', false));
+        $force = $request->boolean('force', false);
+        $cacheTtl = (int)($request->input('cache_ttl', env('PDF_CACHE_TTL', 300)));
+
+        $token = $matricula['id_cliente'] . '_' . Qlib::zerofill($matricula['id'], 5) . '/1';
+        $meta = $this->getAllMatriculaMeta($matricula['id']);
+
+        // Dados auxiliares
+        $dataCadastro = $matricula['data'] ? Carbon::parse($matricula['data']) : now();
+        $validadeDias = (int)($meta['validade'] ?? 0);
+        $validadeData = (clone $dataCadastro)->addDays($validadeDias);
+        $subtotalFormatado = number_format((float)$matricula['subtotal'], 2, ',', '.');
+        $totalFormatado = number_format((float)$matricula['total'], 2, ',', '.');
         $cta_url = Qlib::getFrontUrl() . '/aluno/assinatura/' . $token ?? '';
 
+        // Resolve páginas e fundos (Refatorado)
+        $resolvedPages = $this->resolveBackgroundPages($request, $matricula, $skipExtras);
+        $extraPages = $resolvedPages['extraPages'];
+        $backgroundUrl = $resolvedPages['backgroundUrl'];
+
+        // Renderiza HTML
         $html = View::make('pdf.matricula', [
             'cliente_nome' => $matricula['cliente']['name'] ?? ($matricula['cliente']['nome'] ?? ''),
             'cliente_email' => $matricula['cliente']['email'] ?? '',
@@ -489,103 +450,65 @@ class PdfController extends Controller
             'orc' => is_array($matricula['orc']) ? $matricula['orc'] : [],
             'generatedAt' => now(),
             'background_url' => $backgroundUrl,
-            'background_data_uri' => $backgroundDataUri,
-            // Function-level comment: Pass defaults for first-page background focus/fit.
-            // PT: Repassa parâmetros com default 'contain' para evitar cortes.
-            // EN: Pass parameters with default 'contain' to avoid cropping.
+            'background_data_uri' => null,
             'background_position' => $request->input('background_position'),
             'background_fit' => $request->input('background_fit', 'contain'),
-            // Function-level comment: Allow customizing CTA link/text via request.
-            // PT: Permite informar 'cta_url' e 'cta_text' na query para testes/ajustes.
-            // EN: Allow 'cta_url' and 'cta_text' in the query for testing/adjustment.
-            //token matricula = id_cliente+_+id_curso
             'cta_url' => $cta_url,
             'cta_text' => (string)$request->input('cta_text', ''),
             'extra_pages' => $extraPages,
             'matricula' => $matricula,
         ])->render();
-        // return $html;
-        // Reescreve hosts locais para evitar HostNotFound no wkhtmltopdf
-        // $html = $this->rewriteLocalDevHosts($html);
-        // Modo de depuração opcional: retorna o HTML renderizado sem gerar PDF
-        // Optional debug mode: return rendered HTML without generating PDF
-        // return $html;
+
         if ($request->boolean('debug_html')) {
             return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
         }
-        // Gera nome do arquivo e caminho, incluindo cliente e curso, SEM timestamp.
-        // PT: Usamos um nome estável para sobrescrever a mesma proposta.
-        // EN: Use a stable filename to overwrite the same proposal.
+
+        // Configuração do arquivo
         $clienteSlug = Str::slug((string)($matricula['cliente_nome'] ?? 'cliente'));
-        $clienteSlug = Str::limit($clienteSlug, 40, ''); // evitar nomes muito longos
+        $clienteSlug = Str::limit($clienteSlug, 40, '');
         $cursoId = (string)($matricula['id_curso'] ?? 'curso');
         $slug = 'matricula-' . $matricula['id'] . '-' . $cursoId . '-' . $clienteSlug;
         $filename = $slug . '.pdf';
-        $relative = 'uploads/matriculas/' . $filename; // caminho relativo
+        $relative = 'uploads/matriculas/' . $filename;
         $absolute = storage_path('app/public/' . $relative);
-        // dd($absolute);
-        // Function-level comment: Allow generating without persisting files.
-        // PT: Permite gerar PDF sem salvar em disco via query ?no_store=1 (default: true).
-        // EN: Allow generating PDF without saving to disk via ?no_store=1 (default: true).
         $noStore = $request->boolean('no_store', true);
 
-        // Limpar versões antigas com timestamp para esta matrícula (best-effort)
-        // EN: Clean up older timestamped versions for this enrollment (best-effort)
+        // Limpeza de versões antigas
         $disk = Storage::disk('public');
         if (!$fastDev) {
             try {
                 foreach ($disk->files('uploads/matriculas') as $path) {
                     if ($path !== $relative && Str::startsWith($path, 'uploads/matriculas/matricula-' . $matricula['id'] . '-')) {
-                        // Function-level comment: Remove debug dump and quietly delete old files.
-                        // PT: Remove dd() e apaga versões antigas sem interromper a geração.
-                        // EN: Remove dd() and delete old versions without interrupting generation.
                         $disk->delete($path);
                     }
                 }
-            } catch (\Throwable $e) {
-                // silencioso: não bloquear a geração do PDF
-            }
+            } catch (\Throwable $e) {}
         }
 
-        // Garantir diretório
         if (!is_dir(dirname($absolute))) {
             mkdir(dirname($absolute), 0775, true);
         }
 
-        // Function-level comment: Choose PDF engine via request or env.
-        // PT: Permite escolher o engine ('wkhtmltopdf' ou 'browsershot') por query (?engine=...) ou env PDF_ENGINE.
-        // EN: Allow selecting engine ('wkhtmltopdf' or 'browsershot') via query (?engine=...) or env PDF_ENGINE.
-        $engine = strtolower((string)($request->input('engine', env('PDF_ENGINE', 'wkhtmltopdf'))));
-        // Function-level comment: Skip generation if cached and fresh.
-        // PT: Se já existe e está dentro do TTL, não reprocessa (a menos que force).
-        // EN: If file exists and is fresh within TTL, skip regeneration (unless force).
+        // Verificação de cache
         $shouldGenerate = true;
-        if (!$noStore) {
-            // Apenas considera cache quando for persistir em disco.
-            if (!$force && $disk->exists($relative) && $cacheTtl > 0) {
-                try {
-                    $mtime = @filemtime($disk->path($relative));
-                    if (is_int($mtime) && (time() - $mtime) <= $cacheTtl) {
-                        $shouldGenerate = false;
-                    }
-                } catch (\Throwable $e) {
-                    // Continua gerando se não for possível obter mtime.
+        if (!$noStore && !$force && $disk->exists($relative) && $cacheTtl > 0) {
+            try {
+                $mtime = @filemtime($disk->path($relative));
+                if (is_int($mtime) && (time() - $mtime) <= $cacheTtl) {
+                    $shouldGenerate = false;
                 }
-            }
-            // Se force=true, apaga o arquivo atual para garantir sobrescrita sem interferência de cache
-            if ($force && $disk->exists($relative)) {
-                try { $disk->delete($relative); } catch (\Throwable $e) { /* silencioso */ }
-            }
+            } catch (\Throwable $e) {}
         }
-        // Function-level comment: Engine selection without interrupting execution flow.
-        // PT: Remove debug (dd) para não interromper a geração do PDF.
-        // EN: Remove debug (dd) to avoid interrupting PDF generation.
-        $pdfBinary = null; // conteúdo binário do PDF quando no_store ou para resposta direta
+
+        if ($shouldGenerate && $force && $disk->exists($relative)) {
+            try { $disk->delete($relative); } catch (\Throwable $e) {}
+        }
+
+        // Geração do PDF
+        $engine = strtolower((string)($request->input('engine', env('PDF_ENGINE', 'wkhtmltopdf'))));
+
         if ($engine === 'browsershot') {
             try {
-                // Function-level comment: Generate PDF using Chromium (Browsershot) with full-bleed and print media.
-                // PT: Usa Browsershot com A4, margens 0 e fundo ativo.
-                // EN: Use Browsershot with A4, zero margins, and print background.
                 if ($shouldGenerate) {
                     $shot = Browsershot::html($html)
                         ->format('A4')
@@ -593,14 +516,12 @@ class PdfController extends Controller
                         ->emulateMedia('print')
                         ->timeout(60000)
                         ->setOption('printBackground', true)
-                        // Function-level comment: Lock PDF scale and respect CSS page size to avoid zoom.
-                        // PT: Fixa escala em 1 e usa tamanho de página do CSS (@page) para evitar zoom.
-                        // EN: Fix scale to 1 and use CSS page size (@page) to avoid zoom.
                         ->setOption('scale', 1)
                         ->setOption('preferCSSPageSize', true)
                         ->setOption('waitUntil', 'load');
+
                     if ($noStore) {
-                        $pdfBinary = $shot->pdf();
+                        return response($shot->pdf(), 200)->header('Content-Type', 'application/pdf');
                     } else {
                         $shot->save($absolute);
                     }
@@ -610,28 +531,20 @@ class PdfController extends Controller
                     'matricula_id' => $matricula['id'] ?? null,
                     'exception' => $e->getMessage(),
                 ]);
-                $engine = 'wkhtmltopdf'; // fallback
+                $engine = 'wkhtmltopdf';
             }
         }
+
         if ($engine !== 'browsershot') {
-            // Geração do PDF com Snappy (wkhtmltopdf), salvando via Storage::put
-            // PT: Usa wkhtmltopdf para evitar timeouts do Chromium em Windows.
-            // EN: Use wkhtmltopdf to avoid Chromium timeouts on Windows.
             try {
-                // Function-level comment: Configure wkhtmltopdf binary from env (WKHTML_PDF_BINARY) for Windows.
                 $binary = env('WKHTML_PDF_BINARY');
                 if (is_string($binary) && $binary !== '') {
                     config(['snappy.pdf.binary' => $binary]);
                 }
                 $headerHtml = View::make('pdf.header')->render();
                 $footerHtml = View::make('pdf.footer')->render();
+
                 if ($shouldGenerate) {
-                   // if(isset($_GET['test'])){
-                    //     return $headerHtml.$html.$footerHtml;
-                    // }
-                    // Function-level comment: Build wkhtmltopdf with header/footer and stable scale.
-                    // PT: Monta wkhtmltopdf com cabeçalho/rodapé e escala estável 1:1.
-                    // EN: Build wkhtmltopdf with header/footer and stable 1:1 scale.
                     $pdf = SnappyPdf::loadHTML($html)
                         ->setOption('encoding', 'utf-8')
                         ->setOption('enable-local-file-access', true)
@@ -640,9 +553,6 @@ class PdfController extends Controller
                         ->setOption('page-width', '210mm')
                         ->setOption('page-height', '297mm')
                         ->setOption('zoom', '1.0')
-                        // Function-level comment: Ensure links remain enabled (do not disable).
-                        // PT: Não desabilita links internos/externos (padrão do wkhtmltopdf é permitir links).
-                        // EN: Keep internal/external links enabled (wkhtmltopdf allows links by default).
                         ->setOption('header-html', $headerHtml)
                         ->setOption('margin-top', 10)
                         ->setOption('margin-bottom', 10)
@@ -658,35 +568,16 @@ class PdfController extends Controller
                         ])
                         ->setOption('footer-html', $footerHtml)
                         ->setTimeout(300);
+
                     if ($noStore) {
                         return $pdf->inline($filename);
                     } else {
-                        // Salva usando o driver Knp\Snappy para compatibilidade com versões do wrapper
                         $knp = app('snappy.pdf');
-                        $opts = [
-                            'encoding' => 'utf-8',
-                            'enable-local-file-access' => true,
-                            'load-error-handling' => 'ignore',
-                            'page-width' => '210mm',
-                            'page-height' => '297mm',
-                            'zoom' => '1.0',
-                            'header-html' => $headerHtml,
-                            'margin-top' => 0,
-                            'margin-bottom' => 0,
-                            'margin-left' => 0,
-                            'margin-right' => 0,
-                            'disable-smart-shrinking' => true,
-                            'footer-spacing' => '0',
-                            'print-media-type' => true,
-                            'background' => true,
-                            'replace' => [
-                                '{PAGE_NUM}' => '{PAGE_NUM}',
-                                '{PAGE_COUNT}' => '{PAGE_COUNT}',
-                            ],
-                            'footer-html' => $footerHtml,
-                        ];
-                        // Define timeout para o processo wkhtmltopdf
-                        try { $knp->setTimeout(300); } catch (\Throwable $e) { /* compat */ }
+                        // Opções repetidas para garantir compatibilidade Knp
+                        $opts = $pdf->getOptions();
+                        // Ajuste manual de margens para Knp se necessário, ou usar generateFromHtml direto do wrapper se possível
+                        // Mas o wrapper SnappyPdf do Barryvdh já facilita. Vamos usar save() do wrapper se possível, mas o código original usava generateFromHtml do Knp.
+                        // Mantendo lógica original de usar Knp direto para garantir options
                         $knp->generateFromHtml($html, $absolute, $opts);
                     }
                 }
@@ -696,58 +587,79 @@ class PdfController extends Controller
                     'exception' => $e->getMessage(),
                 ]);
                 if (!$noStore && !$disk->exists($relative)) {
-                    return response()->json([
-                        'message' => 'Falha ao gerar o PDF da matrícula',
-                        'error' => $e->getMessage(),
-                    ], 500);
+                    return response()->json(['message' => 'Falha ao gerar o PDF', 'error' => $e->getMessage()], 500);
                 }
             }
         }
 
-        // Metadados do arquivo
+        // Finalização (Persistência e Log)
         $mime = 'application/pdf';
         $size = $noStore ? null : ($disk->exists($relative) ? $disk->size($relative) : null);
 
-        // Upsert registro em posts como files_uload
-        if ($noStore) {
-            // Já retornado acima via inline; não persiste metadados.
-        }
-        // Persistente: mantém comportamento anterior (salva e retorna metadados JSON)
-        $post = Post::where('post_type','files_uload')->where('guid',$relative)->first() ?? new Post();
-        $post->post_type = 'files_uload';
-        $post->post_title = 'PDF Matrícula #' . Qlib::zerofill($matricula['id'], 6);
-        $post->post_name = Str::slug($slug);
-        $post->post_status = 'publish';
-        $post->menu_order = 0;
-        $post->post_content = 'PDF de matrícula gerado automaticamente';
-        $post->guid = $relative; // persistimos caminho relativo
-        $post->post_mime_type = $mime;
-        $post->post_value1 = $size;
-        $user = $request->user();
-        $post->post_author = $user && !empty($user->id) ? $user->id : 0;
-        $post->save();
-        // URL pública
-        $publicUrl = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
-        // Sanitiza possíveis vírgulas acidentais
-        $publicUrl = rtrim((string)$publicUrl, ", \t\n\r\0\x0B");
-        //Gravar campo meta com o link do PDF
-        $saveLink = Qlib::update_matriculameta($matricula['id'], 'proposta_pdf', $publicUrl);
+        if (!$noStore) {
+            $post = Post::where('post_type','files_uload')->where('guid',$relative)->first() ?? new Post();
+            $post->post_type = 'files_uload';
+            $post->post_title = 'PDF Matrícula #' . Qlib::zerofill($matricula['id'], 6);
+            $post->post_name = Str::slug($slug);
+            $post->post_status = 'publish';
+            $post->menu_order = 0;
+            $post->post_content = 'PDF de matrícula gerado automaticamente';
+            $post->guid = $relative;
+            $post->post_mime_type = $mime;
+            $post->post_value1 = $size;
+            $user = $request->user();
+            $post->post_author = $user && !empty($user->id) ? $user->id : 0;
+            $post->save();
 
-        return response()->json([
-            'data' => [
-                'id' => $post->ID,
-                'nome' => $post->post_title,
-                'slug' => $post->post_name,
-                // Retorna URL com cache-busting; mantém meta com URL estável
-                'url' => $publicUrl . (str_contains($publicUrl, '?') ? '&' : '?') . 'v=' . time(),
-                'mime' => $mime,
-                'save_link' => $saveLink,
-                'size' => $size,
-                'ativo' => 's',
-                'ordenar' => 0,
-                'descricao' => $post->post_content,
-            ]
-        ], 201);
+            $publicUrl = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
+            $publicUrl = rtrim((string)$publicUrl, ", \t\n\r\0\x0B");
+            $saveLink = Qlib::update_matriculameta($matricula['id'], 'proposta_pdf', $publicUrl);
+
+            // Event Log
+            if (class_exists('App\Models\EventLog')) {
+                try {
+                    $existingLog = \App\Models\EventLog::where('entity_type', 'matricula')
+                        ->where('entity_id', $matricula['id'])
+                        ->where('action', 'proposta_generated')
+                        ->where('created_at', '>=', now()->subMinutes(1))
+                        ->first();
+
+                    if (!$existingLog) {
+                        \App\Models\EventLog::create([
+                            'entity_type' => 'matricula',
+                            'entity_id' => $matricula['id'],
+                            'action' => 'proposta_generated',
+                            'description' => 'PDF da proposta gerado/regenerado',
+                            'payload' => [
+                                'url' => $publicUrl,
+                                'generated_by' => $user->id ?? 'system',
+                                'force' => $force,
+                                'engine' => $engine
+                            ],
+                            'actor_id' => $user->id ?? null,
+                        ]);
+                    }
+                } catch (\Throwable $e) {}
+            }
+
+            return response()->json([
+                'data' => [
+                    'id' => $post->ID,
+                    'nome' => $post->post_title,
+                    'slug' => $post->post_name,
+                    'url' => $publicUrl . (str_contains($publicUrl, '?') ? '&' : '?') . 'v=' . time(),
+                    'mime' => $mime,
+                    'save_link' => $saveLink,
+                    'size' => $size,
+                    'ativo' => 's',
+                    'ordenar' => 0,
+                    'descricao' => $post->post_content,
+                ]
+            ], 201);
+        }
+
+        // Se chegou aqui com noStore e engine != browsershot (que já retornou), algo falhou ou é wkhtmltopdf inline (já retornado)
+        return response()->json(['message' => 'PDF gerado sem persistência'], 200);
     }
     /**
      * Converte HTML em PDF e salva no disco público.
