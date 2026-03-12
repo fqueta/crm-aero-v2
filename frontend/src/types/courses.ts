@@ -54,6 +54,7 @@ export interface CourseConfig {
   proximo_curso: string;
   gratis: 's' | 'n';
   comissao: string; // ex: "3,00"
+  taxas?: Array<{ titulo: string; valor: string }>;
   tx2: Array<{ name_label: string; name_valor: string }>;
   tipo_desconto_taxa: 'v' | 'p';
   desconto_taxa: string; // ex: "10,00" ou vazio

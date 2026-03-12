@@ -22,8 +22,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Save, CheckCircle, Plus } from 'lucide-react';
+import { ArrowLeft, FileText, Save, CheckCircle, Plus, Pencil } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
+
+const DEFAULT_FUEL_TEXT = `<p>O custo estimado de combustível para esta proposta é de <strong>{valor}</strong>. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento. O cálculo final será baseado no preço vigente na data em que o combustível for abastecido, sendo assim, esse valor pode variar.</p>`;
 import SelectGeraValor from '@/components/school/SelectGeraValor';
 import { currencyApplyMask, currencyRemoveMaskToNumber, currencyRemoveMaskToString } from '@/lib/masks/currency';
 import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
@@ -68,6 +71,7 @@ const proposalSchema = z.object({
   // Novo campo do formulário para meta.texto_desconto
   // New form field backing meta.texto_desconto
   meta_texto_desconto: z.string().optional(),
+  meta_texto_combustivel: z.string().optional(),
   id: z.string().optional(),
 });
 
@@ -128,6 +132,16 @@ export default function ProposalsCreate() {
   const [quickPhone, setQuickPhone] = useState('');
   const [quickConsultantId, setQuickConsultantId] = useState('');
   const [quickClientLoading, setQuickClientLoading] = useState(false);
+
+  const [isFuelTextOpen, setIsFuelTextOpen] = useState(false);
+
+  const handleOpenFuelText = () => {
+      const current = form.getValues('meta_texto_combustivel');
+      if (!current) {
+          form.setValue('meta_texto_combustivel', DEFAULT_FUEL_TEXT);
+      }
+      setIsFuelTextOpen(true);
+  };
 
   /**
    * handleQuickClientSubmit
@@ -218,6 +232,7 @@ export default function ProposalsCreate() {
     // Valor padrão vazio para meta.texto_desconto
     // Default empty value for meta.texto_desconto
     meta_texto_desconto: '',
+    meta_texto_combustivel: '',
     id: '',
   },
   });
@@ -870,6 +885,7 @@ export default function ProposalsCreate() {
          * en-US: Free text displayed alongside discount (optional).
          */
         texto_desconto: values.meta_texto_desconto || '',
+        texto_combustivel: values.meta_texto_combustivel || '',
         // pt-BR: Preço normalizado (sem máscara), útil para processamento no backend
         // en-US: Normalized price (unmasked), useful for backend processing
         gera_valor_preco: geraValorPreco,
@@ -1324,7 +1340,12 @@ export default function ProposalsCreate() {
                 <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                   {String(selectedCourse?.tipo) === '2' ? (
                     <div className="space-y-2">
-                        <FormLabel>Módulos do Curso (Selecione as fases)</FormLabel>
+                        <div className="flex items-center justify-between">
+                            <FormLabel>Módulos do Curso (Selecione as fases)</FormLabel>
+                            <Button variant="ghost" size="sm" type="button" onClick={handleOpenFuelText}>
+                                <Pencil className="w-3 h-3 mr-1" /> Editar Texto Combustível
+                            </Button>
+                        </div>
                         <CourseModulesSelector
                             course={selectedCourseNormalized}
                             aircrafts={allAircraft}
@@ -1476,8 +1497,40 @@ export default function ProposalsCreate() {
                 subtotalMasked={form.watch('subtotal') || ''}
                 totalMasked={form.watch('total') || ''}
                 validityDate={computeValidityDate(form.watch('validade'))}
+                validityDays={form.watch('validade')}
                 etapa1Discount={form.watch('etapa1_desconto') || 0}
+                inscricaoMasked={form.watch('inscricao') || ''}
+                fuelExternalText={form.watch('meta_texto_combustivel')}
               />
+
+              <Dialog open={isFuelTextOpen} onOpenChange={setIsFuelTextOpen}>
+                  <DialogContent className="max-w-3xl">
+                      <DialogHeader>
+                          <DialogTitle>Editar Texto de Estimativa de Combustível</DialogTitle>
+                          <DialogDescription>
+                              Personalize o texto exibido na seção de combustível. Use <strong>{'{valor}'}</strong> onde deseja que o valor calculado apareça.
+                          </DialogDescription>
+                      </DialogHeader>
+                      <FormField
+                          control={form.control}
+                          name="meta_texto_combustivel"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormControl>
+                                      <RichTextEditor
+                                          value={field.value || ''}
+                                          onChange={field.onChange}
+                                          placeholder="Digite o texto personalizado"
+                                      />
+                                  </FormControl>
+                              </FormItem>
+                          )}
+                      />
+                      <DialogFooter>
+                          <Button onClick={() => setIsFuelTextOpen(false)}>Concluir</Button>
+                      </DialogFooter>
+                  </DialogContent>
+              </Dialog>
 
               {/* Espaço para o rodapé fixo não cobrir o conteúdo */}
               <div className="h-16" />

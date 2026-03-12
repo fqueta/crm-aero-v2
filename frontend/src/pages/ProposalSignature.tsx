@@ -4,13 +4,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Check, ArrowRight, X, CheckCircle, Clock } from 'lucide-react';
+import { Loader2, Check, ArrowRight, X, CheckCircle, Clock, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { proposalService, ProposalData, SignProposalData } from '@/services/proposalService';
+import BudgetPreview from '@/components/school/BudgetPreview';
 import { useCep } from '@/hooks/useCep';
 import { cpfApplyMask } from '@/lib/masks/cpf-apply-mask';
 import { phoneApplyMask } from '@/lib/masks/phone-apply-mask';
@@ -60,6 +61,7 @@ export default function ProposalSignature() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [proposal, setProposal] = useState<ProposalData | null>(null);
+  const [showBudget, setShowBudget] = useState(false);
   
   const { fetchCep, loading: loadingCep } = useCep();
 
@@ -316,9 +318,21 @@ export default function ProposalSignature() {
                 )}
                 <div>
                   <Label className="text-muted-foreground">Valor Total</Label>
-                  <p className="text-lg font-medium">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proposal.total)}
-                  </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <p className="text-lg font-medium">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proposal.total)}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-blue-600 hover:text-blue-800 border-blue-200 bg-blue-50 hover:bg-blue-100 sm:ml-4"
+                      onClick={() => setShowBudget(!showBudget)}
+                      type="button"
+                    >
+                      {showBudget ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                      {showBudget ? 'Ocultar Detalhes' : 'Ver Detalhes'}
+                    </Button>
+                  </div>
                 </div>
               </div>
               
@@ -377,6 +391,30 @@ export default function ProposalSignature() {
               )}
             </CardContent>
           </Card>
+
+          {showBudget && (
+            <Card className="animate-in fade-in slide-in-from-top-4 duration-300">
+              <CardHeader>
+                <CardTitle>Detalhamento do Orçamento</CardTitle>
+                <CardDescription>Confira os itens inclusos na sua proposta</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <BudgetPreview
+                  clientName={proposal.cliente?.name || ''}
+                  course={{
+                    ...(proposal as any).curso,
+                    nome: proposal.curso_nome,
+                    tipo: (proposal as any).curso_tipo,
+                  }}
+                  modules={(proposal as any).orc?.modulos || []}
+                  totalMasked={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proposal.total)}
+                  fuelExternalText={(proposal as any).meta?.texto_combustivel}
+                  validityDays={(proposal as any).validade}
+                  etapa1Discount={(proposal as any).desconto}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Student Form */}
           <Form {...form}>

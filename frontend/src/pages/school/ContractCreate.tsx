@@ -28,6 +28,9 @@ export default function ContractCreate() {
    * en-US: Initial data from navigation (duplication flow). If present, prefill the form.
    */
   const initialFromState = ((location.state as any)?.initialContract ?? null) as ContractRecord | null;
+  const prefillData = ((location.state as any)?.prefillData ?? null) as ContractRecord | null;
+  const returnPath = (location.state as any)?.returnPath as string | undefined;
+
   /**
    * duplicationHint
    * pt-BR: Exibe um toast informando que os dados foram pré-carregados.
@@ -39,8 +42,10 @@ export default function ContractCreate() {
     React.useEffect(() => {
       if (initialFromState) {
         toast.info('Duplicando contrato', { description: `Baseado em: ${initialFromState.nome || initialFromState.slug || initialFromState.id}` });
+      } else if (prefillData) {
+        // Sem toast para prefill simples (ex: vindo da aba de cursos)
       }
-    }, [initialFromState]);
+    }, [initialFromState, prefillData]);
   } catch {}
 
   const createMutation = useMutation({
@@ -55,9 +60,13 @@ export default function ContractCreate() {
   const handleSubmit = async (data: CreateContractInput) => {
     createMutation.mutate(data, {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['contracts', 'list'] });
+        queryClient.invalidateQueries({ queryKey: ['contracts'] });
         if (finishAfterSaveRef.current) {
-          navigate('/admin/school/contracts');
+          if (returnPath) {
+            navigate(returnPath);
+          } else {
+            navigate('/admin/school/contracts');
+          }
         }
       },
     });
@@ -68,7 +77,13 @@ export default function ContractCreate() {
    * pt-BR: Volta para listagem de contratos.
    * en-US: Navigates back to contracts listing.
    */
-  const handleBack = () => navigate('/admin/school/contracts');
+  const handleBack = () => {
+    if (returnPath) {
+      navigate(returnPath);
+    } else {
+      navigate('/admin/school/contracts');
+    }
+  };
 
   /**
    * handleSaveContinue
@@ -107,14 +122,21 @@ export default function ContractCreate() {
    * pt-BR: Ajusta dados iniciais quando vindo de duplicação para exibir "(Copia)" no campo Nome.
    * en-US: Adjusts initial data when duplicating to show "(Copia)" in the Name field.
    */
-  const initialForForm = initialFromState
-    ? {
-        ...initialFromState,
-        nome: appendCopySuffix(
-          String(initialFromState?.nome || initialFromState?.slug || initialFromState?.id || '')
-        ),
-      }
-    : undefined;
+  let initialForForm: any = undefined;
+  
+  if (initialFromState) {
+    initialForForm = {
+      ...initialFromState,
+      nome: appendCopySuffix(
+        String(initialFromState?.nome || initialFromState?.slug || initialFromState?.id || '')
+      ),
+    };
+  } else if (prefillData) {
+    // Apenas pré-preenche campos específicos (ex: id_curso), sem sufixo de cópia
+    initialForForm = {
+      ...prefillData,
+    };
+  }
 
   return (
     <div className="space-y-4">
@@ -126,7 +148,11 @@ export default function ContractCreate() {
         <CardHeader>
           <CardTitle>Cadastro de Contrato</CardTitle>
           <CardDescription>
-            {initialFromState ? 'Dados pré-carregados do contrato selecionado. Edite e salve o novo registro.' : 'Preencha as informações abaixo.'}
+            {initialFromState 
+              ? 'Dados pré-carregados do contrato selecionado. Edite e salve o novo registro.' 
+              : prefillData 
+                ? 'Preencha as informações do novo contrato.' 
+                : 'Preencha as informações abaixo.'}
           </CardDescription>
         </CardHeader>
         <CardContent>

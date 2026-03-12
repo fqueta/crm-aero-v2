@@ -175,6 +175,8 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
     }
   }, [enrollment]);
 
+  const fuelExternalText = (enrollment as any)?.meta?.texto_combustivel || '';
+
   const linkAssinatura = (enrollment as any)?.link_assinatura || '';
 
   const parcelamento = useMemo(() => {
@@ -267,7 +269,9 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                         subtotalMasked={subtotalMasked}
                         totalMasked={totalMasked}
                         validityDate={computeValidityDate(validadeDias)}
+                        validityDays={validadeDias}
                         etapa1Discount={etapa1Discount}
+                        fuelExternalText={fuelExternalText}
                     />
 
                     {/* Card de Parcelamento abaixo do card de Proposta Comercial */}
@@ -279,7 +283,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
         <TabsContent value="contracts" className="mt-4">
              {clientId && id ? (
-                <ProposalContractsTab clientId={clientId} enrollmentId={id} />
+                <ProposalContractsTab clientId={clientId} enrollmentId={id} meta={meta} />
              ) : (
                 <div className="text-center py-4 text-muted-foreground">
                     Carregando dados da matrícula...

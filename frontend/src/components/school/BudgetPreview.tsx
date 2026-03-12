@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { CourseRecord, CourseModule } from '@/types/courses';
+import { enrollmentsService } from '@/services/enrollmentsService';
 
 /**
  * BudgetPreview
@@ -25,6 +26,9 @@ export default function BudgetPreview({
   subtotalMasked,
   totalMasked,
   etapa1Discount = 0,
+  inscricaoMasked,
+  validityDays = '7',
+  fuelExternalText,
 }: {
   title?: string;
   clientName: string;
@@ -40,10 +44,53 @@ export default function BudgetPreview({
   subtotalMasked?: string; // already masked
   totalMasked?: string; // already masked
   etapa1Discount?: number;
+  inscricaoMasked?: string;
+  validityDays?: string | number;
+  fuelExternalText?: string;
 }) {
   // Helpers
   const moduleTitle = module?.titulo || (course?.titulo || course?.nome || '');
   const etapa = module?.etapa || '';
+  
+  const numberToText = (n: string | number) => {
+      const num = Number(n);
+      switch(num) {
+          case 7: return 'sete';
+          case 14: return 'quatorze';
+          case 30: return 'trinta';
+          default: return '';
+      }
+  };
+  const validityDaysText = numberToText(validityDays);
+
+  const isType2 = Array.isArray(modules) && modules.length > 0;
+
+  const [fuelData, setFuelData] = useState<{ valor: number; valor_litro: number | null } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    console.log('BudgetPreview: Checking Type2 condition', { isType2, modules });
+
+    if (isType2 && modules && modules.length > 0) {
+      console.log('BudgetPreview: Simulating fuel for modules', modules);
+      enrollmentsService.simulateFuel({ modulos: modules })
+        .then(res => {
+            console.log('BudgetPreview: Fuel simulation result', res);
+            if (mounted && res && res.exec) {
+                setFuelData(res);
+            } else if (mounted) {
+                setFuelData(null);
+            }
+        })
+        .catch((err) => {
+            console.error('BudgetPreview: Fuel simulation error', err);
+            if (mounted) setFuelData(null);
+        });
+    } else {
+        setFuelData(null);
+    }
+    return () => { mounted = false; };
+  }, [modules, isType2]);
 
   /**
    * parseToNumber
@@ -71,8 +118,6 @@ export default function BudgetPreview({
     return 'R$ 0,00';
   };
 
-  const isType2 = Array.isArray(modules) && modules.length > 0;
-
   // Agrupa módulos por etapa
   const groupedModules = useMemo(() => {
     if (!isType2 || !modules) return {};
@@ -99,6 +144,25 @@ export default function BudgetPreview({
     
     return orderedGroups;
   }, [modules, isType2]);
+
+  // Função para calcular totais por etapa (usado no resumo final)
+  const getStageTotal = (stageName: string) => {
+    const stageModules = groupedModules[stageName] || [];
+    const stageSubtotal = stageModules.reduce((acc, mod) => acc + parseToNumber(mod.valor), 0);
+    
+    if (stageName === 'Etapa 1') {
+      return Math.max(0, stageSubtotal - etapa1Discount);
+    } else {
+      // Assumindo que o desconto global se aplica apenas à Etapa 2 (parte prática), ou proporcionalmente
+      // Mas a lógica atual do renderStageTable aplica o desconto global APENAS nas etapas != 1
+      // Se houver múltiplas etapas != 1 (ex: Etapa 2 e Etapa 3), o desconto global seria aplicado em todas?
+      // A lógica original aplica parseToNumber(discountAmountMasked) em CADA etapa != 1. Isso parece duplicar desconto se houver >1 etapa prática.
+      // Vou manter a lógica do renderStageTable para consistência, mas idealmente desconto global deveria ser único.
+      // No contexto atual (Etapa 1 + Etapa 2), funciona pois só há uma etapa prática.
+      const discount = parseToNumber(discountAmountMasked);
+      return Math.max(0, stageSubtotal - discount);
+    }
+  };
 
   // Função para renderizar tabela de uma etapa específica
   const renderStageTable = (stageName: string, stageModules: any[]) => {
@@ -132,7 +196,6 @@ export default function BudgetPreview({
                   <TableHead className="w-[100px] text-center text-white font-bold whitespace-nowrap">{stageName}</TableHead>
                   <TableHead className="text-white font-bold">Conteúdo</TableHead>
                   <TableHead className="text-white font-bold">Aula</TableHead>
-                  {/* <TableHead className="text-right text-white font-bold">Valor</TableHead> */}
                 </>
               ) : (
                 <>
@@ -156,7 +219,6 @@ export default function BudgetPreview({
                     <TableCell className="text-center font-medium">{idx + 1}</TableCell>
                     <TableCell>{modTitle}</TableCell>
                     <TableCell>Ground School</TableCell>
-                    {/* <TableCell className="text-right">{modValor}</TableCell> */}
                   </TableRow>
                  );
               } else {
@@ -177,7 +239,7 @@ export default function BudgetPreview({
             {/* Footer da Etapa */}
             {!isEtapa1 && (
             <TableRow className="bg-[#22c55e] hover:bg-[#22c55e] border-t-0">
-               <TableCell colSpan={isEtapa1 ? 3 : 5} className="p-0 border-0">
+               <TableCell colSpan={5} className="p-0 border-0">
                    <div className="flex flex-col w-full bg-white">
                         {/* Subtotal */}
                         <div className="flex justify-end items-center py-1 pr-4 border-b">
@@ -257,16 +319,107 @@ export default function BudgetPreview({
               renderStageTable(stageName, stageModules)
             )}
 
+            {/* Etapa 3 - Combustível Estimado */}
+            {fuelData && fuelData.valor > 0 && (
+              <div className="mb-6">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-[#003366] hover:bg-[#003366]">
+                       <TableHead className="w-[100px] text-white font-bold pl-4 whitespace-nowrap">Etapa 3</TableHead>
+                       <TableHead className="text-white font-bold text-center">Conteúdo</TableHead>
+                       <TableHead className="text-right text-white font-bold pr-4">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow className="even:bg-muted/10">
+                        <TableCell colSpan={3} className="p-4 text-sm leading-relaxed text-center">
+                            {fuelExternalText ? (
+                                <div dangerouslySetInnerHTML={{ __html: fuelExternalText.replace('{valor}', formatValue(fuelData.valor)) }} />
+                            ) : (
+                                <>
+                                    O custo estimado de combustível para esta proposta é de <span className="font-bold">{formatValue(fuelData.valor)}</span>. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento. O cálculo final será baseado no preço vigente na data em que o combustível for abastecido, sendo assim, esse valor pode variar.
+                                </>
+                            )}
+                        </TableCell>
+                    </TableRow>
+                    {/* Footer with total */}
+                    <TableRow className="bg-[#003366] hover:bg-[#003366] border-t-0">
+                       <TableCell colSpan={3} className="p-0 border-0">
+                           <div className="flex justify-end items-center py-2 pr-4 text-white">
+                               <span className="font-bold mr-4 text-sm uppercase">Valor Total com estimado de combustível:</span>
+                               <span className="font-bold text-sm">{formatValue((parseToNumber(totalMasked) + fuelData.valor))}</span>
+                           </div>
+                       </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
             {/* Resumo Financeiro Global / Total Final */}
              <div className="mt-0">
-               <div className="bg-[#003366] text-white p-3 flex justify-between items-center rounded-b-lg shadow-md">
-                    <span className="font-bold text-lg pl-2">Valor Total com estimado de combustível:</span>
-                    <span className="font-bold text-xl pr-2">{totalMasked}</span>
-               </div>
+               {/* Tabela de Resumo Detalhado (Substitui o card de taxas e resumo anterior) */}
+               <Table className="border rounded-md bg-white shadow-sm mb-4">
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-bold text-black">Descrição</TableHead>
+                      <TableHead className="text-right font-bold text-black">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {/* Matrícula */}
+                    <TableRow>
+                      <TableCell className="font-medium">Matrícula</TableCell>
+                      <TableCell className="text-right font-bold">{formatValue(parseToNumber(inscricaoMasked))}</TableCell>
+                    </TableRow>
+                    
+                    {/* Totais por Etapa */}
+                    {Object.keys(groupedModules).map((stageName) => (
+                      <TableRow key={`summary-${stageName}`}>
+                        <TableCell className="font-medium">{stageName}</TableCell>
+                        <TableCell className="text-right font-bold">{formatValue(getStageTotal(stageName))}</TableCell>
+                      </TableRow>
+                    ))}
+
+                    {/* Taxas do Curso */}
+                    {course?.config?.taxas && Array.isArray(course.config.taxas) && course.config.taxas.map((taxa: any, idx: number) => (
+                      <TableRow key={`taxa-${idx}`}>
+                        <TableCell className="text-muted-foreground">{taxa.titulo}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatValue(parseToNumber(taxa.valor))}</TableCell>
+                      </TableRow>
+                    ))}
+
+                    {/* Total de Taxas (Não inclusas) */}
+                    {(() => {
+                      const taxasTotal = (course?.config?.taxas || []).reduce((acc: number, t: any) => acc + parseToNumber(t.valor), 0);
+                      if (taxasTotal > 0) {
+                        return (
+                          <TableRow>
+                            <TableCell className="font-bold text-red-600">Total de taxas não inclusas no orçamento:</TableCell>
+                            <TableCell className="text-right font-bold text-red-600">{formatValue(taxasTotal)}</TableCell>
+                          </TableRow>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    {/* TOTAL DA PROPOSTA */}
+                    <TableRow className="bg-muted/20 border-t-2">
+                      <TableCell className="font-bold text-green-600 text-lg uppercase">TOTAL DA PROPOSTA A VISTA:</TableCell>
+                      <TableCell className="text-right font-bold text-green-600 text-lg">{totalMasked}</TableCell>
+                    </TableRow>
+                  </TableBody>
+               </Table>
+               
+               {course?.nome && (
+                 <div className="text-right text-xs text-muted-foreground mt-1 mb-4">
+                   *{course.nome}
+                 </div>
+               )}
                
                <div className="mt-4 p-4 border rounded-lg bg-blue-50 text-sm text-blue-900">
                     <p className="font-bold mb-2">Observações Importantes</p>
-                    <p>Este orçamento possui validade de 7 (sete) dias a contar da data de envio. O valor apresentado poderá ser pago:</p>
+                    <p>Este orçamento possui validade de {validityDays}{validityDaysText ? ` (${validityDaysText})` : ''} dias a contar da data de envio. O valor apresentado poderá ser pago:</p>
                     <ul className="list-disc pl-5 mt-1 space-y-1">
                         <li>À vista, <strong>com desconto</strong> (já aplicado se houver);</li>
                         <li>Parcelado em até 12x no cartão de crédito (consulte condições).</li>

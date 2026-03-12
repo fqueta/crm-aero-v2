@@ -340,7 +340,6 @@ Route::name('api.')->prefix('api/v1')->middleware([
     });
 
 
-
     Route::middleware(['auth:sanctum','auth.active'])->group(function () {
         // Rotas para product-units
         Route::apiResource('product-units', ProductUnitController::class,['parameters' => [
@@ -465,6 +464,8 @@ Route::name('api.')->prefix('api/v1')->middleware([
             'integracoes' => 'id'
         ]]);
         Route::get('integracoes/trash', [\App\Http\Controllers\api\ApiCredentialController::class, 'trash'])->name('integracoes.trash');
+        //simulador de comustivel
+        Route::get('simulador-combustivel/{id_matricula}', [\App\Http\Controllers\api\MatriculaController::class, 'simuladorCombustivel'])->name('simulador-combustivel');
         Route::put('integracoes/{id}/restore', [\App\Http\Controllers\api\ApiCredentialController::class, 'restore'])->name('integracoes.restore');
         Route::delete('integracoes/{id}/force', [\App\Http\Controllers\api\ApiCredentialController::class, 'forceDelete'])->name('integracoes.forceDelete');
         Route::prefix('permissions')->group(function () {

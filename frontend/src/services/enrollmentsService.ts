@@ -75,6 +75,27 @@ class EnrollmentsService extends BaseApiService {
   }
 
   /**
+   * simulateFuel
+   * pt-BR: Simula o custo de combustível baseado nos módulos.
+   * en-US: Simulates fuel cost based on modules.
+   */
+  async simulateFuel(payload: { modulos: any[] }): Promise<{
+    exec: boolean;
+    valor: number;
+    valor_litro: number | null;
+    tipo_pagamento: string;
+    color_tipo_pagamento: string;
+  }> {
+    return this.post<{
+      exec: boolean;
+      valor: number;
+      valor_litro: number | null;
+      tipo_pagamento: string;
+      color_tipo_pagamento: string;
+    }>('/matriculas/simulador-combustivel', payload);
+  }
+
+  /**
    * deleteEnrollment
    * pt-BR: Exclui matrícula.
    * en-US: Deletes an enrollment.

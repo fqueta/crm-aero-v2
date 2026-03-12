@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Plus, X, Trash2, GripVertical } from 'lucide-react';
+import { Plus, X, Trash2, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { aircraftSettingsService } from '@/services/aircraftSettingsService';
 import { periodsService } from '@/services/periodsService';
@@ -41,6 +41,8 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+import { CourseContractsTab } from '@/components/school/CourseContractsTab';
 
 /**
  * formatCurrencyBRLDisplay
@@ -158,7 +160,7 @@ export function CourseForm({
    *        'info' when the parameter is missing or invalid.
    */
   const [searchParams, setSearchParams] = useSearchParams();
-  const allowedTabs = ['info', 'pricing', 'config', 'aircrafts', 'modules'];
+  const allowedTabs = ['info', 'pricing', 'config', 'aircrafts', 'modules', 'contracts'];
   const tabParam = (searchParams.get('tab') || '').trim();
   const initialTab = allowedTabs.includes(tabParam) ? tabParam : 'info';
   /**
@@ -227,6 +229,7 @@ export function CourseForm({
         gratis: z.any().optional(),
         comissao: z.coerce.string().optional(),
         tx2: z.array(z.object({ name_label: z.coerce.string().optional(), name_valor: z.coerce.string().optional() })).optional(),
+        taxas: z.array(z.object({ titulo: z.coerce.string().optional(), valor: z.coerce.string().optional() })).optional(),
         tipo_desconto_taxa: z.any().optional(),
         desconto_taxa: z.coerce.string().optional(),
         pagina_divulgacao: z.coerce.string().optional(),
@@ -255,6 +258,7 @@ export function CourseForm({
         gratis: 'n',
         comissao: '0,00',
         tx2: [{ name_label: '', name_valor: '' }],
+        taxas: [],
         tipo_desconto_taxa: 'v',
         desconto_taxa: '',
         pagina_divulgacao: '',
@@ -277,6 +281,11 @@ export function CourseForm({
   const { fields, append, remove, move } = useFieldArray({
     control: form.control,
     name: "modulos",
+  });
+
+  const { fields: taxasFields, append: appendTaxa, remove: removeTaxa, move: moveTaxa } = useFieldArray({
+    control: form.control,
+    name: "config.taxas",
   });
 
   const sensors = useSensors(
@@ -356,6 +365,15 @@ export function CourseForm({
         if (normalized.inscricao) normalized.inscricao = normalizeCurrencyToBRString(normalized.inscricao) ?? '';
         if (normalized.valor) normalized.valor = normalizeCurrencyToBRString(normalized.valor) ?? '';
         if (normalized.valor_parcela) normalized.valor_parcela = normalizeCurrencyToBRString(normalized.valor_parcela) ?? '';
+        
+        // Normaliza taxas no config
+        if (normalized.config?.taxas) {
+          normalized.config.taxas = normalized.config.taxas.map((t) => ({
+            ...t,
+            valor: normalizeCurrencyToBRString(t.valor) ?? '',
+          }));
+        }
+
         return onSubmit(normalized);
       }, onInvalid);
     }
@@ -376,6 +394,7 @@ export function CourseForm({
         gratis: c.config?.gratis ?? 'n',
         comissao: c.config?.comissao ?? '',
         tx2: c.config?.tx2?.length ? c.config.tx2 : [{ name_label: '', name_valor: '' }],
+        taxas: c.config?.taxas ?? [],
         tipo_desconto_taxa: c.config?.tipo_desconto_taxa ?? 'v',
         desconto_taxa: c.config?.desconto_taxa ?? '',
         pagina_divulgacao: c.config?.pagina_divulgacao ?? '',
@@ -561,6 +580,9 @@ export function CourseForm({
    */
   const RequiredMark = () => (<span className="text-red-600 ml-1">*</span>);
 
+  // Passar o tipo do curso para o componente da aba
+  const courseType = form.watch('tipo');
+
   return (
     <FormProvider {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit, onInvalid)} className="space-y-6">
@@ -575,6 +597,9 @@ export function CourseForm({
             <TabsTrigger value="config">Configurações</TabsTrigger>
             <TabsTrigger value="aircrafts">Aeronaves</TabsTrigger>
             <TabsTrigger value="modules">Módulos</TabsTrigger>
+            {(form.watch('tipo') === '1' || form.watch('tipo') === '2') && (
+              <TabsTrigger value="contracts">Termos e Contratos</TabsTrigger>
+            )}
           </TabsList>
           <p className="text-xs text-muted-foreground mt-2">Campos marcados com <span className="text-red-600">*</span> são obrigatórios.</p>
 
@@ -760,16 +785,102 @@ export function CourseForm({
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Taxas e Descontos</CardTitle>
+                <CardTitle className="text-base">Custos e Taxas</CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Tipo desconto taxa</Label>
-                  <Select value={form.watch('config.tipo_desconto_taxa')} onValueChange={(v) => form.setValue('config.tipo_desconto_taxa', v as any)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent><SelectItem value="v">Valor</SelectItem><SelectItem value="p">Percentual</SelectItem></SelectContent>
-                  </Select>
+              <CardContent className="space-y-6">
+                
+                {/* Taxas List */}
+                <div className="space-y-2">
+                   <div className="flex justify-between items-center">
+                      <Label className="text-sm font-medium">Taxas</Label>
+                   </div>
+                   <div className="border rounded-md">
+                      <div className="grid grid-cols-12 gap-2 p-2 bg-muted/50 text-xs font-medium border-b uppercase text-muted-foreground">
+                         <div className="col-span-1 text-center"></div>
+                         <div className="col-span-7">Título</div>
+                         <div className="col-span-3">Valor</div>
+                         <div className="col-span-1"></div>
+                      </div>
+                      {taxasFields.map((field, index) => (
+                        <div key={field.id} className="grid grid-cols-12 gap-2 p-2 items-center border-b last:border-0 hover:bg-muted/20">
+                           <div className="col-span-1 flex flex-col items-center gap-1">
+                              <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-5 w-5 p-0"
+                                disabled={index === 0}
+                                onClick={() => moveTaxa(index, index - 1)}
+                              >
+                                 <ArrowUp className="h-3 w-3" />
+                              </Button>
+                              <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-5 w-5 p-0"
+                                disabled={index === taxasFields.length - 1}
+                                onClick={() => moveTaxa(index, index + 1)}
+                              >
+                                 <ArrowDown className="h-3 w-3" />
+                              </Button>
+                           </div>
+                           <div className="col-span-7">
+                              <Input {...form.register(`config.taxas.${index}.titulo`)} placeholder="Ex: Taxa de Examinador Credenciado ANAC" />
+                           </div>
+                           <div className="col-span-3">
+                              <Input 
+                                placeholder="0,00"
+                                value={form.watch(`config.taxas.${index}.valor`) || ''}
+                                onChange={(e) => {
+                                  const v = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
+                                  form.setValue(`config.taxas.${index}.valor`, v);
+                                }} 
+                              />
+                           </div>
+                           <div className="col-span-1 text-center">
+                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeTaxa(index)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                           </div>
+                        </div>
+                      ))}
+                      <div className="p-2 bg-muted/10">
+                         <Button type="button" variant="outline" size="sm" onClick={() => appendTaxa({ titulo: '', valor: '' })}>
+                            <Plus className="h-4 w-4 mr-2" /> Adicionar
+                         </Button>
+                      </div>
+                   </div>
                 </div>
-                <div className="space-y-2"><Label>Desconto taxa</Label><Input {...form.register('config.desconto_taxa')} /></div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                  <div className="space-y-2"><Label>Tipo de Desconto</Label>
+                    <Select value={form.watch('config.tipo_desconto_taxa')} onValueChange={(v) => form.setValue('config.tipo_desconto_taxa', v as any)}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent><SelectItem value="v">Valor</SelectItem><SelectItem value="p">Percentual</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label>Desconto das taxas</Label>
+                    <div className="flex">
+                        <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm">
+                            {form.watch('config.tipo_desconto_taxa') === 'v' ? 'R$' : '%'}
+                        </span>
+                        <Input 
+                            className="rounded-l-none" 
+                            placeholder="Desconto das taxas"
+                            value={form.watch('config.desconto_taxa') || ''}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                if (form.watch('config.tipo_desconto_taxa') === 'v') {
+                                    form.setValue('config.desconto_taxa', currencyApplyMask(val, 'pt-BR', 'BRL'));
+                                } else {
+                                    form.setValue('config.desconto_taxa', val);
+                                }
+                            }}
+                        />
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
@@ -954,6 +1065,13 @@ export function CourseForm({
               </>
             )}
           </TabsContent>
+
+          {/* Contratos (apenas tipo 1 e 2) */}
+          {(form.watch('tipo') === '1' || form.watch('tipo') === '2') && (
+            <TabsContent value="contracts" className="space-y-4 pt-4">
+              <CourseContractsTab courseId={courseId} courseType={courseType} />
+            </TabsContent>
+          )}
         </Tabs>
 
         <Separator />

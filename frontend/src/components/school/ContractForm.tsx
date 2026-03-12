@@ -138,13 +138,30 @@ export function ContractForm({
 
   // Query de períodos do curso selecionado (visualização)
   const selectedCourseId = form.watch('id_curso') ? Number(form.watch('id_curso')) : undefined;
+
+  // Busca detalhes do curso para verificar o tipo (se não estiver na lista)
+  const selectedCourseFromList = courseItems.find((c: any) => String(c.id) === String(selectedCourseId));
+  const { data: fetchedCourse } = useQuery({
+    queryKey: ['course', 'detail', selectedCourseId],
+    queryFn: async () => {
+      if (!selectedCourseId) return null;
+      return coursesService.getById(selectedCourseId);
+    },
+    enabled: !!selectedCourseId && !selectedCourseFromList,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const selectedCourse = selectedCourseFromList || fetchedCourse;
+  // Exibe períodos apenas se curso selecionado for do tipo 4
+  const showPeriods = selectedCourse && String(selectedCourse.tipo) === '4';
+
   const periodsQuery = useQuery({
     queryKey: ['periodos', 'list', selectedCourseId],
     queryFn: async () => {
       if (!selectedCourseId) return { data: [] } as any;
       return periodsService.listPeriods({ page: 1, per_page: 200, id_curso: selectedCourseId });
     },
-    enabled: !!selectedCourseId,
+    enabled: !!selectedCourseId && showPeriods,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -182,34 +199,36 @@ export function ContractForm({
         </div>
       </div>
 
-      {/* Visualização de períodos do curso (mantida) */}
-      <div className="space-y-1">
-        <Label>Períodos do curso (visualização)</Label>
-        <div className="border rounded-md p-2 min-h-[42px]">
-          {!selectedCourseId && (
-            <p className="text-sm text-muted-foreground">Selecione um curso para ver os períodos.</p>
-          )}
-          {selectedCourseId && periodsQuery.isLoading && (
-            <p className="text-sm">Carregando períodos...</p>
-          )}
-          {selectedCourseId && !periodsQuery.isLoading && periodItems.length === 0 && (
-            <p className="text-sm text-muted-foreground">Nenhum período encontrado para este curso.</p>
-          )}
-          {selectedCourseId && !periodsQuery.isLoading && periodItems.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {periodItems.map((p: any) => {
-                const relacionados: any[] = (p?.id_contratos as any[]) || [];
-                const isLinked = !!relacionados?.includes?.((initialData as any)?.id);
-                return (
-                  <Badge key={String(p?.id)} variant={isLinked ? 'default' : 'secondary'}>
-                    {String(p?.nome || p?.title || '')}
-                  </Badge>
-                );
-              })}
-            </div>
-          )}
+      {/* Visualização de períodos do curso (apenas tipo 4) */}
+      {showPeriods && (
+        <div className="space-y-1">
+          <Label>Períodos do curso (visualização)</Label>
+          <div className="border rounded-md p-2 min-h-[42px]">
+            {!selectedCourseId && (
+              <p className="text-sm text-muted-foreground">Selecione um curso para ver os períodos.</p>
+            )}
+            {selectedCourseId && periodsQuery.isLoading && (
+              <p className="text-sm">Carregando períodos...</p>
+            )}
+            {selectedCourseId && !periodsQuery.isLoading && periodItems.length === 0 && (
+              <p className="text-sm text-muted-foreground">Nenhum período encontrado para este curso.</p>
+            )}
+            {selectedCourseId && !periodsQuery.isLoading && periodItems.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {periodItems.map((p: any) => {
+                  const relacionados: any[] = (p?.id_contratos as any[]) || [];
+                  const isLinked = !!relacionados?.includes?.((initialData as any)?.id);
+                  return (
+                    <Badge key={String(p?.id)} variant={isLinked ? 'default' : 'secondary'}>
+                      {String(p?.nome || p?.title || '')}
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Status por último */}
       <div className="space-y-1">

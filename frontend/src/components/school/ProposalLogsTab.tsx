@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -14,7 +14,10 @@ import {
   FileText, 
   Clock, 
   Activity,
-  User as UserIcon
+  User as UserIcon,
+  Send,
+  Download,
+  Code
 } from 'lucide-react';
 import { useEventLogsList } from '@/hooks/eventLogs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,6 +25,15 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ProposalLogsTabProps {
   enrollmentId: string;
@@ -39,6 +51,10 @@ const getActionConfig = (action: string) => {
       return { label: 'Remoção', icon: Trash2, color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-200' };
     case 'login':
       return { label: 'Acesso', icon: Activity, color: 'text-indigo-500', bg: 'bg-indigo-500/10', border: 'border-indigo-200' };
+    case 'zapsign_send_request':
+      return { label: 'Envio Zapsign', icon: Send, color: 'text-purple-500', bg: 'bg-purple-500/10', border: 'border-purple-200' };
+    case 'zapsign_send_response':
+      return { label: 'Retorno Zapsign', icon: Download, color: 'text-purple-500', bg: 'bg-purple-500/10', border: 'border-purple-200' };
     default:
       return { label: action, icon: FileText, color: 'text-gray-500', bg: 'bg-gray-500/10', border: 'border-gray-200' };
   }
@@ -50,6 +66,9 @@ const getActionConfig = (action: string) => {
  * en-US: Tab to list Event Logs related to the enrollment/proposal with enhanced UI (Timeline).
  */
 export default function ProposalLogsTab({ enrollmentId }: ProposalLogsTabProps) {
+  const { user } = useAuth();
+  const canViewJson = user && Number(user.permission_id) === 1;
+
   const { data, isLoading, isFetching } = useEventLogsList({
     per_page: 50, // Increased to show more history
     entity_type: 'matricula',
@@ -166,6 +185,29 @@ export default function ProposalLogsTab({ enrollmentId }: ProposalLogsTabProps) 
                                   Autor: <span className="font-mono">{log.actor?.name || String(log.actor_id || '').substring(0, 8) || 'Sistema'}</span>
                                 </span>
                               </div>
+                            )}
+
+                             {canViewJson && log.payload && (
+                                <div className="mt-3">
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button variant="outline" size="sm" className="h-6 text-xs gap-1">
+                                        <Code className="h-3 w-3" />
+                                        Ver JSON
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-2xl h-[80vh] flex flex-col p-0">
+                                      <DialogHeader className="px-6 py-4 border-b">
+                                        <DialogTitle>Detalhes do Evento (JSON)</DialogTitle>
+                                      </DialogHeader>
+                                      <div className="flex-1 min-h-0 overflow-auto bg-slate-950 text-slate-50 p-4">
+                                            <pre className="text-xs font-mono break-all whitespace-pre-wrap">
+                                              {JSON.stringify(log.payload, null, 2)}
+                                            </pre>
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                </div>
                             )}
                           </div>
                         </div>

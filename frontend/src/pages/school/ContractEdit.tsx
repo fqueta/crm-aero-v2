@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -15,10 +15,13 @@ import type { ContractRecord, UpdateContractInput } from '@/types/contracts';
  */
 export default function ContractEdit() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const submitRef = useRef<(() => void) | null>(null);
   const finishAfterSaveRef = useRef<boolean>(false);
+  
+  const returnPath = (location.state as any)?.returnPath as string | undefined;
 
   const { data: contract, isLoading } = useQuery<ContractRecord | null>({
     queryKey: ['contracts', 'detail', id],
@@ -47,10 +50,14 @@ export default function ContractEdit() {
   const handleSubmit = async (data: UpdateContractInput) => {
     updateMutation.mutate(data, {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['contracts', 'list'] });
+        queryClient.invalidateQueries({ queryKey: ['contracts'] });
         queryClient.invalidateQueries({ queryKey: ['contracts', 'detail', id] });
         if (finishAfterSaveRef.current) {
-          navigate('/admin/school/contracts');
+          if (returnPath) {
+            navigate(returnPath);
+          } else {
+            navigate('/admin/school/contracts');
+          }
         }
       },
     });
@@ -61,7 +68,13 @@ export default function ContractEdit() {
    * pt-BR: Volta para listagem de contratos.
    * en-US: Navigates back to contracts listing.
    */
-  const handleBack = () => navigate('/admin/school/contracts');
+  const handleBack = () => {
+    if (returnPath) {
+      navigate(returnPath);
+    } else {
+      navigate('/admin/school/contracts');
+    }
+  };
 
   /**
    * handleSaveContinue

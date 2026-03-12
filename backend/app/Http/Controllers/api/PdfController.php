@@ -18,6 +18,10 @@ use App\Models\User;
 use App\Services\Qlib;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Spatie\Browsershot\Browsershot;
+use App\Jobs\GeraPdfPropostasPnlJob;
+use App\Jobs\GeraPdfcontratosPnlJob;
+use App\Jobs\SendPeriodosZapsingJob;
+use Illuminate\Support\Facades\Bus;
 
 class PdfController extends Controller
 {
@@ -269,6 +273,29 @@ class PdfController extends Controller
         // Function-level note: increase PHP max execution time for heavy PDF rendering.
         @set_time_limit(300);
         @ini_set('max_execution_time', '300');
+
+        if ($request->boolean('regenerate_all')) {
+            // Dispatch Jobs Sequentially as requested
+            Bus::chain([
+                new GeraPdfPropostasPnlJob($id),
+                new GeraPdfcontratosPnlJob($id),
+            ])->dispatch();
+
+            return response()->json([
+                'message' => 'Processo de regeneração iniciado em background.',
+                'exec' => true
+            ]);
+            // $ret = (new MatriculaController)->contratos_periodos_pdf($id);
+            // return $ret;
+        }
+
+        if ($request->boolean('send_zapsign')) {
+            SendPeriodosZapsingJob::dispatch($id);
+            return response()->json([
+                'message' => 'Envio para Zapsign iniciado em background.',
+                'exec' => true
+            ]);
+        }
 
         // Buscar matrícula com curso, turma e cliente
         // $matricula = Matricula::join('cursos', 'matriculas.id_curso', '=', 'cursos.id')
@@ -617,10 +644,10 @@ class PdfController extends Controller
                         // PT: Não desabilita links internos/externos (padrão do wkhtmltopdf é permitir links).
                         // EN: Keep internal/external links enabled (wkhtmltopdf allows links by default).
                         ->setOption('header-html', $headerHtml)
-                        ->setOption('margin-top', 0)
-                        ->setOption('margin-bottom', 0)
-                        ->setOption('margin-left', 0)
-                        ->setOption('margin-right', 0)
+                        ->setOption('margin-top', 10)
+                        ->setOption('margin-bottom', 10)
+                        ->setOption('margin-left', 10)
+                        ->setOption('margin-right', 10)
                         ->setOption('disable-smart-shrinking', true)
                         ->setOption('footer-spacing', '0')
                         ->setOption('print-media-type', true)

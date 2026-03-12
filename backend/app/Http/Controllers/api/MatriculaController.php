@@ -584,6 +584,7 @@ class MatriculaController extends Controller
         $data['consultor'] = $this->mapClientNodeOutput(User::find($matricula['id_consultor']));
         // Parcelamentos via relação Eloquent para manter consistência com sync()
         // Parcelamentos já carregados via relação
+        $data['numero_contrato'] = $this->numero_contrato($matricula['id']);
         $data['parcelamentos'] = $matricula->parcelamentos ? $matricula->parcelamentos->toArray() : [];
         //incluir o campo com link publico da proposta
         $link = '/aluno/matricula/'.$matricula['id_cliente'].'_'.Qlib::zerofill($matricula['id'],5).'/1';
@@ -591,7 +592,27 @@ class MatriculaController extends Controller
         $data['link_assinatura'] = Qlib::qoption('front_url') . str_replace('matricula','assinatura',$link);
         return $data;
     }
-
+    /**
+     * Metodo para exibir o numero do contrato
+     * @param int $id_matricula
+     */
+    public function numero_contrato($id_matricula=false){
+        $ret = false;
+        if($id_matricula){
+            //uso $ret = (new CursosController)->numero_contrato($id_matricula);
+            $ret = false;
+            if($id_matricula){
+                $data = Qlib::buscaValorDb('matriculas','id',$id_matricula,'data');
+                if($data){
+                    $arr_data = explode('-',explode(' ',$data)[0]);
+                    if(isset($arr_data[1])){
+                        $ret = Qlib::zerofill($id_matricula,5).'.'.$arr_data[1].'.'.$arr_data[0];
+                    }
+                }
+            }
+            return $ret;
+        }
+    }
     /**
      * PT-BR: Mapeia os dados de um cliente (User) para saída compatível com o front-end,
      * replicando os aliases e normalizações usadas em ClientController->mapIndexItemOutput.
@@ -1115,6 +1136,17 @@ class MatriculaController extends Controller
                     $d_periodo = [];
                 }
                 $ids = $d_periodo??[];
+
+                // Se não encontrou IDs pelo período, tenta buscar contratos vinculados diretamente ao curso
+                // Ajuste: Apenas para cursos do tipo 2 (conforme solicitado)
+                if (empty($ids) && !empty($dm['id_curso']) && isset($dm['curso_tipo']) && $dm['curso_tipo'] == 2) {
+                    $ids = \App\Models\Post::where('post_type', 'contratos')
+                        ->where('config', 'like', '%"id_curso":' . $dm['id_curso'] . '%')
+                        ->where('post_status', 'publish')
+                        ->orderByDesc('ID')
+                        ->pluck('ID')
+                        ->toArray();
+                }
                 // dd($ids);
                 // return response()->json(['error' => 'IDs dos contratos são necessários'], 400);
             // }
@@ -1122,7 +1154,7 @@ class MatriculaController extends Controller
             //Localizar os conteudos dos contratos com esses ids
             if($ids && count($ids)){
                 $cc = new ContratoController();
-                //adicionar complatibilidade de campos
+                //adicionar compatibilidade de campos
                 $dm['aluno'] = $dm['cliente_nome']??[];
                 $dm['cpf_aluno'] = $dm['cliente']['cpf']??'';
                 $dm['estado_civil'] = $dm['cliente']['estado_civil']??'';
@@ -1142,6 +1174,7 @@ class MatriculaController extends Controller
                 }
 
                 $dm['curso'] = $dm['curso_nome']??'';
+                $dm['nome_curso'] = $dm['curso'];
                 $dm['identidade'] = $dm['cliente']['config']['rg']??'';
                 $testemunhas = $this->testemunhas();
                 $dm['nome_testemunha1'] = $testemunhas[0]['name']??'';
@@ -1566,7 +1599,7 @@ class MatriculaController extends Controller
                 }
             }
         }
-        // Log::info('send_to_zapSing:', $ret);
+        Log::info('send_to_zapSing:', $ret);
         return $ret;
     }
     /**
@@ -1617,11 +1650,44 @@ class MatriculaController extends Controller
                 "folder_path" => '/CRM',
                 "signers" =>$signers,
                 ];
+
+            // Log Request
+            try {
+                if (class_exists('App\Models\EventLog')) {
+                    \App\Models\EventLog::create([
+                        'entity_type' => 'matricula',
+                        'entity_id' => $id,
+                        'action' => 'zapsign_send_request',
+                        'description' => 'Enviando documento para Zapsign',
+                        'payload' => $body,
+                        'actor_id' => \Illuminate\Support\Facades\Auth::id() ?? null,
+                    ]);
+                }
+            } catch (\Throwable $th) {
+                Log::error('Erro ao criar log de evento zapsign_send_request: ' . $th->getMessage());
+            }
+
             //eviar
             $ret = (new ZapsingController)->post([
                 "endpoint" => 'docs',
                 "body" => $body,
             ]);
+
+            // Log Response
+            try {
+                if (class_exists('App\Models\EventLog')) {
+                    \App\Models\EventLog::create([
+                        'entity_type' => 'matricula',
+                        'entity_id' => $id,
+                        'action' => 'zapsign_send_response',
+                        'description' => 'Resposta do envio para Zapsign',
+                        'payload' => $ret,
+                        'actor_id' => \Illuminate\Support\Facades\Auth::id() ?? null,
+                    ]);
+                }
+            } catch (\Throwable $th) {
+                Log::error('Erro ao criar log de evento zapsign_send_response: ' . $th->getMessage());
+            }
         }
         return $ret;
 
@@ -1870,24 +1936,23 @@ class MatriculaController extends Controller
     /**
      * Metodo para gerar uma simução do valor do comustivel no orçamento
      */
-    public function simuladorCombustivel($token = null,$dados=false)
+    public function simuladorCombustivel($id_matricula = null,$dados=false)
 	{
-
 		$ret['exec'] = false;
 		$ret['valor'] = 0;
 		$ret['valor_litro'] = null;
 		$ret['tipo_pagamento'] = '';
 		$ret['color_tipo_pagamento'] = '';
 
-		if($token){
+		if($id_matricula || $dados){
 
-			if(!$dados){
+			if(!$dados && $id_matricula){
 
-				$dados = $this->dm($token);
+				$dados = $this->dm($id_matricula);
 
 			}
 			if(!isset($dados['modulos']) && isset($dados['orc'])){
-				$arr_mod = Qlib::lib_json_array($dados['orc']);
+                $arr_mod = Qlib::lib_json_array($dados['orc']);
 				if(isset($arr_mod['modulos'])){
 					$dados['modulos'] = $arr_mod['modulos'];
 				}
@@ -1899,40 +1964,40 @@ class MatriculaController extends Controller
 
 				$previsao_consumo = NULL;
 				$preco_litro = null;
+                // dd($arr_mod);
 				foreach ($arr_mod as $k => $v) {
-					$v['aviao'] = isset($v['aviao'])?$v['aviao']:0;
-					$dAviao = Qlib::buscaValorDb0($GLOBALS['tab54'],'id',$v['aviao'],'config');
-
+					$aircraft_id = isset($v['aircraft_id'])?$v['aircraft_id']:0;
+					$dAviao = Qlib::buscaValorDb('aeronaves','id',$aircraft_id,'config');
 					if($dAviao){
+                        $creditos = isset($v['limite'])?$v['limite']:0;
 
 						$arr_dAv = Qlib::lib_json_array($dAviao);
+                        // dump($dAviao,$aircraft_id,$creditos);
 
 						if(isset($arr_dAv['combustivel']['consumo_hora']) && isset($arr_dAv['combustivel']['preco_litro']) && isset($arr_dAv['combustivel']['ativar']) && $arr_dAv['combustivel']['ativar']=='s'){
 
 							$p_litro = Qlib::qoption('preco_litro')?Qlib::qoption('preco_litro'): $arr_dAv['combustivel']['preco_litro'];
 							$preco_litro = Qlib::precoDbdase($p_litro);
-							$consumo = ((int)$arr_dAv['combustivel']['consumo_hora'] * (int)$v['horas']); //
+							$consumo = ((int)$arr_dAv['combustivel']['consumo_hora'] * (int)$creditos); //
 							$previsao_consumo += ($preco_litro * $consumo);
 						}
 
 					}
 
 				}
+                // dd($previsao_consumo);
 
 				if($previsao_consumo){
 
 					$ret['valor'] = $previsao_consumo;
 					$ret['valor_litro'] = $preco_litro;
-					$ret['tipo_pagamento'] = $this->pagamento_combustivel($token,@$dados['orc']);
+					$ret['tipo_pagamento'] = $this->pagamento_combustivel($id_matricula,@$dados['orc']);
 					$ret['exec'] = true;
 					if($ret['tipo_pagamento']=='antecipado'){
 						$ret['color_tipo_pagamento'] = 'text-success';
 					}else{
 						$ret['color_tipo_pagamento'] = 'text-danger';
 					}
-					// if(Qlib::isAdmin(1)){
-					// 	dd($ret);
-					// }
 				}
 
 
@@ -1943,7 +2008,7 @@ class MatriculaController extends Controller
 		return $ret;
 	}
     /**
-	 * Metodo para veridicar a forma de pagamento de comustivel escolhido
+	 * Metodo para verificar a forma de pagamento de comustivel escolhido
 	 * uso $ret = (new Orcamentos)->pagamento_combustivel($token,$org);
 	 */
 	public function pagamento_combustivel($token,$orc=false){
@@ -1962,4 +2027,11 @@ class MatriculaController extends Controller
 		}
 		return $ret;
 	}
+
+    public function simuladorCombustivelApi(Request $request)
+    {
+        $dados = $request->all();
+        $res = $this->simuladorCombustivel(null, $dados);
+        return response()->json($res);
+    }
 }

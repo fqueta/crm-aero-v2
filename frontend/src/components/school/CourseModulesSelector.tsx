@@ -226,10 +226,30 @@ export default function CourseModulesSelector({
   };
 
   const handleCheckboxChange = (idx: number, checked: boolean) => {
-    setSelections(prev => ({
-      ...prev,
-      [idx]: { ...prev[idx], selected: checked }
-    }));
+    setSelections(prev => {
+      const newState = { ...prev };
+      newState[idx] = { ...newState[idx], selected: checked };
+
+      // Se marcou (checked = true) e é Etapa 2 (ou tem aircrafts disponíveis)
+      // e ainda não tem aeronave selecionada, seleciona a primeira automaticamente
+      if (checked) {
+          const module = course?.modulos?.[idx];
+          // Verifica se o módulo permite aeronaves
+          const allowedAircrafts = getAllowedAircrafts(module);
+          
+          if (allowedAircrafts.length > 0 && !newState[idx].aircraftId) {
+              // Seleciona a primeira aeronave disponível
+              const firstAircraft = allowedAircrafts[0];
+              newState[idx].aircraftId = String(firstAircraft.id);
+              
+              // Calcula o valor inicial baseado na aeronave selecionada
+              const rate = getAircraftHourlyRate(firstAircraft);
+              newState[idx].price = newState[idx].credits * rate;
+          }
+      }
+
+      return newState;
+    });
   };
 
   // Notifica mudanças para o componente pai
@@ -271,6 +291,22 @@ export default function CourseModulesSelector({
         // Se desmarcar, apenas desmarca. Se marcar, mantém estado anterior ou inicializa.
         // Importante: Não limpar aircraftId ao desmarcar para não perder o contexto se o usuário marcar de novo.
         next[index] = { ...next[index], selected: checked };
+
+        // Auto-select aircraft and calculate price if checked
+        if (checked) {
+            const module = course?.modulos?.[index];
+            const allowedAircrafts = getAllowedAircrafts(module);
+            
+            if (allowedAircrafts.length > 0 && !next[index].aircraftId) {
+                // Select first available aircraft
+                const firstAircraft = allowedAircrafts[0];
+                next[index].aircraftId = String(firstAircraft.id);
+                
+                // Calculate price
+                const rate = getAircraftHourlyRate(firstAircraft);
+                next[index].price = next[index].credits * rate;
+            }
+        }
       });
       return next;
     });
