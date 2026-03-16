@@ -274,8 +274,8 @@ class PdfController extends Controller
         // Determina o shortcode baseado no tipo de curso (2 = Prático, 4 = Teórico/Plano)
         // Default para 'fundo_proposta_plano' se não for tipo 2
         $shortcode = ($matricula['curso_tipo'] ?? null) == 2
-            ? 'fundo_proposta_pratico'
-            : 'fundo_proposta_plano';
+            ? 'fundo-proposta-pratico'
+            : 'fundo-proposta-plano';
 
         $galerias = Qlib::get_post_by_shortcode($shortcode, $matricula['id_curso']);
 
@@ -554,10 +554,10 @@ class PdfController extends Controller
                         ->setOption('page-height', '297mm')
                         ->setOption('zoom', '1.0')
                         ->setOption('header-html', $headerHtml)
-                        ->setOption('margin-top', 10)
-                        ->setOption('margin-bottom', 10)
-                        ->setOption('margin-left', 10)
-                        ->setOption('margin-right', 10)
+                        ->setOption('margin-top', 0)
+                        ->setOption('margin-bottom', 0)
+                        ->setOption('margin-left', 0)
+                        ->setOption('margin-right', 0)
                         ->setOption('disable-smart-shrinking', true)
                         ->setOption('footer-spacing', '0')
                         ->setOption('print-media-type', true)

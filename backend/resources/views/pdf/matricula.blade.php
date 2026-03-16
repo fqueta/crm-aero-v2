@@ -284,6 +284,7 @@
                             <div><b>Cliente:</b> {{ $cliente_nome }} <span class="muted">Nº: {{ $cliente_zapsint ?? '-' }}</span></div>
                             <div><b>Telefone:</b> {{ $cliente_telefone ?? '-' }}</div>
                             <div><b>Email:</b> {{ $cliente_email ?? '-' }}</div>
+                            <div><b>Curso:</b> {{ $curso ?? '-' }}</div>
                             <div><b>Data:</b> {{ $data_formatada }} &nbsp; <b>Validade:</b> {{ $validade_formatada }}</div>
                         </div>
                         @php
@@ -304,7 +305,7 @@
                         @endif
                     </div>
                 @elseif($idx === 1)
-                    <div style="margin-top: 10mm;">
+                    <div style="margin-top: 15mm;">
                         <!-- HEADER BAR REMOVIDO -->
 
                         @php
@@ -544,7 +545,7 @@
                                  @endif
                             </div>
                         @endif
-                            <div class="section-title" style="page-break-inside: avoid; break-inside: avoid; margin-top: 30px;">Parcelamento</div>
+                            {{-- <div class="section-title" style="page-break-inside: avoid; break-inside: avoid; margin-top: 30px;">Parcelamento</div> --}}
                             <div class="chips" style="page-break-inside: avoid; break-inside: avoid;">
                                 @php
                                     $orcArr = is_array($orc) ? $orc : (is_string($orc) ? (json_decode($orc, true) ?: []) : []);
@@ -581,17 +582,19 @@
                     </div>
                 @else
                     <!-- PT/EN: Remaining pages from controller -->
-                    @php
-                        $hasTitle = !empty($p['title']);
-                        $hasHtml = !empty($p['html']);
-                    @endphp
-                    @if($hasTitle)
-                        <h1>{{ $p['title'] }}</h1>
-                    @endif
-                    {!! $p['html'] ?? '' !!}
-                    @if(!$hasTitle && !$hasHtml)
-                        <div class="page-filler"></div>
-                    @endif
+                    <div style="margin-top: 15mm;">
+                        @php
+                            $hasTitle = !empty($p['title']);
+                            $hasHtml = !empty($p['html']);
+                        @endphp
+                        @if($hasTitle)
+                            <h1>{{ $p['title'] }}</h1>
+                        @endif
+                        {!! $p['html'] ?? '' !!}
+                        @if(!$hasTitle && !$hasHtml)
+                            <div class="page-filler"></div>
+                        @endif
+                    </div>
                 @endif
             </div>
         </div>
