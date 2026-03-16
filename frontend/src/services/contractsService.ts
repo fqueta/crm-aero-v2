@@ -55,6 +55,13 @@ class ContractsService extends BaseApiService {
     await this.delete(`${this.endpoint}/${id}`);
   }
 
+  async reorderContracts(ids: Array<string | number>, courseId?: string | number): Promise<{ ok: boolean; message?: string }> {
+    return this.post<{ ok: boolean; message?: string }>(`${this.endpoint}/reorder`, {
+      ids,
+      id_curso: courseId !== undefined && courseId !== null && courseId !== '' ? Number(courseId) : undefined,
+    });
+  }
+
   // Métodos de conveniência para compatibilidade com useGenericApi
   async list(params?: ContractsListParams): Promise<PaginatedResponse<ContractRecord>> {
     return this.listContracts(params);

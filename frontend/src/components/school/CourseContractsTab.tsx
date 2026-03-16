@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { contractsService } from '@/services/contractsService';
@@ -7,9 +7,26 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Plus, Copy, Trash2, Edit, Import } from 'lucide-react';
+import { MoreHorizontal, Plus, Copy, Trash2, Edit, Import, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { ImportContractsDialog } from './ImportContractsDialog';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface CourseContractsTabProps {
   courseId?: string | number;
@@ -29,6 +46,8 @@ export function CourseContractsTab({ courseId, courseType }: CourseContractsTabP
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [orderedItems, setOrderedItems] = useState<ContractRecord[]>([]);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
   const perPage = 50; // Mostrar mais itens por padrão na aba
 
   // Se não tiver ID do curso, não carrega nada
@@ -49,6 +68,106 @@ export function CourseContractsTab({ courseId, courseType }: CourseContractsTabP
   });
 
   const items = useMemo(() => ((data as any)?.data || (data as any)?.items || []) as ContractRecord[], [data]);
+  useEffect(() => {
+    if (!isSavingOrder) setOrderedItems(items);
+  }, [items, isSavingOrder]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+
+    const oldIndex = orderedItems.findIndex((c) => String(c.id) === activeId);
+    const newIndex = orderedItems.findIndex((c) => String(c.id) === overId);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const next = arrayMove(orderedItems, oldIndex, newIndex);
+    setOrderedItems(next);
+    setIsSavingOrder(true);
+    try {
+      await contractsService.reorderContracts(next.map((c) => c.id), courseId);
+      toast.success('Ordem atualizada');
+      queryClient.invalidateQueries({ queryKey: ['contracts', 'by_course', courseId] });
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || error?.body?.message || 'Erro ao salvar ordem';
+      toast.error(String(msg));
+      setOrderedItems(items);
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  function SortableContractRow({ contract, index }: { contract: ContractRecord; index: number }) {
+    const id = String(contract.id);
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      zIndex: isDragging ? 50 : 'auto',
+      position: 'relative' as const,
+      opacity: isDragging ? 0.3 : 1,
+    };
+
+    return (
+      <TableRow ref={setNodeRef} style={style} key={id}>
+        <TableCell className="w-[50px]">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="flex items-center justify-center p-1 cursor-grab text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md"
+              title="Arraste para reordenar"
+              disabled={isSavingOrder}
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+            <span>{index + 1}</span>
+          </div>
+        </TableCell>
+        <TableCell>{contract.nome}</TableCell>
+        <TableCell>
+          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+            contract.ativo === 'publish'
+              ? 'bg-green-100 text-green-700'
+              : 'bg-yellow-100 text-yellow-700'
+          }`}>
+            {contract.ativo === 'publish' ? 'Sim' : 'Não'}
+          </span>
+        </TableCell>
+        <TableCell className="text-right">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                Ação <MoreHorizontal className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Ações</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleEdit(contract.id)}>
+                <Edit className="mr-2 h-4 w-4" /> Editar
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCopy(contract)}>
+                <Copy className="mr-2 h-4 w-4" /> Duplicar
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleDelete(contract)} className="text-red-600">
+                <Trash2 className="mr-2 h-4 w-4" /> Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableCell>
+      </TableRow>
+    );
+  }
 
   /**
    * handleAdd
@@ -143,68 +262,46 @@ export function CourseContractsTab({ courseId, courseType }: CourseContractsTabP
       </CardHeader>
       <CardContent>
         <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]">#</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ação</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading && (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4">Carregando...</TableCell>
+                  <TableHead className="w-[50px]">#</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ação</TableHead>
                 </TableRow>
-              )}
-              {!isLoading && items.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
-                    Nenhum contrato vinculado.
-                  </TableCell>
-                </TableRow>
-              )}
-              {!isLoading && items.map((c, index) => (
-                <TableRow key={c.id}>
-                  <TableCell>{index + 1}</TableCell>
-                  <TableCell>{c.nome}</TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      c.ativo === 'publish' 
-                        ? 'bg-green-100 text-green-700' 
-                        : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {c.ativo === 'publish' ? 'Sim' : 'Não'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          Ação <MoreHorizontal className="ml-2 h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleEdit(c.id)}>
-                          <Edit className="mr-2 h-4 w-4" /> Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleCopy(c)}>
-                          <Copy className="mr-2 h-4 w-4" /> Duplicar
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleDelete(c)} className="text-red-600">
-                          <Trash2 className="mr-2 h-4 w-4" /> Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-4">Carregando...</TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && orderedItems.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
+                      Nenhum contrato vinculado.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && orderedItems.length > 0 && (
+                  <SortableContext
+                    items={orderedItems.map((c) => String(c.id))}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {orderedItems.map((c, index) => (
+                      <SortableContractRow key={String(c.id)} contract={c} index={index} />
+                    ))}
+                  </SortableContext>
+                )}
+              </TableBody>
+            </Table>
+          </DndContext>
         </div>
       </CardContent>
 

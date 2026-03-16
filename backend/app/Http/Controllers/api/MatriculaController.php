@@ -1153,6 +1153,7 @@ class MatriculaController extends Controller
                     $ids = \App\Models\Post::where('post_type', 'contratos')
                         ->where('config', 'like', '%"id_curso":' . $dm['id_curso'] . '%')
                         ->where('post_status', 'publish')
+                        ->orderBy('menu_order')
                         ->orderByDesc('ID')
                         ->pluck('ID')
                         ->toArray();

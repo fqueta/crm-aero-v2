@@ -409,6 +409,7 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::apiResource('contratos', ContratoController::class, ['parameters' => [
             'contratos' => 'id'
         ]]);
+        Route::post('contratos/reorder', [ContratoController::class, 'reorder'])->name('contratos.reorder');
         Route::get('contratos/trash', [ContratoController::class, 'trash'])->name('contratos.trash');
         Route::put('contratos/{id}/restore', [ContratoController::class, 'restore'])->name('contratos.restore');
         Route::delete('contratos/{id}/force', [ContratoController::class, 'forceDelete'])->name('contratos.forceDelete');

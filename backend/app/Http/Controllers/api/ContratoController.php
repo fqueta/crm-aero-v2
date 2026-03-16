@@ -5,6 +5,7 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\Post;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class ContratoController extends Controller
@@ -110,6 +111,67 @@ class ContratoController extends Controller
             'periodo' => $post->config['periodo'] ?? null,
             'ativo' => $post->post_status,
         ], 201);
+    }
+
+    public function reorder(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+            'id_curso' => 'nullable|integer',
+        ], [
+            'ids.required' => 'A lista de IDs é obrigatória',
+            'ids.array' => 'A lista de IDs deve ser um array',
+            'ids.min' => 'A lista de IDs deve conter ao menos um ID',
+            'ids.*.integer' => 'Todos os IDs devem ser números inteiros',
+            'id_curso.integer' => 'id_curso deve ser um número inteiro',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Erro de validação', 'errors' => $validator->errors()], 422);
+        }
+
+        $ids = array_map('intval', (array) $request->input('ids', []));
+        $courseId = $request->filled('id_curso') ? (int) $request->input('id_curso') : null;
+
+        $counts = array_count_values($ids);
+        $duplicates = array_keys(array_filter($counts, fn ($c) => $c > 1));
+        if (!empty($duplicates)) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => [
+                    'ids' => ['Há IDs duplicados no payload. Remova duplicidades e tente novamente.'],
+                    'duplicateIds' => $duplicates,
+                ],
+            ], 422);
+        }
+
+        $query = Post::query()->ofType('contratos')->whereIn('ID', $ids);
+        if ($courseId) {
+            $query->where(function ($q) use ($courseId) {
+                $q->where('config->id_curso', $courseId)
+                    ->orWhere('post_parent', $courseId);
+            });
+        }
+        $existingIds = $query->pluck('ID')->all();
+        $missing = array_values(array_diff($ids, array_map('intval', $existingIds)));
+        if (!empty($missing)) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => [
+                    'ids' => ['Alguns IDs informados não existem ou não pertencem ao curso.'],
+                    'missingIds' => $missing,
+                ],
+            ], 422);
+        }
+
+        DB::transaction(function () use ($ids) {
+            foreach ($ids as $pos => $id) {
+                Post::query()->ofType('contratos')->where('ID', (int) $id)->update(['menu_order' => $pos + 1]);
+            }
+        });
+
+        return response()->json(['ok' => true, 'message' => 'Ordem atualizada com sucesso']);
     }
 
     /**
