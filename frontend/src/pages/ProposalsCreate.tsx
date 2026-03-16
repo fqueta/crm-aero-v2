@@ -197,7 +197,17 @@ export default function ProposalsCreate() {
 
     } catch (error: any) {
       console.error(error);
-      const msg = error?.response?.data?.message || 'Erro ao criar cliente.';
+      const data = error?.response?.data ?? error?.body;
+      const apiMessage = (data && typeof data === 'object' && 'message' in data) ? String((data as any).message || '') : '';
+      const errorsObj = (data && typeof data === 'object' && 'errors' in data) ? (data as any).errors : undefined;
+      const collectedMsgs: string[] = [];
+      if (errorsObj && typeof errorsObj === 'object') {
+        Object.values(errorsObj).forEach((messages: any) => {
+          if (Array.isArray(messages) && messages[0]) collectedMsgs.push(String(messages[0]));
+          else if (typeof messages === 'string' && messages) collectedMsgs.push(messages);
+        });
+      }
+      const msg = (collectedMsgs.filter(Boolean)[0]) || apiMessage || error?.message || 'Erro ao criar cliente.';
       toast({ title: 'Erro', description: msg, variant: 'destructive' });
     } finally {
       setQuickClientLoading(false);

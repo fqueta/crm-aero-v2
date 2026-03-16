@@ -58,9 +58,10 @@ export abstract class BaseApiService {
         ['inactive','user_inactive','usuario_inativo','usuario-inativo'].includes(String(errorBody?.code || '').toLowerCase());
 
       // Criar erro com status code para verificação de acesso
-      const error = new Error(errorMessage) as Error & { status?: number; body?: any };
+      const error = new Error(errorMessage) as Error & { status?: number; body?: any; response?: { status: number; data: any } };
       error.status = response.status;
       error.body = errorBody;
+      error.response = { status: response.status, data: errorBody };
 
       // Logout imediato se usuário inativo
       if (isInactive) {
