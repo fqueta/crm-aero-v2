@@ -36,3 +36,6 @@ yarn-error.log
 /storage/logs/*
 !/storage/logs/.gitignore
 /storage/tenant*
+/storage/tenant*/**
+/storage/tenancy*
+/storage/tenancy*/**
