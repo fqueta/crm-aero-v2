@@ -1,6 +1,8 @@
 import { componentsService } from '@/services/componentsService';
 import { useGenericApi } from '@/hooks/useGenericApi';
 import { ComponentRecord, CreateComponentInput, UpdateComponentInput, ComponentsListParams } from '@/types/components';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 /**
  * getComponentsApi
@@ -63,6 +65,20 @@ export function useUpdateComponent(mutationOptions?: any) {
 export function useDeleteComponent(mutationOptions?: any) {
   const api = getComponentsApi();
   return api.useDelete(mutationOptions);
+}
+
+export function useDuplicateComponent() {
+  const queryClient = useQueryClient();
+  return useMutation<ComponentRecord, Error, string>({
+    mutationFn: (id: string) => componentsService.duplicate(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cmsComponents'] });
+      toast.success('Componente duplicado com sucesso!');
+    },
+    onError: (error) => {
+      toast.error('Erro ao duplicar componente', { description: error?.message ? String(error.message) : undefined });
+    },
+  });
 }
 
 /**

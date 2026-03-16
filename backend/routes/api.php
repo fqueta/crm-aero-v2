@@ -209,6 +209,7 @@ Route::name('api.')->prefix('v1')->middleware([
         Route::apiResource('componentes', ComponentController::class, ['parameters' => [
             'componentes' => 'id'
         ]]);
+        Route::post('componentes/{id}/duplicate', [ComponentController::class, 'duplicate'])->name('componentes.duplicate');
 
         // PDF: Relatório de componentes
         // Gera PDF a partir dos filtros usados pelo CRUD de componentes

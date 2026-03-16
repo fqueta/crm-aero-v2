@@ -150,7 +150,7 @@ export abstract class BaseApiService {
       method: 'GET',
       headers: this.getHeaders(),
     });
-    try { console.log('API GET status', response.status); } catch {}
+    // try { console.log('API GET status', response.status); } catch {}
     return this.handleResponse<T>(response);
   }
 

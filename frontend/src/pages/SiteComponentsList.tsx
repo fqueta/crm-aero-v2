@@ -9,7 +9,7 @@ import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useComponentsList, useDeleteComponent } from '@/hooks/components';
+import { useComponentsList, useDeleteComponent, useDuplicateComponent } from '@/hooks/components';
 import { useContentTypesList } from '@/hooks/contentTypes';
 import { useQuery } from '@tanstack/react-query';
 import { coursesService } from '@/services/coursesService';
@@ -100,6 +100,7 @@ export default function SiteComponentsList() {
 
   const { data: resp, isLoading, isFetching } = useComponentsList(listParams);
   const deleteMutation = useDeleteComponent();
+  const duplicateMutation = useDuplicateComponent();
 
   /**
    * Actions
@@ -109,6 +110,13 @@ export default function SiteComponentsList() {
   // Navegação atualizada para novo prefixo
   const goToCreate = () => navigate('/admin/site/conteudo-site/create');
   const goToEdit = (id: string) => navigate(`/admin/site/conteudo-site/${id}/edit`);
+  const handleDuplicate = (id: string) => {
+    duplicateMutation.mutate(id, {
+      onSuccess: (created) => {
+        if (created?.id) goToEdit(String(created.id));
+      },
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -224,6 +232,7 @@ export default function SiteComponentsList() {
                       <DropdownMenuLabel>Ações</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => goToEdit(String(item.id))}>Editar</DropdownMenuItem>
+                      <DropdownMenuItem disabled={duplicateMutation.isPending} onClick={() => handleDuplicate(String(item.id))}>Duplicar</DropdownMenuItem>
                       <DropdownMenuItem className="text-red-600" onClick={() => deleteMutation.mutate(String(item.id))}>Excluir</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

@@ -12,6 +12,17 @@ use Illuminate\Validation\Rule;
 
 class ComponentController extends Controller
 {
+    private function appendCopySuffix(string $base): string
+    {
+        $text = trim((string) $base);
+        if ($text === '') {
+            return 'Sem nome (Copia)';
+        }
+        if (preg_match('/\(\s*Copia\s*\)\s*$/i', $text)) {
+            return $text;
+        }
+        return $text . ' (Copia)';
+    }
     /**
      * Enriquecer itens de galeria com URL pública multi-tenant.
      * PT: Recebe array de objetos {id, nome?, descricao?} e adiciona
@@ -324,6 +335,61 @@ class ComponentController extends Controller
         $request->merge(['id' => $id]);
         // dd($request->all());
         return $this->store($request);
+    }
+
+    public function duplicate(Request $request, int $id)
+    {
+        $original = Post::where('post_type', 'componentes')->findOrFail($id);
+
+        $copy = $original->replicate();
+        $copy->post_type = 'componentes';
+        $copy->post_title = $this->appendCopySuffix((string) $original->post_title);
+        $copy->post_status = 'draft';
+        $copy->token = Str::random(16);
+        $copy->deletado = 'n';
+        $copy->reg_deletado = null;
+        $copy->excluido = 'n';
+        $copy->reg_excluido = null;
+
+        $base = $original->post_name ?: $original->post_title;
+        $baseSlug = Str::slug((string) $base . '-copia');
+        if ($baseSlug === '') {
+            $baseSlug = 'copia';
+        }
+        $candidate = $baseSlug;
+        $i = 2;
+        while (Post::query()->where('post_name', $candidate)->exists()) {
+            $candidate = $baseSlug . '-' . $i;
+            $i++;
+        }
+        $copy->post_name = $candidate;
+
+        $user = $request->user();
+        if ($user && !empty($user->id)) {
+            $copy->post_author = $user->id;
+            $cfg = $copy->config ?? [];
+            $cfg['autor_uuid'] = $user->id;
+            $copy->config = $cfg;
+        } else {
+            $copy->post_author = $copy->post_author ?? 0;
+        }
+
+        $copy->save();
+
+        return response()->json(['data' => [
+            'id' => (string) $copy->ID,
+            'nome' => $copy->post_title,
+            'tipo_conteudo' => $copy->guid,
+            'ordenar' => (string) $copy->menu_order,
+            'short_code' => $copy->post_name,
+            'ativo' => $copy->post_status === 'publish' ? 's' : 'n',
+            'obs' => $copy->post_content,
+            'id_curso' => (string) ($copy->config['id_curso'] ?? ''),
+            'config' => $copy->config,
+            'token' => $copy->token,
+            'autor_uuid' => ($copy->config['autor_uuid'] ?? null),
+            'galeria' => $this->enrichGalleryPublicUrls((array) ($copy->config['galeria'] ?? [])),
+        ]], 201);
     }
 
     /**
