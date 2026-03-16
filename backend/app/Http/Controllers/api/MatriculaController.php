@@ -1146,6 +1146,14 @@ class MatriculaController extends Controller
                     $d_periodo = [];
                 }
                 $ids = $d_periodo??[];
+                if (is_array($ids) && count($ids)) {
+                    $ids = \App\Models\Post::where('post_type', 'contratos')
+                        ->whereIn('ID', $ids)
+                        ->orderBy('menu_order')
+                        ->orderByDesc('ID')
+                        ->pluck('ID')
+                        ->toArray();
+                }
 
                 // Se não encontrou IDs pelo período, tenta buscar contratos vinculados diretamente ao curso
                 // Ajuste: Apenas para cursos do tipo 2 (conforme solicitado)
