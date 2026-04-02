@@ -1634,12 +1634,12 @@ class MatriculaController extends Controller
         $ret['exec'] = false;
         if($dm && $url_pdf){
             $cliente = $dm['cliente'] ?? [];
-            $nome = isset($cliente['nome']) ? $cliente['nome'] : '';
-            $email = isset($cliente['email']) ? $cliente['email'] : '';
-            $cpf = isset($cliente['cpf']) ? $cliente['cpf'] : '';
-            $celular = isset($cliente['celular']) ? $cliente['celular'] : '';
-            $tipo_curso = isset($dm['curso_tipo']) ? $dm['curso_tipo'] : '';
-            $periodo = isset($dm['orc']['modulos'][0]['nome']) ? $dm['orc']['modulos'][0]['nome'] : '';
+            $nome = $cliente['name']?? $cliente['nome'] ?? '';
+            $email = $cliente['email']?? $cliente['email'] ?? '';
+            $cpf = $cliente['cpf']?? $cliente['cpf'] ?? '';
+            // $celular = $cliente['celular']?? $cliente['celular'] ?? '';
+            $tipo_curso = $dm['curso_tipo']?? $dm['curso_tipo'] ?? '';
+            $periodo = $dm['orc']['modulos'][0]['nome']?? $dm['orc']['modulos'][0]['nome'] ?? '';
             if($tipo_curso == 4){
             }
             $signers = [
