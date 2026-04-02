@@ -2931,6 +2931,7 @@ class Qlib
         $component = Post::query()
             ->where('post_type', 'componentes')
             ->where('deletado', '!=', 's')
+            ->where('post_status', '=', 'publish')
             ->where('post_name', '=', $shortcode)
             ->first();
 

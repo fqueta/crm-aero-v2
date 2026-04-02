@@ -10,6 +10,7 @@ use App\Jobs\GeraPdfContratoJoub;
 use App\Jobs\SendZapsingJoub;
 use App\Models\User;
 use App\Services\Qlib;
+use App\Services\BrevoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -138,7 +139,7 @@ class ZapsingController extends Controller
         $id_matricula = false;
         if($token){
             $arr_token = explode('_',$token);
-            $id_matricula = isset($arr_token[0]) ? $arr_token[0] : false;
+            $id_matricula = isset($arr_token[0]) ? (int)$arr_token[0] : false;
             $tk_periodo = isset($arr_token[1]) ? $arr_token[1] : false;
         }
         $signed_file = isset($d['signed_file']) ? $d['signed_file'] : false;
@@ -148,7 +149,18 @@ class ZapsingController extends Controller
             //salvar hisorico do webhook
             $ret['salvar_webhook'] = Qlib::update_matriculameta($id_matricula, $this->campo_processo,json_encode($d));
 
+        } elseif ($id_matricula) {
+             // Mesmo se não tiver signed_file, vamos tentar atualizar o processo
+             $ret['salvar_webhook'] = Qlib::update_matriculameta($id_matricula, $this->campo_processo,json_encode($d));
         }
+
+        $status = $d['status'] ?? '';
+        if ($status === 'signed') {
+            $emails = Qlib::qoption('zapsing_notify_emails') ?: ['contato@exemplo.com','suporte@exemplo.com'];
+            if (is_string($emails)) $emails = \App\Services\Qlib::lib_json_array($emails);
+            $ret['notify_brevo'] = BrevoService::notifySignatureCompleted($emails, $d);
+        }
+
         return $ret;
     }
     /**

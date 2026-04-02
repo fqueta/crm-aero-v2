@@ -135,9 +135,18 @@ export default function SiteComponentsForm() {
   const selectedTypeLabel = useMemo(() => {
     const list = (contentTypesResp?.data || []) as any[];
     const item = list.find((opt: any) => String(opt.id ?? opt.value ?? opt.codigo) === String(selectedTypeValue || ''));
-    const label = item ? (item.nome ?? item.name ?? item.descricao ?? item.titulo ?? '') : '';
-    return String(label || '').trim();
-  }, [contentTypesResp?.data, selectedTypeValue]);
+    
+    if (item) {
+        return String(item.nome ?? item.name ?? item.descricao ?? item.titulo ?? '').trim();
+    }
+    
+    // Fallback: se não encontrar na lista, tenta pegar do record original
+    if (record && record.tipo_conteudo_nome) {
+        return String(record.tipo_conteudo_nome);
+    }
+    
+    return '';
+  }, [contentTypesResp?.data, selectedTypeValue, record]);
   /**
    * typeHasSelected
    * pt-BR: Indica se o valor atual de `tipo_conteudo` existe na lista.
@@ -177,14 +186,18 @@ export default function SiteComponentsForm() {
         value: String(opt.id ?? opt.value ?? opt.codigo),
         label: String(opt.nome ?? opt.name ?? opt.descricao ?? opt.titulo ?? (opt.id ?? opt.value ?? opt.codigo)),
       }));
-    const val = String(selectedTypeValue || '');
+    
+    // Pega o valor atual do form (reagindo instantaneamente) ou faz fallback para o record inicial
+    const val = String(selectedTypeValue || record?.tipo_conteudo || '');
     const exists = base.some(o => o.value === val);
+    
+    // Se o valor existe mas não está nas opções carregadas, criamos um item fake.
     if (val && !exists) {
-      const fallbackLabel = selectedTypeLabel || (val === '3' ? 'Galeria' : val === '19' ? 'Galeria Completa' : '(valor atual)');
+      const fallbackLabel = selectedTypeLabel || (record as any)?.tipo_conteudo_nome || (val === '3' ? 'Galeria' : val === '19' ? 'Galeria Completa' : '(valor atual)');
       base.unshift({ value: val, label: fallbackLabel });
     }
     return base;
-  }, [contentTypesResp?.data, selectedTypeValue, selectedTypeLabel]);
+  }, [contentTypesResp?.data, selectedTypeValue, selectedTypeLabel, record]);
 
   /**
    * gallerySelection
@@ -356,7 +369,7 @@ export default function SiteComponentsForm() {
         nome: record.nome || '',
         // pt-BR: Garante que `tipo_conteudo` seja sempre string para o Select.
         // en-US: Ensure `tipo_conteudo` is always a string for the Select.
-        tipo_conteudo: record.tipo_conteudo !== undefined && record.tipo_conteudo !== null ? String(record.tipo_conteudo) : '',
+        tipo_conteudo: record.tipo_conteudo !== undefined && record.tipo_conteudo !== null ? String((record as any).tipo_conteudo?.id ?? record.tipo_conteudo) : '',
         // pt-BR: Normaliza ordenar para string, evitando erro "Expected string, received number".
         // en-US: Normalize ordenar to string to avoid "Expected string, received number".
         ordenar: record.ordenar !== undefined && record.ordenar !== null ? String(record.ordenar) : '',
@@ -372,7 +385,7 @@ export default function SiteComponentsForm() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record?.id]);
+  }, [record]);
 
   /**
    * hydrateGallerySelection
@@ -417,15 +430,9 @@ export default function SiteComponentsForm() {
       };
       return item;
     }).filter(Boolean) as GalleryItem[] : [];
+    
     if (ordered.length > 0) {
       setGallerySelection(ordered);
-    } else if (componentUploads.length > 0) {
-      const initial = componentUploads.map((u) => ({
-        ...u,
-        nome_personalizado: u.nome ?? '',
-        descricao_personalizada: '',
-      })) as GalleryItem[];
-      setGallerySelection(initial);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record?.id, isGallery, uploadsQuery.data]);
@@ -519,10 +526,21 @@ export default function SiteComponentsForm() {
                     <FormLabel>Tipo de conteúdo</FormLabel>
                     {/* pt-BR: Usa sempre string para evitar mismatch com itens do Select. */}
                     {/* en-US: Always use string to avoid mismatch with Select item values. */}
-                    <Select value={String(field.value ?? '')} onValueChange={field.onChange}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={loadingContentTypes ? 'Carregando...' : 'Selecione o tipo'} />
-                      </SelectTrigger>
+                    <Select
+                      key={field.value}
+                      value={String(field.value ?? '')}
+                      onValueChange={(val) => {
+                        field.onChange(val);
+                        // pt-BR: Atualiza selectedTypeValue imediatamente
+                        // en-US: Update selectedTypeValue immediately
+                        form.setValue('tipo_conteudo', val);
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={loadingContentTypes ? 'Carregando...' : 'Selecione o tipo'} />
+                        </SelectTrigger>
+                      </FormControl>
                       <SelectContent>
                         {contentTypeOptions.map((opt) => (
                           <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>

@@ -126,6 +126,10 @@
         {
             "title": "Integrações",
             "url": "/admin/settings/integrations"
+        },
+        {
+            "title": "Importação de Dados",
+            "url": "/settings/import-data"
         }
     ]
   }

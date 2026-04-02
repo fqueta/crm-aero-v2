@@ -57,9 +57,9 @@ class OptionsTableSeeder extends Seeder
                 ],
                 [
                     'name'  => 'Credenciais da Api Zapsign',
-                    'value' => json_encode([ 
-                        "url_api" => "https://api.zapsign.com.br/api/v1", 
-                        "id_api" => "" 
+                    'value' => json_encode([
+                        "url_api" => "https://api.zapsign.com.br/api/v1",
+                        "id_api" => ""
                     ]),
                     'url'   => 'credenciais_zapsign',
                 ],
@@ -67,8 +67,13 @@ class OptionsTableSeeder extends Seeder
                     'name'=> 'Enviar link assinatura zap',
                     'value'=> 'n',
                     'url'=> 'enviar_link_assinatura_zap',
+                ],
+                [
+                    'name'=> 'Enviar link assinatura zap',
+                    'value'=> Qlib::lib_array_json(['quetafernando1@gmail.com', 'ger.maisaqui1@gmail.com']),
+                    'url'=> 'zapsing_notify_emails',
                 ]
-                
+
             ];
         }else{
             $data = [
@@ -110,6 +115,7 @@ class OptionsTableSeeder extends Seeder
             ];
 
         }
+        DB::table('options')->truncate();
         DB::table('options')->insert($data);
     }
 }

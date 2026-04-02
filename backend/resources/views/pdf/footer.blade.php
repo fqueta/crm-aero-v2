@@ -10,7 +10,7 @@
         .footer-container {
             width: 100%;
             margin: 0;
-            padding: 5px 0 5px 0;
+            padding: 0;
             /* border-top: 1px solid #ddd; */
             display: flex;
             justify-content: space-between;
@@ -34,6 +34,7 @@
             display: block; /* Remove espaços abaixo da imagem */
             width: 100%; /* Ou tamanho fixo conforme necessário */
             height: auto;
+            vertical-align: bottom;
         }
     </style>
 </head>

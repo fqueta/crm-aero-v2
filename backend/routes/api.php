@@ -200,6 +200,9 @@ Route::name('api.')->prefix('v1')->middleware([
             'metrics' => 'id'
         ]]);
 
+        // Rota de Importação
+        Route::post('import', [\App\Http\Controllers\api\ImportController::class, 'importData'])->name('import.data');
+
         // CRUD: Tipos de conteúdo (posts: post_type=tipo_conteudo)
         Route::apiResource('tipos-conteudo', ContentTypeController::class, ['parameters' => [
             'tipos-conteudo' => 'id'

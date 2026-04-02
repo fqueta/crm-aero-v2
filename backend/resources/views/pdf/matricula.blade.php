@@ -305,7 +305,7 @@
                         @endif
                     </div>
                 @elseif($idx === 1)
-                    <div style="margin-top: 15mm;">
+                    <div class="budget-auto-shrink" style="margin-top: 15mm; overflow: hidden;">
                         <!-- HEADER BAR REMOVIDO -->
 
                         @php
@@ -368,7 +368,7 @@
 
                                 @if($isEtapaCombustivel)
                                     <!-- Layout Especial para Etapa de Combustível -->
-                                    <table class="styled-table" style="margin-top: 20px;">
+                                    <table class="styled-table" style="margin-top: 5px;">
                                         <thead>
                                             <tr>
                                                 <th style="background-color: #003366; color: white; padding: 10px;">{{ $stageName }}</th>
@@ -528,46 +528,9 @@
                                     if (is_string($cursoConfig)) $cursoConfig = json_decode($cursoConfig, true);
                                     $obsProposta = $cursoConfig['obs_proposta'] ?? null;
                                 @endphp
-
-                                @if(!empty($obsProposta))
-                                    {!! $obsProposta !!}
-                                @else
-                                    @php
-                                        // Tenta pegar a validade do meta da matrícula, senão 7 dias padrão
-                                        $diasValidade = isset($meta['validade']) && is_numeric($meta['validade']) ? (int)$meta['validade'] : 7;
-                                    @endphp
-                                     <p style="font-weight: 700; margin: 0 0 4px;">Observações Importantes</p>
-                                     <p style="margin: 0 0 4px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::convert_number_to_words($diasValidade) }}) dias. O valor apresentado poderá ser pago:</p>
-                                     <ul style="margin: 0 0 4px; padding-left: 16px;">
-                                         <li>À vista, <strong>com desconto</strong> (já aplicado se houver);</li>
-                                         <li>Parcelado em até 12x no cartão de crédito.</li>
-                                     </ul>
-                                 @endif
                             </div>
                         @endif
-                            {{-- <div class="section-title" style="page-break-inside: avoid; break-inside: avoid; margin-top: 30px;">Parcelamento</div> --}}
-                            <div class="chips" style="page-break-inside: avoid; break-inside: avoid;">
-                                @php
-                                    $orcArr = is_array($orc) ? $orc : (is_string($orc) ? (json_decode($orc, true) ?: []) : []);
-                                    $linhas = [];
-                                    if (isset($orcArr['parcelamento']) && is_array($orcArr['parcelamento'])) {
-                                        $linhasRaw = $orcArr['parcelamento']['linhas'] ?? [];
-                                        $linhas = is_array($linhasRaw) ? $linhasRaw : [];
-                                    }
-                                @endphp
-                                @if(!empty($linhas))
-                                    @foreach($linhas as $linha)
-                                        <span class="chip">Total de Parcelas: {{ $linha['parcelas'] ?? '-' }}</span>
-                                        <span class="chip">Valor da Parcela: R$ {{ isset($linha['valor']) ? number_format((float)$linha['valor'], 2, ',', '.') : '-' }}</span>
-                                        @if(isset($linha['desconto']))
-                                            <span class="chip">Desconto: R$ {{ number_format((float)$linha['desconto'], 2, ',', '.') }}</span>
-                                            <span class="chip">Parcela c/ Desconto: R$ {{ number_format(((float)$linha['valor']) - ((float)$linha['desconto']), 2, ',', '.') }}</span>
-                                        @endif
-                                    @endforeach
-                                @else
-                                    <span class="chip">Sem dados de parcelamento</span>
-                                @endif
-                            </div>
+
                             <div class="content-html">
                                 @php
                                     $textoPreview = '';
@@ -579,6 +542,47 @@
                             </div>
                             <div class="footer">Gerado em {{ $generatedAt->format('d/m/Y H:i') }}
                             </div>
+                    </div>
+                @elseif($idx === 2)
+                    <!-- PT/EN: Remaining pages from controller -->
+                    <div style="margin-top: 15mm;">
+                        @if(!empty($obsProposta))
+                                    {!! $obsProposta !!}
+                        @else
+                            @php
+                                // Tenta pegar a validade do meta da matrícula, senão 7 dias padrão
+                                $diasValidade = isset($meta['validade']) && is_numeric($meta['validade']) ? (int)$meta['validade'] : 7;
+                            @endphp
+                             <p style="font-weight: 700; margin: 0 0 4px;">Observações Importantes</p>
+                             <p style="margin: 0 0 4px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::convert_number_to_words($diasValidade) }}) dias. O valor apresentado poderá ser pago:</p>
+                             <ul style="margin: 0 0 4px; padding-left: 16px;">
+                                 <li>À vista, <strong>com desconto</strong> (já aplicado se houver);</li>
+                                 {{-- <li>Parcelado em até 12x no cartão de crédito.</li> --}}
+                             </ul>
+                         @endif
+                         {{-- <div class="section-title" style="page-break-inside: avoid; break-inside: avoid; margin-top: 30px;">Parcelamento</div> --}}
+                        <div class="chips" style="page-break-inside: avoid; break-inside: avoid;">
+                            @php
+                                $orcArr = is_array($orc) ? $orc : (is_string($orc) ? (json_decode($orc, true) ?: []) : []);
+                                $linhas = [];
+                                if (isset($orcArr['parcelamento']) && is_array($orcArr['parcelamento'])) {
+                                    $linhasRaw = $orcArr['parcelamento']['linhas'] ?? [];
+                                    $linhas = is_array($linhasRaw) ? $linhasRaw : [];
+                                }
+                            @endphp
+                            @if(!empty($linhas))
+                                @foreach($linhas as $linha)
+                                    <span class="chip">Total de Parcelas: {{ $linha['parcelas'] ?? '-' }}</span>
+                                    <span class="chip">Valor da Parcela: R$ {{ isset($linha['valor']) ? number_format((float)$linha['valor'], 2, ',', '.') : '-' }}</span>
+                                    @if(isset($linha['desconto']))
+                                        <span class="chip">Desconto: R$ {{ number_format((float)$linha['desconto'], 2, ',', '.') }}</span>
+                                        <span class="chip">Parcela c/ Desconto: R$ {{ number_format(((float)$linha['valor']) - ((float)$linha['desconto']), 2, ',', '.') }}</span>
+                                    @endif
+                                @endforeach
+                            @else
+                                <span class="chip">Sem dados de parcelamento</span>
+                            @endif
+                        </div>
                     </div>
                 @else
                     <!-- PT/EN: Remaining pages from controller -->
@@ -599,5 +603,29 @@
             </div>
         </div>
     @endforeach
+    <script>
+        // PT: Script para ajustar o tamanho da fonte da página de orçamento (Página 2) 
+        // para tentar manter tudo em uma única folha se o conteúdo for muito extenso.
+        (function() {
+            window.addEventListener('load', function() {
+                const container = document.querySelector('.budget-auto-shrink');
+                if (!container) return;
+                
+                // Limite aproximado de altura para conteúdo na A4 (em px, considerando margens)
+                // 240mm ~ 900px
+                const MAX_PIXELS = 880; 
+                
+                let currentFont = 13; // Começa com um tamanho padrão confortável
+                container.style.fontSize = currentFont + 'px';
+                
+                let protection = 0;
+                while (container.scrollHeight > MAX_PIXELS && currentFont > 8 && protection < 20) {
+                    currentFont -= 0.5;
+                    container.style.fontSize = currentFont + 'px';
+                    protection++;
+                }
+            });
+        })();
+    </script>
 </body>
 </html>

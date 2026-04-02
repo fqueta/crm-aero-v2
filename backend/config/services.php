@@ -39,8 +39,10 @@ return [
     'brevo' => [
         'api_key' => env('BREVO_API_KEY'),
         'api_url' => env('BREVO_API_URL', 'https://api.brevo.com/v3'),
-        'from_email' => env('MAIL_FROM_ADDRESS'),
-        'from_name' => env('MAIL_FROM_NAME'),
+        'sender' => [
+            'email' => env('BREVO_SENDER_EMAIL'),
+            'name' => env('BREVO_SENDER_NAME', env('MAIL_FROM_NAME', 'CRM Aeroclube')),
+        ],
     ],
 
 ];

@@ -299,6 +299,12 @@ export const defaultMenu: MenuItemDTO[] = [
         url: "/admin/settings/workflows/designer",
         permission: "settings.workflows.view",
         can_view: true
+      },
+      {
+        title: "Importação de Dados",
+        url: "/admin/settings/import-data",
+        permission: "settings.import-data.view",
+        can_view: true
       }
     ]
   }

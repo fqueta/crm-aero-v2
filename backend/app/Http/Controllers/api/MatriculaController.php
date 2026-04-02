@@ -1981,7 +1981,7 @@ class MatriculaController extends Controller
 
 				$arr_mod = $dados['modulos'];
 
-				$previsao_consumo = NULL;
+				$previsao_consumo = 0;
 				$preco_litro = null;
                 // dd($arr_mod);
 				foreach ($arr_mod as $k => $v) {
@@ -1996,7 +1996,7 @@ class MatriculaController extends Controller
 						if(isset($arr_dAv['combustivel']['consumo_hora']) && isset($arr_dAv['combustivel']['preco_litro']) && isset($arr_dAv['combustivel']['ativar']) && $arr_dAv['combustivel']['ativar']=='s'){
 
 							$p_litro = Qlib::qoption('preco_litro')?Qlib::qoption('preco_litro'): $arr_dAv['combustivel']['preco_litro'];
-							$preco_litro = Qlib::precoDbdase($p_litro);
+							$preco_litro = (float)Qlib::precoDbdase($p_litro);
 							$consumo = ((int)$arr_dAv['combustivel']['consumo_hora'] * (int)$creditos); //
 							$previsao_consumo += ($preco_litro * $consumo);
 						}

@@ -179,10 +179,21 @@ class ComponentController extends Controller
     {
         $post = Post::where('post_type', 'componentes')->findOrFail($id);
         $galeriaRaw = ($post->config['galeria'] ?? []);
+
+        $tipo_conteudo_nome = null;
+        if (!empty($post->guid)) {
+            $ct = Post::query()
+                ->where('post_type', 'tipo_conteudo')
+                ->where('ID', $post->guid)
+                ->first();
+            $tipo_conteudo_nome = $ct?->post_title;
+        }
+
         return response()->json([
             'id' => $post->ID,
             'nome' => $post->post_title,
             'tipo_conteudo' => $post->guid,
+            'tipo_conteudo_nome' => $tipo_conteudo_nome,
             'ordenar' => $post->menu_order,
             'short_code' => $post->post_name,
             'ativo' => $post->post_status === 'publish' ? 's' : 'n',

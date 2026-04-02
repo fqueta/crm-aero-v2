@@ -43,6 +43,7 @@ import WorkflowDesigner from "./pages/settings/WorkflowDesigner";
 import Integrations from "./pages/settings/Integrations";
 import IntegrationsNew from "./pages/settings/IntegrationsNew";
 import IntegrationsEdit from "./pages/settings/IntegrationsEdit";
+import ImportData from "./pages/settings/ImportData";
 import Login from "./pages/auth/Login";
 import Metrics from "./pages/settings/Metrics";
 import AircraftsSettings from "./pages/settings/AircraftsSettings";
@@ -675,6 +676,13 @@ const App = () => {
                 <AdminProtectedRoute>
                   <AppLayout>
                     <IntegrationsEdit />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/import-data" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <ImportData />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

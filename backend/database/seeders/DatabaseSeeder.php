@@ -45,6 +45,7 @@ class DatabaseSeeder extends Seeder
                     PeriodosSeeder::class,
                     TipoConteudoSeeder::class,
                     ContratosSeeder::class,
+                    ComponentesFundosPropostaSeeder::class,
                     // QoptionSeeder::class,
             ];
 
@@ -66,6 +67,7 @@ class DatabaseSeeder extends Seeder
                     PeriodosSeeder::class,
                     ContratosSeeder::class,
                     TipoConteudoSeeder::class,
+                    ComponentesFundosPropostaSeeder::class,
             ];
 
         }

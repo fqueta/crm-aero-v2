@@ -48,8 +48,8 @@ return [
         'enabled' => true,
         // OS-aware default path; override via env WKHTML_PDF_BINARY
         'binary'  => env('WKHTML_PDF_BINARY', $defaultPdfBinary),
-        // Limit to 120s to avoid hanging processes
-        'timeout' => 120,
+        // Raised to 300s to accommodate pages with many background images / external assets
+        'timeout' => 300,
         'options' => [
             'encoding' => 'utf-8',
             'print-media-type' => true,
@@ -61,6 +61,8 @@ return [
             'margin-right' => '0mm',
             'margin-bottom' => '0mm',
             'margin-left' => '0mm',
+            'load-error-handling' => 'ignore',
+            'load-media-error-handling' => 'ignore',
         ],
         'env'     => [],
     ],

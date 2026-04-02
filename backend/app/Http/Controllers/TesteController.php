@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\api\PdfController;
 use App\Http\Controllers\api\ZapsingController;
 use App\Services\Escola;
 use App\Services\Qlib;
@@ -42,9 +43,10 @@ class TesteController extends Controller
         // }
         // $ret = (new OrcamentoController)->resumo_proposta_periodos($id??'');
         // $ret = (new MatriculaController)->contratos_periodos($id??'');
-        // $ret = (new MatriculaController)->contratos_periodos_pdf($id??'');
+        $ret = (new MatriculaController)->contratos_periodos_pdf($id??'');
+        // $ret = (new PdfController())->matricula($request, $id??'');
         // $ret = (new \App\Http\Controllers\api\ZapsingController)->enviar_envelope($id??'');
-        $ret = (new MatriculaController)->send_to_zapSing($id??'');
+        // $ret = (new MatriculaController)->send_to_zapSing($id??'');
 
         // $ret['enviar_link_assinatura'] = (new ZapsingController())->enviar_link_assinatura($id);
         // $ret = (new MenuController)->getMenus(1);

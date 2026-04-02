@@ -466,13 +466,13 @@ export default function BudgetPreview({
               })()}
 
               {discountAmountMasked && (
-                <TableRow>
-                  <TableCell colSpan={4}>
-                    <span className="text-red-600 font-medium">{discountLabel}</span>
-                  </TableCell>
-                  <TableCell className="text-right text-red-600">- {discountAmountMasked}</TableCell>
-                </TableRow>
-              )}
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <span className="text-red-600 font-medium">{discountLabel}</span>
+                    </TableCell>
+                    <TableCell className="text-right text-red-600">- {discountAmountMasked}</TableCell>
+                  </TableRow>
+                )}
 
               {subtotalMasked && (
                 <TableRow>

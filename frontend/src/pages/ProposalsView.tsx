@@ -6,6 +6,8 @@ import ProposalViewContent from '@/components/school/ProposalViewContent';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
 import { useAuth } from '@/contexts/AuthContext';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
 
 /**
  * ProposalsView
@@ -65,53 +67,119 @@ export default function ProposalsView() {
 
   /**
    * handleGeneratePdf
-   * pt-BR: Faz uma requisição GET ao endpoint de PDF de matrículas e, se houver `data.url`,
-   *        abre uma nova aba com o link do documento.
-   * en-US: Performs a GET request to the enrollment PDF endpoint and, if `data.url` exists,
-   *        opens a new tab pointing to the document link.
+   * pt-BR: Faz uma requisição GET ao endpoint de PDF de matrículas.
+   *        Se receber HTML (com debug_html=1), usa a biblioteca html2pdf no frontend
+   *        para converter o HTML em PDF e baixar diretamente.
+   * en-US: Performs a GET request to the enrollment PDF endpoint.
+   *        If it receives HTML (with debug_html=1), uses the html2pdf library in the 
+   *        frontend to convert HTML to PDF and download directly.
    */
   async function handleGeneratePdf() {
     if (!id) return;
     setIsPdfLoading(true);
     try {
-      const base = getApiUrl();
-      const url = `${base}/pdf/matriculas/${encodeURIComponent(String(id))}?debug_html=0&engine=snap&no_store=0&force=1&cache_ttl=0`;
-      const headers: HeadersInit = { Accept: 'application/json' };
-      const tk = token || localStorage.getItem('auth_token');
-      if (tk) headers['Authorization'] = `Bearer ${tk}`;
-      const resp = await fetch(url, { method: 'GET', headers });
-      if (!resp.ok) {
-        toast({ title: 'Erro', description: `Falha ao gerar PDF (HTTP ${resp.status})`, variant: 'destructive' });
-        return;
-      }
-      // Trata tanto JSON quanto PDF/HTML direto
-      const ct = resp.headers.get('Content-Type') || '';
-      if (ct.includes('application/pdf')) {
-        const blob = await resp.blob();
-        const urlBlob = URL.createObjectURL(blob);
-        window.open(urlBlob, '_blank');
-        toast({ title: 'PDF gerado', description: 'Abrindo o documento em nova aba.' });
-        return;
-      }
-      if (ct.includes('text/html')) {
-        const htmlText = await resp.text();
-        const blob = new Blob([htmlText], { type: 'text/html' });
-        const urlBlob = URL.createObjectURL(blob);
-        window.open(urlBlob, '_blank');
-        toast({ title: 'Visualização HTML', description: 'Exibindo conteúdo gerado.' });
-        return;
-      }
-      const data = await resp.json().catch(() => ({}));
-      const targetUrl = data?.data?.url || data?.url;
-      if (typeof targetUrl === 'string' && targetUrl.length > 0) {
-        const bust = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
-        window.open(bust, '_blank');
-        toast({ title: 'PDF gerado', description: 'Abrindo o documento em nova aba.' });
-      } else {
-        toast({ title: 'PDF gerado', description: 'Resposta sem URL. Verifique o servidor.' });
-      }
-    } catch (error) {
-      toast({ title: 'Erro', description: 'Não foi possível gerar o PDF.', variant: 'destructive' });
+        const base = getApiUrl();
+        // Mudamos para debug_html=1 para receber o HTML e processar no frontend
+        const url = `${base}/pdf/matriculas/${encodeURIComponent(String(id))}?debug_html=1&engine=snap&no_store=1&force=1&cache_ttl=0`;
+        const headers: HeadersInit = { Accept: 'application/json, text/html' };
+        const tk = token || localStorage.getItem('auth_token');
+        if (tk) headers['Authorization'] = `Bearer ${tk}`;
+        
+        const resp = await fetch(url, { method: 'GET', headers });
+        if (!resp.ok) {
+          setIsPdfLoading(false);
+          toast({ title: 'Erro', description: `Falha ao buscar dados (HTTP ${resp.status})`, variant: 'destructive' });
+          return;
+        }
+
+        const ct = resp.headers.get('Content-Type') || '';
+        
+        // Se o backend retornou HTML, geramos o PDF no frontend
+        if (ct.includes('text/html')) {
+          const htmlText = await resp.text();
+          console.log('HTML recebido do backend, tamanho:', htmlText.length);
+          
+          if (htmlText.length < 100) {
+              console.warn('HTML muito curto, pode estar incompleto:', htmlText);
+          }
+
+          // Criamos um iframe oculto para carregar o HTML completo com seus estilos
+          const iframe = document.createElement('iframe');
+          iframe.style.position = 'fixed';
+          iframe.style.left = '-10000px';
+          iframe.style.top = '0';
+          iframe.style.width = '210mm'; // Largura A4 padrão
+          iframe.style.height = '100%';
+          iframe.style.border = '0';
+          iframe.style.opacity = '0';
+          iframe.style.pointerEvents = 'none';
+          document.body.appendChild(iframe);
+          
+          // Injeta o HTML no iframe
+          const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+          if (!iframeDoc) {
+             throw new Error('Não foi possível acessar o documento do iframe');
+          }
+          
+          iframeDoc.open();
+          iframeDoc.write(htmlText);
+          iframeDoc.close();
+
+          // Aguarda um pouco para as fontes e imagens (agora URLs públicas) serem processadas
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          // Configurações do html2pdf
+          const options = {
+            margin:       0, // Margem já controlada pelo Blade do backend
+            filename:     `proposta-${id}.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { 
+              scale: 1, // Reduzido para evitar "Canvas exceeds max size" em documentos longos
+              useCORS: true,
+              letterRendering: true,
+              logging: false,
+              scrollY: 0,
+              windowWidth: 794, 
+            },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+          };
+
+          try {
+            // Geramos o PDF a partir do body do iframe
+            // @ts-ignore
+            await html2pdf().from(iframeDoc.body).set(options).save();
+            toast({ title: 'PDF gerado', description: 'O download do PDF foi iniciado.' });
+          } catch (err) {
+            console.error('Erro no html2pdf:', err);
+            throw err;
+          } finally {
+            document.body.removeChild(iframe);
+          }
+          return;
+        }
+        
+        // Caso o backend tenha retornado PDF ou JSON (legado)
+        if (ct.includes('application/pdf')) {
+          const blob = await resp.blob();
+          const urlBlob = URL.createObjectURL(blob);
+          window.open(urlBlob, '_blank');
+          toast({ title: 'PDF gerado', description: 'Abrindo o documento em nova aba.' });
+          return;
+        }
+
+        const data = await resp.json().catch(() => ({}));
+        const targetUrl = data?.data?.url || data?.url;
+        if (typeof targetUrl === 'string' && targetUrl.length > 0) {
+          const bust = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+          window.open(bust, '_blank');
+          toast({ title: 'PDF gerado', description: 'Abrindo o documento em nova aba.' });
+        } else {
+          toast({ title: 'PDF processado', description: 'Resposta sem conteúdo PDF/HTML. Verifique o servidor.' });
+        }
+    } catch (err: any) {
+      console.error('Erro PDF:', err);
+      toast({ title: 'Erro ao gerar PDF', description: err.message, variant: 'destructive' });
     } finally {
       setIsPdfLoading(false);
     }

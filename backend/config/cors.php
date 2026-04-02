@@ -41,7 +41,7 @@ return [
         'http://crm.localhost:3000',
         'http://localhost:8000',
         'http://maisaqui1.localhost:8080',
-        'http://api-crm.localhost:8000',
+        'http://api-crm.localhost:8001',
         'http://crm.localhost:5173',
     ],
 
