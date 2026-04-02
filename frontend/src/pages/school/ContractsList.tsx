@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useContractsList, useDeleteContract } from '@/hooks/contracts';
 import type { ContractRecord, ContractStatus } from '@/types/contracts';
@@ -24,10 +24,55 @@ export default function ContractsList() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<ContractStatus | ''>('');
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const status = (searchParams.get('status') || '') as ContractStatus | '';
+  const page = Number(searchParams.get('page')) || 1;
   const perPage = 20;
+
+  // Sync status to URL
+  const setStatus = (newStatus: ContractStatus | '') => {
+    setSearchParams(prev => {
+      if (newStatus) prev.set('status', newStatus);
+      else prev.delete('status');
+      prev.set('page', '1');
+      return prev;
+    }, { replace: true });
+  };
+
+  // Sync page to URL
+  const setPage = (newPageOrFn: number | ((p: number) => number)) => {
+    const next = typeof newPageOrFn === 'function' ? newPageOrFn(page) : newPageOrFn;
+    setSearchParams(prev => {
+      prev.set('page', String(next));
+      return prev;
+    }, { replace: true });
+  };
+
+  // Sync search to URL with debounce
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      const currentSearch = searchParams.get('search') || '';
+      if (search !== currentSearch) {
+        setSearchParams(prev => {
+          if (search) prev.set('search', search);
+          else prev.delete('search');
+          prev.set('page', '1');
+          return prev;
+        }, { replace: true });
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [search, setSearchParams, searchParams]);
+
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const urlSearch = searchParams.get('search') || '';
+    if (urlSearch !== search) {
+      setSearch(urlSearch);
+    }
+  }, [searchParams]);
 
   /**
    * listQuery

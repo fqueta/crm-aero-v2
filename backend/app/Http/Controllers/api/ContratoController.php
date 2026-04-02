@@ -27,6 +27,15 @@ class ContratoController extends Controller
             $query->where('post_name', $request->input('slug'));
         }
 
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('post_title', 'like', '%' . $search . '%')
+                  ->orWhere('post_name', 'like', '%' . $search . '%')
+                  ->orWhere('ID', $search);
+            });
+        }
+
         if ($request->filled('ativo')) {
             // Expect 'publish' or 'draft'
             $query->where('post_status', $request->input('ativo'));
