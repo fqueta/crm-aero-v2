@@ -29,6 +29,8 @@ export default function BudgetPreview({
   inscricaoMasked,
   validityDays = '7',
   fuelExternalText,
+  courseName,
+  turmaName,
 }: {
   title?: string;
   clientName: string;
@@ -37,6 +39,8 @@ export default function BudgetPreview({
   clientEmail?: string;
   validityDate?: string;
   course?: CourseRecord | any;
+  courseName?: string;
+  turmaName?: string;
   module?: CourseModule | any;
   modules?: any[]; // Suporte para múltiplos módulos (curso tipo 2)
   discountLabel?: string;
@@ -297,6 +301,18 @@ export default function BudgetPreview({
             <div>
               <span className="font-medium">Email:</span>{' '}
               <span className='font-bold'>{clientEmail}</span>
+            </div>
+          )}
+          {courseName && (
+            <div>
+              <span className="font-medium">Curso:</span>{' '}
+              <span className='font-bold'>{courseName}</span>
+            </div>
+          )}
+          {turmaName && (
+            <div>
+              <span className="font-medium">Turma:</span>{' '}
+              <span className='font-bold'>{turmaName}</span>
             </div>
           )}
           <div className="flex gap-4">

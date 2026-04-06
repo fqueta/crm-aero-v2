@@ -488,6 +488,14 @@ class PdfController extends Controller
             ]);
         }
 
+        if ($request->boolean('generate_proposal')) {
+            GeraPdfPropostasPnlJob::dispatch($id);
+            return response()->json([
+                'message' => 'Geração da proposta PDF iniciada em background.',
+                'exec' => true
+            ]);
+        }
+
         return null;
     }
 

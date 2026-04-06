@@ -262,6 +262,8 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                         clientPhone={clientPhone}
                         clientEmail={clientEmail}
                         course={course as any}
+                        courseName={(course as any)?.titulo || (course as any)?.nome || (enrollment as any)?.curso_name || (enrollment as any)?.curso_nome}
+                        turmaName={(enrollment as any)?.turma_name || (enrollment as any)?.turma_nome}
                         module={modulo}
                         modules={modulesList}
                         discountLabel="Desconto"

@@ -1926,6 +1926,8 @@ export default function ProposalsEdit() {
                 clientPhone={selectedClient?.config?.celular || selectedClient?.config?.telefone_residencial || ''}
                 clientEmail={selectedClient?.email || ''}
                 course={selectedCourseNormalized as any}
+                courseName={selectedCourseNormalized?.titulo || selectedCourseNormalized?.nome || ''}
+                turmaName={classOptionsWithFallback.find(t => String(t.value) === String(form.watch('id_turma')))?.label || ''}
                 module={normalizeModuleForTipo4(selectedModule ?? moduleFromEnrollment) as any}
                 modules={previewModules}
                 discountLabel="Desconto"
