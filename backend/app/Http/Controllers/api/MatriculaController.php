@@ -1925,27 +1925,53 @@ class MatriculaController extends Controller
      * @param string $token
      */
     public function baixar_arquivo($id_matricula,$url,$nome_arquivo=false,$slug=false,$pasta=false){
-        // $url = "https://zapsign.s3.amazonaws.com/sandbox/dev/2024/12/pdf/72d30d89-da1f-4e10-9025-3689b03ef3d4/7a773057-05d3-4843-be1d-0fe6bffdb730.pdf?AWSAccessKeyId=AKIASUFZJ7JCTI2ZRGWX&Signature=oRLj2PALoDs1JEkx%2FHm4TV1ZM%2BQ%3D&Expires=1734026017";
+        $raw_id = $id_matricula;
+        $id_matricula = trim((string)$id_matricula);
+        
+        // Log de depuração para entender o que está chegando
+        \App\Models\EventLog::create([
+            'entity_type' => 'matricula',
+            'entity_id'   => $id_matricula ?: '0',
+            'action'      => 'debug_download',
+            'description' => "Processando baixa de arquivo. ID Recebido: '{$raw_id}', Pasta: '{$pasta}', Nome: '{$nome_arquivo}'",
+            'actor_id'    => '1',
+        ]);
+
         $num=null;
         $nome_arquivo = $nome_arquivo?$nome_arquivo:'assinado';
         $nome_arquivo = Qlib::createSlug($nome_arquivo);
         $disk = 'public';
-        $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$nome_arquivo.'.pdf';
+        
+        // Caminho físico (sempre o mesmo no storage)
+        $caminhoRelativo = 'pdfs/termos/' . ($id_matricula ?: '0');
         if($pasta){
-            $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$pasta.'/'.$nome_arquivo.'.pdf';
+            $caminhoRelativo .= '/' . trim((string)$pasta);
         }
+        $caminhoSalvar = $caminhoRelativo . '/' . $nome_arquivo . '.pdf';
+
         if(Storage::disk($disk)->exists($caminhoSalvar)){
             $num='-'.time();
         }
-        $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$nome_arquivo.$num.'.pdf';
-        if($pasta){
-            $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$pasta.'/'.$nome_arquivo.$num.'.pdf';
-        }
+        $caminhoSalvar = $caminhoRelativo . '/' . $nome_arquivo . $num . '.pdf';
+
         $ret = Qlib::download_file($url,$caminhoSalvar,$disk);
         $ret['url'] = $url;
         $ret['id_matricula'] = $id_matricula;
+
         if($ret['exec']){
-            $link = Storage::disk($disk)->url($caminhoSalvar);
+            $isTenant = false;
+            if (function_exists('tenant') && tenant('id')) {
+                $isTenant = true;
+            } elseif (strpos($_SERVER['HTTP_HOST'] ?? '', 'api-crm.') !== false) {
+                $isTenant = true;
+            }
+
+            if ($isTenant) {
+                $baseUrl = rtrim(env('APP_URL', (isset($_SERVER['HTTPS']) ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? 'localhost')), '/');
+                $link = $baseUrl . '/tenancy/assets/' . $caminhoSalvar;
+            } else {
+                $link = Storage::disk($disk)->url($caminhoSalvar);
+            }
             $ret['link'] = $link;
             if($slug){
                 $ret['salv'] = Qlib::update_matriculameta($id_matricula,$slug,Qlib::lib_array_json(['link'=>$link,'data'=>Qlib::dataLocal()]));

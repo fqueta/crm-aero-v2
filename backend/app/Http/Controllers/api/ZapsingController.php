@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\MatriculasController;
+use App\Http\Controllers\api\MatriculaController;
 use App\Http\Controllers\api\ZapguruController;
 use App\Http\Controllers\api\ApiCredentialController;
 use App\Jobs\GeraPdfContratoJoub;
@@ -223,6 +223,15 @@ class ZapsingController extends Controller
         if(isset($arr_token[1])){
             $tk_periodo = $arr_token[1];
         }
+        // Log de diagnóstico no ZapsingController
+        \App\Models\EventLog::create([
+            'entity_type' => 'matricula',
+            'entity_id'   => $id_matricula ?: '0',
+            'action'      => 'webhook_baixar_assinados',
+            'description' => "ZapsingController: Iniciando baixa de assinados para Matrícula #{$id_matricula}. Token Período: '{$tk_periodo}'",
+            'actor_id'    => '1',
+        ]);
+
         $mc = new MatriculaController;
         $name = str_replace('.pdf', '', $name);
         $ret = $mc->baixar_arquivo($id_matricula, $signed_file,$name,false,$tk_periodo);
