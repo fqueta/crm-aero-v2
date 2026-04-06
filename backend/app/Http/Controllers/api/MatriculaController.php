@@ -1929,22 +1929,23 @@ class MatriculaController extends Controller
         $num=null;
         $nome_arquivo = $nome_arquivo?$nome_arquivo:'assinado';
         $nome_arquivo = Qlib::createSlug($nome_arquivo);
+        $disk = 'public';
         $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$nome_arquivo.'.pdf';
         if($pasta){
             $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$pasta.'/'.$nome_arquivo.'.pdf';
         }
-        if(Storage::exists($caminhoSalvar)){
+        if(Storage::disk($disk)->exists($caminhoSalvar)){
             $num='-'.time();
         }
         $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$nome_arquivo.$num.'.pdf';
         if($pasta){
             $caminhoSalvar = 'pdfs/termos/'.$id_matricula.'/'.$pasta.'/'.$nome_arquivo.$num.'.pdf';
         }
-        $ret = Qlib::download_file($url,$caminhoSalvar);
+        $ret = Qlib::download_file($url,$caminhoSalvar,$disk);
         $ret['url'] = $url;
         $ret['id_matricula'] = $id_matricula;
         if($ret['exec']){
-            $link = Storage::url($caminhoSalvar);
+            $link = Storage::disk($disk)->url($caminhoSalvar);
             $ret['link'] = $link;
             if($slug){
                 $ret['salv'] = Qlib::update_matriculameta($id_matricula,$slug,Qlib::lib_array_json(['link'=>$link,'data'=>Qlib::dataLocal()]));

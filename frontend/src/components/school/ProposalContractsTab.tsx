@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { proposalService } from '@/services/proposalService';
-import { Loader2, AlertCircle, FileText, ExternalLink, Pencil, Save, X, RotateCcw, Send } from 'lucide-react';
+import { Loader2, AlertCircle, FileText, ExternalLink, Pencil, Save, X, RotateCcw, Send, Copy, Check, Share2, CheckCircle2, MessageCircle, Eye, Clock, Zap, MapPin, MousePointerClick } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -73,49 +73,113 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
   }, [clientId, enrollmentId]);
 
   // Processamento dos metadados para Assinatura Digital
-  const { pdfsToSend, sentDocs, rawParsedContracts } = useMemo(() => {
+  const { pdfsToSend, sentDocs, rawParsedContracts, zapsignDoc, localSignedUrl, localExtraDocs } = useMemo(() => {
     const listToSend: { name: string; url: string; original?: any }[] = [];
-    const listSent: { name: string; url: string }[] = [];
+    const listSent: { name: string; url: string; signer?: any }[] = [];
     let parsedContracts: PdfContractItem[] = [];
 
-    // 1. Proposta PDF (string)
-    if (meta?.proposta_pdf && typeof meta.proposta_pdf === 'string') {
-        listToSend.push({
-            name: 'Proposta Comercial (PDF)',
-            url: meta.proposta_pdf,
-            original: { type: 'proposal' }
-        });
-    }
-
-    // 2. Contratos PDF (JSON string ou Array/Object)
-    const rawContratoPdf = meta?.contrato_pdf;
-    
-    if (Array.isArray(rawContratoPdf)) {
-        parsedContracts = rawContratoPdf;
-    } else if (typeof rawContratoPdf === 'string') {
-        try {
-            parsedContracts = JSON.parse(rawContratoPdf);
-        } catch (e) {
-            console.error('Erro ao fazer parse de contrato_pdf:', e);
+    // 1. PDFs a serem enviados (Simulações/Contratos gerados localmente)
+    // pt-BR: Pega os PDFs gerados localmente na matrícula meta 'proposta_pdf' e 'contrato_pdf'.
+    const rawPropostas = meta?.proposta_pdf;
+    if (rawPropostas) {
+        if (typeof rawPropostas === 'string' && (rawPropostas.startsWith('http') || rawPropostas.startsWith('/storage'))) {
+            listToSend.push({
+                name: 'Proposta Comercial (PDF)',
+                url: rawPropostas,
+                original: { type: 'proposal' }
+            });
+        } else {
+            try {
+                const parsed = typeof rawPropostas === 'string' ? JSON.parse(rawPropostas) : rawPropostas;
+                const items = Array.isArray(parsed) ? parsed : [parsed];
+                items.forEach((item: any) => {
+                    if (item?.url) {
+                        listToSend.push({
+                            name: item.nome_contrato || item.nome_arquivo || 'Simulação/Orçamento',
+                            url: item.url,
+                            original: item
+                        });
+                    }
+                });
+            } catch (e) {}
         }
-    } else if (typeof rawContratoPdf === 'object' && rawContratoPdf !== null) {
-        // Se vier como objeto (ex: array associativo do PHP), tenta converter valores em array
-        parsedContracts = Object.values(rawContratoPdf);
     }
 
-    if (Array.isArray(parsedContracts)) {
-        parsedContracts.forEach((item: any) => { // item pode ser PdfContractItem ou similar
-            if (item && item.url) {
-                listToSend.push({
-                    name: item.nome_contrato || item.nome_arquivo || 'Contrato',
-                    url: item.url,
-                    original: item
+    const rawContratos = meta?.contrato_pdf;
+    if (rawContratos) {
+        try {
+            const parsed = typeof rawContratos === 'string' ? JSON.parse(rawContratos) : rawContratos;
+            const items = Array.isArray(parsed) ? parsed : (typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [parsed]);
+            parsedContracts = items;
+            items.forEach((item: any) => {
+                if (item && typeof item === 'object' && item.url) {
+                    listToSend.push({
+                        name: item.nome_contrato || item.nome_arquivo || 'Contrato',
+                        url: item.url,
+                        original: item
+                    });
+                }
+            });
+        } catch (e) {}
+    }
+
+    // 2. Status e Signatários (ZapSign)
+    // pt-BR: O webhook do ZapSign atualiza o meta 'processo_assinatura' diretamente com o payload.
+    //        Já o envio inicial salva em 'processo_assinatura.enviar.response'.
+    const zapsignBase = meta?.processo_assinatura;
+    const zapsignData = zapsignBase?.enviar?.response || zapsignBase;
+    const signersList = zapsignData?.signers;
+
+    if (Array.isArray(signersList)) {
+        signersList.forEach((s: any) => {
+            const link = s.sign_url || s.signing_link;
+            if (link) {
+                listSent.push({
+                    name: `Link Assinatura: ${s.name}`,
+                    url: link,
+                    signer: s
                 });
             }
         });
     }
 
-    return { pdfsToSend: listToSend, sentDocs: listSent, rawParsedContracts: parsedContracts };
+    // 3. Arquivos Assinados Localmente (Segurança e Permanência)
+    // pt-BR: Procuramos por arquivos já baixados para o servidor local em 'salvar_links_assinados'
+    // en-US: Looking for files already downloaded to the local server in 'salvar_links_assinados'
+    let localUrl = '';
+    let extraList: { nome: string; link: string }[] = [];
+    const localLinksRaw = meta?.salvar_links_assinados;
+    let localLinksObj: any = null;
+
+    if (localLinksRaw) {
+        localLinksObj = typeof localLinksRaw === 'string' ? JSON.parse(localLinksRaw) : localLinksRaw;
+    } else {
+        // Tenta encontrar metadados de períodos específicos (ex: salvar_links_assinados_TK123)
+        const periodKey = Object.keys(meta || {}).find(k => k.startsWith('salvar_links_assinados_'));
+        if (periodKey) {
+            const raw = meta[periodKey];
+            localLinksObj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        }
+    }
+    
+    if (localLinksObj?.principal?.link) {
+        localUrl = localLinksObj.principal.link;
+    }
+
+    if (localLinksObj?.extra) {
+        // localLinksObj.extra pode ser um array ou objeto (chave -> {nome, link})
+        extraList = Object.values(localLinksObj.extra);
+    }
+
+    return { 
+        pdfsToSend: listToSend, 
+        sentDocs: listSent, 
+        rawParsedContracts: parsedContracts,
+        zapsignSigners: Array.isArray(signersList) ? signersList : [],
+        zapsignDoc: zapsignData,
+        localSignedUrl: localUrl,
+        localExtraDocs: extraList
+    };
   }, [meta]);
 
   // Initialize edit state when entering edit mode
@@ -384,21 +448,158 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                             {sentDocs.length > 0 ? (
-                                <ul className="space-y-2">
-                                    {sentDocs.map((doc, idx) => (
-                                        <li key={idx} className="flex items-center justify-between text-sm p-2 bg-background rounded border">
-                                            <span className="truncate mr-2">{doc.name}</span>
-                                            <Button variant="ghost" size="sm" asChild className="h-6 w-6 p-0">
-                                                <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                                                    <ExternalLink className="h-3 w-3" />
+                             {/* Document-level global info (Final PDF) */}
+                             {(localSignedUrl || zapsignDoc?.signed_file) && (
+                                <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="text-xs font-bold text-green-700 dark:text-green-400 flex items-center gap-2 uppercase tracking-wider">
+                                            <Zap className="h-3 w-3 animate-pulse" />
+                                            Documento Final Assinado
+                                        </h4>
+                                        <span className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded-full font-bold uppercase">
+                                            Concluído
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button variant="outline" size="sm" className="flex-1 h-8 text-xs font-medium border-green-300 dark:border-green-700 bg-white dark:bg-zinc-800" asChild>
+                                            <a href={localSignedUrl || zapsignDoc.signed_file} target="_blank" rel="noopener noreferrer">
+                                                <FileText className="h-3 w-3 mr-2" />
+                                                {localSignedUrl ? 'Ver Contrato Assinado (Local)' : 'Baixar PDF Final'}
+                                            </a>
+                                        </Button>
+                                        {zapsignDoc.signature_report && (
+                                            <Button variant="outline" size="sm" className="h-8 text-[10px] font-medium border-green-300 dark:border-green-700 bg-white dark:bg-zinc-800" asChild title="Relatório de Assinaturas">
+                                                <a href={zapsignDoc.signature_report} target="_blank" rel="noopener noreferrer">
+                                                    Manifesto
                                                 </a>
                                             </Button>
-                                        </li>
-                                    ))}
-                                </ul>
+                                        )}
+                                    </div>
+
+                                    {/* Documentos Extra (Individuais) */}
+                                    {localExtraDocs && localExtraDocs.length > 0 && (
+                                        <div className="mt-4 pt-3 border-t border-green-200 dark:border-green-800">
+                                            <h5 className="text-[10px] font-bold text-green-700 dark:text-green-400 uppercase mb-2 tracking-wider">
+                                                Arquivos Individuais do Envelope
+                                            </h5>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {localExtraDocs.map((ex: any, i: number) => (
+                                                    <Button key={i} variant="ghost" size="sm" className="h-7 text-[10px] justify-start px-2 hover:bg-green-100 dark:hover:bg-green-900/40 text-green-800 dark:text-green-300" asChild>
+                                                        <a href={ex.link} target="_blank" rel="noopener noreferrer">
+                                                            <FileText className="h-3 w-3 mr-1.5 opacity-70" />
+                                                            <span className="truncate">{ex.nome}</span>
+                                                        </a>
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                             )}
+
+                             {sentDocs.length > 0 ? (
+                                <div className="space-y-4">
+                                    {sentDocs.map((doc, idx) => (
+                                        <div key={idx} className="group relative bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-slate-200 dark:bg-zinc-800 group-hover:bg-primary transition-colors duration-300"></div>
+                                        
+                                        <div className="p-4">
+                                            {/* Header do Card: Avatar + Nome + Status */}
+                                            <div className="flex items-start justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm border-2 ${
+                                                        doc.signer?.status === 'signed' ? 'bg-green-50 border-green-200 text-green-700' :
+                                                        doc.signer?.status === 'opened' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                                                        'bg-slate-50 border-slate-200 text-slate-600'
+                                                    }`}>
+                                                        {getInitials(doc.signer?.name || doc.name)}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
+                                                            {doc.signer?.name || doc.name}
+                                                        </h4>
+                                                        <p className="text-[10px] text-muted-foreground">
+                                                            {doc.signer?.email || 'E-mail não informado'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                
+                                                <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase font-black tracking-widest ${
+                                                    doc.signer?.status === 'signed' ? 'bg-green-600 text-white shadow-sm shadow-green-200' :
+                                                    doc.signer?.status === 'new' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                                                    doc.signer?.status === 'opened' ? 'bg-blue-600 text-white shadow-sm shadow-blue-200' :
+                                                    'bg-slate-100 text-slate-600 border border-slate-200'
+                                                }`}>
+                                                    {doc.signer?.status === 'signed' ? 'Assinado' :
+                                                     doc.signer?.status === 'new' ? 'Pendente' :
+                                                     doc.signer?.status === 'opened' ? 'Visualizado' :
+                                                     doc.signer?.status || 'Pendente'}
+                                                </span>
+                                            </div>
+
+                                            {/* Métricas de Engajamento */}
+                                            <div className="flex flex-wrap items-center gap-y-1 gap-x-4 mb-4">
+                                                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 bg-slate-50 dark:bg-zinc-800/50 px-2 py-1 rounded-md">
+                                                    <MousePointerClick className="h-3 w-3 opacity-70" />
+                                                    <span className="font-medium">{doc.signer?.times_viewed || 0}</span> acessos
+                                                </div>
+                                                
+                                                {doc.signer?.last_view_at && (
+                                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500" title="Data da última visualização">
+                                                        <Eye className="h-3 w-3 opacity-70" />
+                                                        Lido: <span className="font-medium">{formatDateTime(doc.signer.last_view_at)}</span>
+                                                    </div>
+                                                )}
+                                                
+                                                {doc.signer?.signed_at && (
+                                                    <div className="flex items-center gap-1.5 text-[10px] text-green-600 font-bold bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-md" title="Finalizado em">
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                        {formatDateTime(doc.signer.signed_at)}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Ações (Link + Botões) */}
+                                            <div className="flex flex-col gap-2">
+                                                <div className="relative group/link">
+                                                    <Input 
+                                                        value={doc.url} 
+                                                        readOnly 
+                                                        className="h-8 pr-16 bg-slate-50/50 dark:bg-zinc-800/30 border-slate-200 dark:border-zinc-800 text-[10px] focus-visible:ring-offset-0 focus-visible:ring-1"
+                                                    />
+                                                    <div className="absolute right-1 top-1 flex items-center gap-1">
+                                                        <CopyButton text={doc.url} />
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-2">
+                                                    <Button variant="outline" size="sm" className="flex-1 h-8 text-[10px] font-bold uppercase tracking-wider" asChild>
+                                                        <a href={doc.url} target="_blank" rel="noopener noreferrer">
+                                                            <ExternalLink className="h-3 w-3 mr-2" />
+                                                            Abrir Link
+                                                        </a>
+                                                    </Button>
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm" 
+                                                        className="h-8 px-3 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400"
+                                                        onClick={() => {
+                                                            const message = `Olá ${doc.signer?.name || doc.name}, segue o link para assinatura do seu contrato no Aeroclube: ${doc.url}`;
+                                                            const whatsappUrl = `https://api.whatsapp.com/send?phone=55${doc.signer?.phone_number || ''}&text=${encodeURIComponent(message)}`;
+                                                            window.open(whatsappUrl, '_blank');
+                                                        }}
+                                                        title="Enviar lembrete pelo WhatsApp"
+                                                    >
+                                                        <MessageCircle className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                  ))}
+                                </div>
                             ) : (
-                                <p className="text-xs text-muted-foreground italic">Nenhum documento enviado.</p>
+                                <p className="text-xs text-muted-foreground italic">Nenhum documento enviado ou links de assinatura disponíveis.</p>
                             )}
                         </CardContent>
                     </Card>
@@ -448,4 +649,50 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
         )}
     </div>
   );
+}
+
+function formatDateTime(isoString?: string) {
+    if (!isoString) return '';
+    try {
+        const date = new Date(isoString);
+        return date.toLocaleString('pt-BR', { 
+            day: '2-digit', 
+            month: '2-digit', 
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (e) {
+        return isoString;
+    }
+}
+
+function getInitials(name: string) {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function CopyButton({ text }: { text: string }) {
+    const { toast } = useToast();
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            toast({ title: "Copiado", description: "Link copiado para a área de transferência." });
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            toast({ title: "Erro", description: "Falha ao copiar link.", variant: "destructive" });
+        }
+    };
+
+    return (
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleCopy} title="Copiar link">
+            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </Button>
+    );
 }

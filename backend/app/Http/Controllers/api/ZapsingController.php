@@ -154,6 +154,23 @@ class ZapsingController extends Controller
              $ret['salvar_webhook'] = Qlib::update_matriculameta($id_matricula, $this->campo_processo,json_encode($d));
         }
 
+        // Registro de Log/Evento no histórico da matrícula
+        if ($id_matricula) {
+            $status_doc = $d['status'] ?? 'desconhecido';
+            $nome_doc = $d['name'] ?? 'Documento';
+            $evento_desc = "ZapSign Webhook: Documento '{$nome_doc}' atualizado para status '{$status_doc}'";
+            
+            \App\Models\EventLog::create([
+                'entity_type' => 'matriculas',
+                'entity_id'   => (string)$id_matricula,
+                'action'      => 'zapsing_webhook',
+                'description' => $evento_desc,
+                'payload'     => $d,
+                'actor_id'    => '1', // Sistema/Bot
+                'ip_address'  => request()->ip(),
+            ]);
+        }
+
         $status = $d['status'] ?? '';
         if ($status === 'signed') {
             $emails = Qlib::qoption('zapsing_notify_emails') ?: ['contato@exemplo.com','suporte@exemplo.com'];

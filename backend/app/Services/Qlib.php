@@ -2810,17 +2810,18 @@ class Qlib
     /**
      * Metodo para baixar um arquivo remoto e salvar em disco do servidor
      */
-    static function download_file($url=false,$caminhoSalvar=false){
+    static function download_file($url=false,$caminhoSalvar=false,$disk = null){
         $ret = ['exec'=>false,'mens'=>false,'color'=>'danger','status'=>false];
         if($url && $caminhoSalvar){
+            $storage = $disk ? Storage::disk($disk) : Storage::disk();
             $response = Http::get($url);
             $delete = false;
-            if (Storage::exists($caminhoSalvar)) {
-                $delete = Storage::delete($caminhoSalvar);
+            if ($storage->exists($caminhoSalvar)) {
+                $delete = $storage->delete($caminhoSalvar);
             }
             if ($response->successful()) {
                 // Salvar no disco local
-                Storage::put($caminhoSalvar, $response->body());
+                $storage->put($caminhoSalvar, $response->body());
                 $ret = ['exec'=>true,'mens'=>'Arquivo baixado e salvo com sucesso!','delete'=>$delete,'color'=>'success','status'=>$response->status()];
             }else{
                 $ret = ['exec'=>false,'mens'=>'Erro ao baixar o arquivo remoto!','color'=>'danger','status'=>$response->status()];
