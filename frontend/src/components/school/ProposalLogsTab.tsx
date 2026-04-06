@@ -55,6 +55,8 @@ const getActionConfig = (action: string) => {
       return { label: 'Envio Zapsign', icon: Send, color: 'text-purple-500', bg: 'bg-purple-500/10', border: 'border-purple-200' };
     case 'zapsign_send_response':
       return { label: 'Retorno Zapsign', icon: Download, color: 'text-purple-500', bg: 'bg-purple-500/10', border: 'border-purple-200' };
+    case 'zapsing_webhook':
+      return { label: 'Webhook Zapsign', icon: Activity, color: 'text-indigo-600', bg: 'bg-indigo-500/10', border: 'border-indigo-200' };
     default:
       return { label: action, icon: FileText, color: 'text-gray-500', bg: 'bg-gray-500/10', border: 'border-gray-200' };
   }

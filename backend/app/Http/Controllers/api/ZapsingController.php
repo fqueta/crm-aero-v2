@@ -161,7 +161,7 @@ class ZapsingController extends Controller
             $evento_desc = "ZapSign Webhook: Documento '{$nome_doc}' atualizado para status '{$status_doc}'";
             
             \App\Models\EventLog::create([
-                'entity_type' => 'matriculas',
+                'entity_type' => 'matricula',
                 'entity_id'   => (string)$id_matricula,
                 'action'      => 'zapsing_webhook',
                 'description' => $evento_desc,
