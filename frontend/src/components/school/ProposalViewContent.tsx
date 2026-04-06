@@ -285,7 +285,14 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
         <TabsContent value="contracts" className="mt-4">
              {clientId && id ? (
-                <ProposalContractsTab clientId={clientId} enrollmentId={id} meta={meta} />
+                <ProposalContractsTab 
+                  clientId={clientId} 
+                  enrollmentId={id} 
+                  meta={meta} 
+                  courseName={(course as any)?.titulo || (course as any)?.nome || (enrollment as any)?.curso_name || (enrollment as any)?.curso_nome}
+                  signatureLink={linkAssinatura}
+                  onGoToOverview={() => handleTabChange('overview')}
+                />
              ) : (
                 <div className="text-center py-4 text-muted-foreground">
                     Carregando dados da matrícula...

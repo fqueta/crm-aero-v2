@@ -70,6 +70,16 @@ class ProposalService extends BaseApiService {
   async getContractsHtml(clientId: string, matriculaId: string) {
     return this.get<any[]>(`/proposal/${clientId}/${matriculaId}/contracts-html`);
   }
+
+  async generateContracts(clientId: string, matriculaId: string) {
+    // pt-BR: Endpoint de geração de contratos/propostas. force=1 garante a recriação.
+    return this.get(`/pdf/matriculas/${matriculaId}?generate_proposal=1&force=1`);
+  }
+
+  async sendToZapsign(matriculaId: string) {
+    // pt-BR: Envia os documentos atuais para assinatura.
+    return this.get(`/pdf/matriculas/${matriculaId}?send_zapsign=1`);
+  }
 }
 
 export const proposalService = new ProposalService();

@@ -11,11 +11,16 @@ import { Label } from '@/components/ui/label';
 import { enrollmentsService } from '@/services/enrollmentsService';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Info } from 'lucide-react';
 
 interface ProposalContractsTabProps {
   clientId: string;
   enrollmentId: string;
   meta?: any;
+  courseName?: string;
+  signatureLink?: string;
+  onGoToOverview?: () => void;
 }
 
 interface PdfContractItem {
@@ -24,14 +29,14 @@ interface PdfContractItem {
   nome_contrato: string;
 }
 
-export default function ProposalContractsTab({ clientId, enrollmentId, meta }: ProposalContractsTabProps) {
+export default function ProposalContractsTab({ clientId, enrollmentId, meta, courseName, signatureLink, onGoToOverview }: ProposalContractsTabProps) {
   const [contracts, setContracts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   
   // Auth and Permissions
   const { user, token } = useAuth();
-  const canEdit = user && Number(user.permission_id) < 2;
 
   // Editing State
   const [isEditing, setIsEditing] = useState(false);
@@ -126,7 +131,8 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
     // 2. Status e Signatários (ZapSign)
     // pt-BR: O webhook do ZapSign atualiza o meta 'processo_assinatura' diretamente com o payload.
     //        Já o envio inicial salva em 'processo_assinatura.enviar.response'.
-    const zapsignBase = meta?.processo_assinatura;
+    const rawZapsign = meta?.processo_assinatura;
+    const zapsignBase = typeof rawZapsign === 'string' ? (JSON.parse(rawZapsign) || {}) : (rawZapsign || {});
     const zapsignData = zapsignBase?.enviar?.response || zapsignBase;
     const signersList = zapsignData?.signers;
 
@@ -181,6 +187,11 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
         localExtraDocs: extraList
     };
   }, [meta]);
+
+  const isAdmin = user && Number(user.permission_id) === 1;
+  const isStandard = user && Number(user.permission_id) > 1;
+  const hasZapsign = zapsignDoc && typeof zapsignDoc === 'object' && Object.keys(zapsignDoc).length > 0 && (zapsignDoc.token || zapsignDoc.signers);
+  const canEdit = isAdmin || (isStandard && hasZapsign);
 
   // Initialize edit state when entering edit mode
   const handleStartEditing = () => {
@@ -281,30 +292,33 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
 
   const handleSendZapsign = async () => {
     if (!enrollmentId) return;
-    if (!confirm("Deseja enviar os documentos para o Zapsign?")) return;
+
+    // pt-BR: Validação de segurança - A proposta PRECISA estar aprovada antes de enviar ao ZapSign pela primeira vez.
+    if (meta?.status_assinatura !== 'aprovado' && !hasZapsign) {
+        setShowApprovalDialog(true);
+        return;
+    }
+
+    if (!confirm("Deseja enviar os documentos para o ZapSign?")) return;
 
     setIsSendingZapsign(true);
     try {
-      const base = getApiUrl();
-      const url = `${base}/pdf/matriculas/${encodeURIComponent(String(enrollmentId))}?send_zapsign=1`;
-      const headers: HeadersInit = { Accept: 'application/json' };
-      const tk = token || localStorage.getItem('auth_token');
-      if (tk) headers['Authorization'] = `Bearer ${tk}`;
-      
-      const resp = await fetch(url, { method: 'GET', headers });
-      
-      if (!resp.ok) {
-        throw new Error(`Falha ao enviar para Zapsign (HTTP ${resp.status})`);
+      // Se for um reenvio, primeiro forçamos a regeneração dos PDFs para garantir que estão atualizados
+      if (hasZapsign) {
+          toast({ title: 'Atualizando arquivos', description: 'Regenerando PDFs antes de enviar...' });
+          await proposalService.generateContracts(clientId, enrollmentId);
       }
 
+      await proposalService.sendToZapsign(enrollmentId);
+      
       toast({ 
           title: 'Sucesso', 
-          description: 'Envio para Zapsign iniciado.' 
+          description: hasZapsign ? 'Reenvio para ZapSign iniciado com arquivos atualizados.' : 'Envio para ZapSign iniciado.' 
       });
 
     } catch (error) {
       console.error(error);
-      toast({ title: 'Erro', description: 'Não foi possível enviar para o Zapsign.', variant: 'destructive' });
+      toast({ title: 'Erro', description: 'Não foi possível processar o envio para o ZapSign.', variant: 'destructive' });
     } finally {
         setIsSendingZapsign(false);
     }
@@ -339,18 +353,33 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
                 </div>
                 {canEdit && !isEditing && (
                     <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isRegenerating}>
-                            {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-                            Gerar Novamente
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={handleSendZapsign} disabled={isSendingZapsign}>
-                            {isSendingZapsign ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                            Enviar p/ Zapsign
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={handleStartEditing}>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Editar Links
-                        </Button>
+                        {isAdmin && (
+                            <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isRegenerating}>
+                                {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                                Gerar Novamente
+                            </Button>
+                        )}
+                        
+                        {/* Botão de Envio (Admin) ou Reenvio (Todos se já enviado) */}
+                        {(isAdmin || (isStandard && hasZapsign)) && (
+                            <Button 
+                                variant={hasZapsign ? "secondary" : "default"}
+                                size="sm" 
+                                onClick={handleSendZapsign} 
+                                disabled={isSendingZapsign}
+                                className={hasZapsign ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100" : ""}
+                            >
+                                {isSendingZapsign ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                                {hasZapsign ? 'Reenviar para ZapSign' : 'Enviar p/ ZapSign'}
+                            </Button>
+                        )}
+
+                        {isAdmin && (
+                            <Button variant="outline" size="sm" onClick={handleStartEditing}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Editar Links
+                            </Button>
+                        )}
                     </div>
                 )}
                  {canEdit && isEditing && (
@@ -372,8 +401,8 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
                     <Card className="bg-slate-50 dark:bg-slate-900 border-dashed">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-base font-medium flex items-center gap-2">
-                                <FileText className="h-4 w-4 text-amber-500" />
-                                Documentos que serão enviados
+                                <FileText className="h-4 w-4 text-amber-600" />
+                                Documentos Selecionados para Assinatura Digital
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -444,7 +473,7 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
                         <CardHeader className="pb-2">
                             <CardTitle className="text-base font-medium flex items-center gap-2">
                                 <FileText className="h-4 w-4 text-green-600" />
-                                Documentos enviados
+                                Monitoramento de Assinatura (ZapSign)
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -453,11 +482,19 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
                                 <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="text-xs font-bold text-green-700 dark:text-green-400 flex items-center gap-2 uppercase tracking-wider">
-                                            <Zap className="h-3 w-3 animate-pulse" />
+                                            <Zap className={`h-3 w-3 ${zapsignDoc?.status === 'pending' ? 'animate-pulse' : ''}`} />
                                             Documento Final Assinado
                                         </h4>
-                                        <span className="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded-full font-bold uppercase">
-                                            Concluído
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                            (zapsignDoc?.status === 'signed' || zapsignDoc?.status === 'completed') ? 'bg-green-600 text-white' :
+                                            zapsignDoc?.status === 'pending' ? 'bg-amber-500 text-white' :
+                                            zapsignDoc?.status === 'rejected' ? 'bg-red-600 text-white' :
+                                            'bg-slate-400 text-white'
+                                        }`}>
+                                            {zapsignDoc?.status === 'signed' || zapsignDoc?.status === 'completed' ? 'Concluído' :
+                                             zapsignDoc?.status === 'pending' ? 'Pendente' :
+                                             zapsignDoc?.status === 'rejected' ? 'Rejeitado' :
+                                             zapsignDoc?.status || 'Processando'}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -523,16 +560,17 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
                                                         </p>
                                                     </div>
                                                 </div>
-                                                
                                                 <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase font-black tracking-widest ${
-                                                    doc.signer?.status === 'signed' ? 'bg-green-600 text-white shadow-sm shadow-green-200' :
+                                                    (doc.signer?.status === 'signed' || doc.signer?.status === 'completed') ? 'bg-green-600 text-white shadow-sm shadow-green-200' :
                                                     doc.signer?.status === 'new' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
                                                     doc.signer?.status === 'opened' ? 'bg-blue-600 text-white shadow-sm shadow-blue-200' :
+                                                    doc.signer?.status === 'rejected' ? 'bg-red-600 text-white shadow-sm shadow-red-200' :
                                                     'bg-slate-100 text-slate-600 border border-slate-200'
                                                 }`}>
-                                                    {doc.signer?.status === 'signed' ? 'Assinado' :
+                                                    {(doc.signer?.status === 'signed' || doc.signer?.status === 'completed') ? 'Assinado' :
                                                      doc.signer?.status === 'new' ? 'Pendente' :
                                                      doc.signer?.status === 'opened' ? 'Visualizado' :
+                                                     doc.signer?.status === 'rejected' ? 'Rejeitado' :
                                                      doc.signer?.status || 'Pendente'}
                                                 </span>
                                             </div>
@@ -613,7 +651,7 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
             <CardHeader>
                 <CardTitle>Contratos da Proposta</CardTitle>
                 <CardDescription>
-                Listagem dos contratos gerados para este plano de formação. Clique para visualizar o conteúdo.
+                Listagem de documentos do curso: <span className="font-bold text-slate-900 dark:text-white uppercase px-1">{courseName || '—'}</span>
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -647,6 +685,49 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta }: P
                 Nenhum contrato HTML disponível.
             </div>
         )}
+
+        {/* Modal de Alerta: Necessário Aprovação */}
+        <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+            <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-amber-600">
+                        <Info className="h-5 w-5" />
+                        Aprovação da Proposta Necessária
+                    </DialogTitle>
+                    <DialogDescription className="py-2">
+                        Esta proposta ainda não foi aprovada pelo cliente. Para prosseguir com o envio dos contratos para o ZapSign, é obrigatório que a proposta comercial seja assinada/aprovada primeiro.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md border border-slate-200 dark:border-slate-800 space-y-3">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Link para Aprovação do Cliente:</p>
+                    {signatureLink ? (
+                        <div className="flex items-start gap-2">
+                             <div className="bg-white dark:bg-black p-2 rounded border flex-1 text-[11px] font-mono break-all text-slate-600 dark:text-slate-400 overflow-hidden leading-relaxed shadow-sm">
+                                {signatureLink}
+                            </div>
+                            <div className="pt-1">
+                                <CopyButton text={signatureLink} />
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-amber-600 italic">Link de assinatura não disponível. Gere a proposta novamente.</p>
+                    )}
+                </div>
+
+                <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                    <Button variant="outline" className="w-full flex-1" onClick={() => setShowApprovalDialog(false)}>
+                        Fechar e Manter aqui
+                    </Button>
+                    <Button variant="default" className="w-full flex-1" onClick={() => {
+                        setShowApprovalDialog(false);
+                        onGoToOverview?.();
+                    }}>
+                        Ir para Visão Geral
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }
