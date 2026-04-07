@@ -185,16 +185,23 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
   const meta = (enrollment as any)?.meta || {};
   const statusAssinatura = meta?.status_assinatura;
-  const hasLinksAssinados = Boolean(meta?.salvar_links_assinados) || Object.keys(meta || {}).some((k) => k.startsWith('salvar_links_assinados_'));
-  const contratoAceito = String((enrollment as any)?.contrato?.aceito_contrato || '').toLowerCase() === 'on';
-  const isAssinado = hasLinksAssinados || contratoAceito;
 
   // ZapSign Status Check
   const rawZapsign = meta?.processo_assinatura;
   const zapsignBase = typeof rawZapsign === 'string' ? (JSON.parse(rawZapsign) || {}) : (rawZapsign || {});
   const zapsignData = zapsignBase?.enviar?.response || zapsignBase;
   const hasZapsign = zapsignData && typeof zapsignData === 'object' && (zapsignData.token || zapsignData.signers);
-  const isZapsignPending = hasZapsign && !isAssinado;
+  
+  // pt-BR: Só considera assinado via ZapSign se o status for explicitamente 'signed' ou 'completed'
+  const isZapsignSigned = hasZapsign && (zapsignData.status === 'signed' || zapsignData.status === 'completed');
+  
+  const hasLinksAssinados = Boolean(meta?.salvar_links_assinados) || Object.keys(meta || {}).some((k) => k.startsWith('salvar_links_assinados_'));
+  const contratoAceito = String((enrollment as any)?.contrato?.aceito_contrato || '').toLowerCase() === 'on';
+  
+  // pt-BR: Se tem ZapSign, a palavra final é do status do ZapSign. Se não tem, olha para o manual/local.
+  const isAssinado = hasZapsign ? isZapsignSigned : (hasLinksAssinados || contratoAceito);
+  
+  const isZapsignPending = hasZapsign && !isZapsignSigned;
 
   const status = isAssinado ? 'assinado' : (isZapsignPending ? 'em_andamento' : (statusAssinatura === 'aprovado' ? 'aprovado' : ''));
   
