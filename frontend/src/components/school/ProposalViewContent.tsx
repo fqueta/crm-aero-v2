@@ -284,7 +284,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
         </TabsContent>
 
         <TabsContent value="contracts" className="mt-4">
-             {clientId && id ? (
+             {tab === 'contracts' && clientId && id ? (
                 <ProposalContractsTab 
                   clientId={clientId} 
                   enrollmentId={id} 
@@ -295,16 +295,16 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                 />
              ) : (
                 <div className="text-center py-4 text-muted-foreground">
-                    Carregando dados da matrícula...
+                    {tab === 'contracts' ? 'Carregando dados da matrícula...' : ''}
                 </div>
              )}
         </TabsContent>
         <TabsContent value="logs" className="mt-4">
-          {id ? (
+          {tab === 'logs' && id ? (
             <ProposalLogsTab enrollmentId={id} />
           ) : (
             <div className="text-center py-4 text-muted-foreground">
-              Carregando dados da matrícula...
+              {tab === 'logs' ? 'Carregando dados da matrícula...' : ''}
             </div>
           )}
         </TabsContent>
