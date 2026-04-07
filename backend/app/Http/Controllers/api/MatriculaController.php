@@ -1557,9 +1557,21 @@ class MatriculaController extends Controller
         //     $contratos = false;
         // }
         $enviar = false;
-        if(isset($contratos[0]['url']) && ($link_c = $contratos[0]['url'])){
-            //link do contrato de prestação ou seja o principal contrato
-            $enviar = $this->enviar_envelope($id,$dm,$link_c);
+        $mainPdf = isset($dm['meta']['proposta_pdf']) ? $dm['meta']['proposta_pdf'] : null;
+        $useProposalAsMain = false;
+
+        if ($mainPdf) {
+            $useProposalAsMain = true;
+            $link_base = $mainPdf;
+        } elseif (isset($contratos[0]['url']) && ($link_c = $contratos[0]['url'])) {
+            $link_base = $link_c;
+        } else {
+            $link_base = false;
+        }
+
+        if ($link_base) {
+            // Se houver link base (proposta ou primeiro contrato), envia o envelope principal
+            $enviar = $this->enviar_envelope($id, $dm, $link_base);
             // $enviar = (new \App\Http\Controllers\api\ZapsingController)->enviar_envelope($id??'');
             if($tk_periodo){
                 if($enviar['exec'] == true){
@@ -1568,14 +1580,17 @@ class MatriculaController extends Controller
                     $ret['mens'] = 'Matricula de id '.$id_matricula.' processada para envio (Período: '.$tk_periodo.')';
                     //gravar o processamento em campo
                     $ret['save_process'] = Qlib::update_matriculameta($id,$campo_processamento,Qlib::lib_array_json($enviar));
-                    //removendo o primiero contrato da lista
-                    if(is_array($contratos)){
-                        $n_cont = array_shift($contratos);
-                        $token_doc = isset($enviar['response']['token']) ? $enviar['response']['token'] : false;
-                        if($token_doc && is_array($n_cont)){
-                            $ret['anexos'] = $this->enviar_contratos_anexos(false,false,$dm,$tk_periodo);
+                    // Se usamos a proposta como principal, enviamos TODOS os contratos como anexos.
+                    // Se usamos o primeiro contrato como principal, removemos ele da lista antes de enviar os demais anexos.
+                    if (is_array($contratos)) {
+                        if (!$useProposalAsMain) {
+                            array_shift($contratos);
                         }
-                    }else{
+                        $token_doc = isset($enviar['response']['token']) ? $enviar['response']['token'] : false;
+                        if ($token_doc && !empty($contratos)) {
+                            $ret['anexos'] = $this->enviar_contratos_anexos($contratos, $id, $dm, $tk_periodo);
+                        }
+                    } else {
                         $ret['exec'] = false;
                         $ret['mens'] = 'Lista de contratos inválidos';
                         $ret['color'] = 'danger';
@@ -1588,11 +1603,16 @@ class MatriculaController extends Controller
                     $ret['mens'] = 'Matricula de id '.$id_matricula.' processada para envio.';
                     //gravar o processamento em campo
                     $ret['save_process'] = Qlib::update_matriculameta($id,'enviar_envelope',Qlib::lib_array_json($enviar));
-                    //removendo o primiero contrato da lista
-                    $n_cont = array_shift($contratos);
-                    $token_doc = isset($enviar['response']['token']) ? $enviar['response']['token'] : false;
-                    if($token_doc && is_array($n_cont)){
-                        $ret['anexos'] = $this->enviar_contratos_anexos(false,false,$dm);
+                    // Se usamos a proposta como principal, enviamos TODOS os contratos como anexos.
+                    // Se usamos o primeiro contrato como principal, removemos ele da lista antes de enviar os demais anexos.
+                    if (is_array($contratos)) {
+                        if (!$useProposalAsMain) {
+                            array_shift($contratos);
+                        }
+                        $token_doc = isset($enviar['response']['token']) ? $enviar['response']['token'] : false;
+                        if ($token_doc && !empty($contratos)) {
+                            $ret['anexos'] = $this->enviar_contratos_anexos($contratos, $id, $dm);
+                        }
                     }
                 }
             }
@@ -1741,11 +1761,9 @@ class MatriculaController extends Controller
         // dd($contatos_anexos);
         if(is_array($contatos_anexos)){
             //conseguir o token do contrato principal
-            // if($tk_periodo){
-            //     $denv_p = Qlib::get_matriculameta($id,'enviar_envelope_'.$tk_periodo);
-            // }else{
-            $denv_p = Qlib::get_matriculameta($id,'enviar_envelope');
-            // }
+            $campo_envelope = $tk_periodo ? 'enviar_envelope_'.$tk_periodo : 'enviar_envelope';
+            $denv_p = Qlib::get_matriculameta($id, $campo_envelope);
+            
             $ret['exec'] = false;
             $arr = [];
             if($denv_p){

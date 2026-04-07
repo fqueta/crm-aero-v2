@@ -45,8 +45,8 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $this->id_matricula,
-                    'action' => 'Geração de Proposta: Iniciada',
-                    'description' => 'Iniciando geração do PDF da Proposta Comercial em segundo plano (Job)...',
+                    'action' => 'proposta_generated',
+                    'description' => 'Iniciando geração do PDF da Proposta Comercial em segundo plano...',
                     'payload' => ['job' => get_class($this)],
                     'actor_id' => null,
                 ]);
@@ -71,7 +71,7 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $this->id_matricula,
-                    'action' => 'Geração de Proposta: Concluída',
+                    'action' => 'proposta_generated',
                     'description' => 'PDF da Proposta Comercial gerado com sucesso pelo Job.',
                     'payload' => ['response_payload' => $response],
                 ]);
@@ -84,7 +84,7 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $this->id_matricula,
-                    'action' => 'Geração de Proposta: Erro',
+                    'action' => 'proposta_error',
                     'description' => 'Falha ao gerar PDF da Proposta Comercial: ' . $e->getMessage(),
                     'payload' => ['error' => $e->getMessage()],
                 ]);

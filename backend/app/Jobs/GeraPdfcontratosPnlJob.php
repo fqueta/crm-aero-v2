@@ -37,8 +37,8 @@ class GeraPdfcontratosPnlJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $this->id_matricula,
-                    'action' => 'Geração de Contratos: Iniciada',
-                    'description' => 'Iniciando geração dos PDFs de Contratos/Períodos em segundo plano (Job)...',
+                    'action' => 'contratos_generated',
+                    'description' => 'Iniciando geração dos PDFs de Contratos/Períodos em segundo plano...',
                     'payload' => ['job' => get_class($this)],
                     'actor_id' => null,
                 ]);
@@ -52,7 +52,7 @@ class GeraPdfcontratosPnlJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $this->id_matricula,
-                    'action' => 'Geração de Contratos: Concluída',
+                    'action' => 'contratos_generated',
                     'description' => 'PDFs dos Contratos gerados com sucesso pelo Job.',
                     'payload' => ['response_payload' => $response],
                 ]);
@@ -65,7 +65,7 @@ class GeraPdfcontratosPnlJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $this->id_matricula,
-                    'action' => 'Geração de Contratos: Erro',
+                    'action' => 'contratos_error',
                     'description' => 'Falha ao gerar PDFs dos Contratos: ' . $e->getMessage(),
                     'payload' => ['error' => $e->getMessage()],
                 ]);

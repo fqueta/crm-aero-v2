@@ -57,6 +57,13 @@ const getActionConfig = (action: string) => {
       return { label: 'Retorno Zapsign', icon: Download, color: 'text-purple-500', bg: 'bg-purple-500/10', border: 'border-purple-200' };
     case 'zapsing_webhook':
       return { label: 'Webhook Zapsign', icon: Activity, color: 'text-indigo-600', bg: 'bg-indigo-500/10', border: 'border-indigo-200' };
+    case 'proposta_generated':
+      return { label: 'Proposta Gerada', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-500/10', border: 'border-blue-200' };
+    case 'contratos_generated':
+      return { label: 'Contratos Gerados', icon: FileText, color: 'text-cyan-600', bg: 'bg-cyan-500/10', border: 'border-cyan-200' };
+    case 'proposta_error':
+    case 'contratos_error':
+      return { label: 'Erro na Geração', icon: Activity, color: 'text-red-600', bg: 'bg-red-500/10', border: 'border-red-200' };
     default:
       return { label: action, icon: FileText, color: 'text-gray-500', bg: 'bg-gray-500/10', border: 'border-gray-200' };
   }

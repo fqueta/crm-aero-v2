@@ -38,7 +38,7 @@ class SendPeriodosZapsingJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $id_matricula,
-                    'action' => 'ZapSign: Envio Iniciado',
+                    'action' => 'zapsign_send_request',
                     'description' => 'Iniciando processo de envio de documentos para assinatura via ZapSign...',
                     'payload' => ['job' => get_class($this)],
                 ]);
@@ -52,7 +52,7 @@ class SendPeriodosZapsingJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $id_matricula,
-                    'action' => 'ZapSign: Envio Concluído',
+                    'action' => 'zapsign_send_response',
                     'description' => 'Processo de envio para o ZapSign finalizado com sucesso.',
                     'payload' => ['response' => $response],
                 ]);
@@ -65,7 +65,7 @@ class SendPeriodosZapsingJob implements ShouldQueue
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $id_matricula,
-                    'action' => 'ZapSign: Erro no Envio',
+                    'action' => 'zapsign_error',
                     'description' => 'Falha durante o processo de envio para ZapSign: ' . $e->getMessage(),
                     'payload' => ['error' => $e->getMessage()],
                 ]);
