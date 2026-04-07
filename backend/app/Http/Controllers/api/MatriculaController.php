@@ -1617,7 +1617,7 @@ class MatriculaController extends Controller
                 }
                 //Envia o link de assinatura para o whatsapp atrave do zapguru
                 if(Qlib::qoption('enviar_link_assinatura_zap')=='s'){
-                    $ret['enviar_link_assinatura'] = (new ZapsingController())->enviar_link_assinatura($id,$tk_periodo);
+                    $ret['enviar_link_assinatura'] = (new ZapsingController())->enviar_link_assinatura($id, (string)$tk_periodo);
                 }
             }
         }
@@ -1686,7 +1686,7 @@ class MatriculaController extends Controller
                     ]);
                 }
             } catch (\Throwable $th) {
-                Log::error('Erro ao criar log de evento zapsign_send_request: ' . $th->getMessage());
+                \Log::error('Erro ao criar log de evento zapsign_send_request: ' . $th->getMessage());
             }
 
             //eviar
@@ -1708,7 +1708,7 @@ class MatriculaController extends Controller
                     ]);
                 }
             } catch (\Throwable $th) {
-                Log::error('Erro ao criar log de evento zapsign_send_response: ' . $th->getMessage());
+                \Log::error('Erro ao criar log de evento zapsign_send_response: ' . $th->getMessage());
             }
         }
         return $ret;

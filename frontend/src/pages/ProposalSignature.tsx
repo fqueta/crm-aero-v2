@@ -171,7 +171,7 @@ export default function ProposalSignature() {
             altura: data.cliente.config?.altura ? String(data.cliente.config.altura) : '',
             peso: data.cliente.config?.peso ? String(data.cliente.config.peso) : '',
             sexo: (() => {
-              const val = data.cliente.sexo || data.cliente.genero || '';
+              const val = data.cliente.sexo || data.cliente.genero || data.cliente.config?.sexo || '';
               if (['m', 'masculino'].includes(val.toLowerCase())) return 'M';
               if (['f', 'feminino'].includes(val.toLowerCase())) return 'F';
               // If 'ni', return empty to force selection (show placeholder 'Selecionar')

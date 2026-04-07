@@ -496,15 +496,20 @@ class ZapsingController extends Controller
         }
         return $ret;
     }
+
     /**
      * Metodo para adiminstrar um envio de mensagem do zapsing
-     * @param string $token
+     * @param string $id_matricula
+     * @param string $tk_periodo
      */
-    public function enviar_link_assinatura($id_matricula=null){
+    public function enviar_link_assinatura($id_matricula=null, $tk_periodo=null){
         $d = (new MatriculaController())->dm($id_matricula);
         $processo = [];
         if(isset($d['id']) && ($id_matricula = $d['id'])){
             $campo_processo = $this->campo_processo;
+            if($tk_periodo){
+                $campo_processo .= '_'. $tk_periodo;
+            }
             $json_processo = Qlib::get_matriculameta($id_matricula,$campo_processo);
             if($json_processo){
                 $processo = Qlib::lib_json_array($json_processo);
@@ -524,13 +529,13 @@ class ZapsingController extends Controller
         $temm = 'Olá *{nome}* sua assinatura foi solicitada, pelo *{app}*, para o documento, *{nome_doc}* segue o link de assinatura {link}';
         $i = 0;
         $zgc = new ZapguruController();
-        // if($tk_periodo){
-        //     $tk = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
-        //     $arr_tk = explode('_',$tk);
-        //     $external_id = isset($arr_tk[0]) ? $arr_tk[0] : false;
-        // }else{
+        if($tk_periodo){
+            $tk = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
+            $arr_tk = explode('_',$tk);
+            $external_id = isset($arr_tk[0]) ? $arr_tk[0] : false;
+        }else{
             $external_id = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
-        // }
+        }
         $nome_doc = isset($webhook_zapsing['name']) ? $webhook_zapsing['name'] : '';
         if(isset($webhook_zapsing['signers'][$i]['sign_url']) && is_string($webhook_zapsing['signers'][$i]['sign_url']) && ($signers=$webhook_zapsing['signers'])){
             if(is_array($signers)){
