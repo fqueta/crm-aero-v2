@@ -40,6 +40,18 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
     public function handle(): void
     {
         try {
+             // Log do Início
+             if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $this->id_matricula,
+                    'action' => 'Geração de Proposta: Iniciada',
+                    'description' => 'Iniciando geração do PDF da Proposta Comercial em segundo plano (Job)...',
+                    'payload' => ['job' => get_class($this)],
+                    'actor_id' => null,
+                ]);
+            }
+
             // Instantiate the controller
             $controller = new \App\Http\Controllers\api\PdfController();
 
@@ -52,15 +64,33 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
             ]);
 
             // Call the matricula method to generate the PDF
-            $controller->matricula($request, $this->id_matricula);
+            $response = $controller->matricula($request, $this->id_matricula);
 
-            // Optional: Log success
-            // \Log::info("PDF Proposal generated for Matricula ID: {$this->id_matricula}");
+             // Log de Sucesso
+             if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $this->id_matricula,
+                    'action' => 'Geração de Proposta: Concluída',
+                    'description' => 'PDF da Proposta Comercial gerado com sucesso pelo Job.',
+                    'payload' => ['response_payload' => $response],
+                ]);
+            }
 
         } catch (\Throwable $e) {
             \Log::error("Error generating PDF Proposal for Matricula ID: {$this->id_matricula}: " . $e->getMessage());
-            // Optionally rethrow to fail the job
-            // throw $e;
+            
+             if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $this->id_matricula,
+                    'action' => 'Geração de Proposta: Erro',
+                    'description' => 'Falha ao gerar PDF da Proposta Comercial: ' . $e->getMessage(),
+                    'payload' => ['error' => $e->getMessage()],
+                ]);
+            }
+
+            throw $e;
         }
     }
 }

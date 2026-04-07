@@ -32,10 +32,46 @@ class GeraPdfcontratosPnlJob implements ShouldQueue
     public function handle(): void
     {
         try {
+            // Log do Início
+            if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $this->id_matricula,
+                    'action' => 'Geração de Contratos: Iniciada',
+                    'description' => 'Iniciando geração dos PDFs de Contratos/Períodos em segundo plano (Job)...',
+                    'payload' => ['job' => get_class($this)],
+                    'actor_id' => null,
+                ]);
+            }
+
             $controller = new MatriculaController();
-            $controller->contratos_periodos_pdf($this->id_matricula);
+            $response = $controller->contratos_periodos_pdf($this->id_matricula);
+
+            // Log de Sucesso
+            if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $this->id_matricula,
+                    'action' => 'Geração de Contratos: Concluída',
+                    'description' => 'PDFs dos Contratos gerados com sucesso pelo Job.',
+                    'payload' => ['response_payload' => $response],
+                ]);
+            }
+
         } catch (\Throwable $e) {
             \Log::error("Error generating Contract PDF for Matricula ID: {$this->id_matricula}: " . $e->getMessage());
+            
+            if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $this->id_matricula,
+                    'action' => 'Geração de Contratos: Erro',
+                    'description' => 'Falha ao gerar PDFs dos Contratos: ' . $e->getMessage(),
+                    'payload' => ['error' => $e->getMessage()],
+                ]);
+            }
+
+            throw $e;
         }
     }
 }

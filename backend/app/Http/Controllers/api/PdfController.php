@@ -787,6 +787,9 @@ class PdfController extends Controller
         } else {
             $knp = app('snappy.pdf');
             $knp->setTimeout(300);
+            if (file_exists($fileInfo['absolute'])) {
+                @unlink($fileInfo['absolute']);
+            }
             $knp->generateFromHtml($bodyHtml, $fileInfo['absolute'], $pdf->getOptions());
             return null;
         }

@@ -23,6 +23,7 @@ use App\Jobs\GeraPdfcontratosPnlJob;
 use App\Jobs\SendPeriodosZapsingJob;
 use App\Models\EventLog;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class MatriculaController extends Controller
 {
@@ -1564,6 +1565,7 @@ class MatriculaController extends Controller
                 if($enviar['exec'] == true){
                     $campo_processamento = 'enviar_envelope_'.$tk_periodo;
                     $ret['exec'] = true;
+                    $ret['mens'] = 'Matricula de id '.$id_matricula.' processada para envio (Período: '.$tk_periodo.')';
                     //gravar o processamento em campo
                     $ret['save_process'] = Qlib::update_matriculameta($id,$campo_processamento,Qlib::lib_array_json($enviar));
                     //removendo o primiero contrato da lista
@@ -1583,6 +1585,7 @@ class MatriculaController extends Controller
             }else{
                 if($enviar['exec'] == true){
                     $ret['exec'] = true;
+                    $ret['mens'] = 'Matricula de id '.$id_matricula.' processada para envio.';
                     //gravar o processamento em campo
                     $ret['save_process'] = Qlib::update_matriculameta($id,'enviar_envelope',Qlib::lib_array_json($enviar));
                     //removendo o primiero contrato da lista
@@ -1618,7 +1621,7 @@ class MatriculaController extends Controller
                 }
             }
         }
-        Log::info('send_to_zapSing:', $ret);
+        \Log::info('send_to_zapSing:', $ret);
         return $ret;
     }
     /**

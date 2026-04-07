@@ -31,30 +31,47 @@ class SendPeriodosZapsingJob implements ShouldQueue
     public function handle(): void
     {
         $id_matricula = $this->id_matricula;
-        // Verify via Controller method, which handles duplication checks too
+
         try {
-            // $zapsingController = new \App\Http\Controllers\api\ZapsingController();
+            // Log do Início
+            if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $id_matricula,
+                    'action' => 'ZapSign: Envio Iniciado',
+                    'description' => 'Iniciando processo de envio de documentos para assinatura via ZapSign...',
+                    'payload' => ['job' => get_class($this)],
+                ]);
+            }
+
             $MatriculaController = new \App\Http\Controllers\api\MatriculaController();
-            // $mc = new MatriculaController
             $response = $MatriculaController->send_to_zapSing($id_matricula);
 
-            if (isset($response['exec']) && $response['exec']) {
-                \Log::info("ZapSign Envelope sent successfully for Matricula ID: $id_matricula");
-            } else {
-                // If mens is populated, log it. If specific "already sent", maybe info, else error.
-                // Assuming controller returns 'mens'
-                $msg = isset($response['mens']) ? $response['mens'] : 'Unknown result';
-                
-                if (strpos($msg, 'Envelope já enviado') !== false) {
-                     \Log::info("ZapSign: $msg (Matricula ID: $id_matricula)");
-                } else {
-                     \Log::error("ZapSign Error: $msg (Matricula ID: $id_matricula)");
-                     // throw new \Exception($msg); // Uncomment if retry behavior is desired
-                }
+            // Log de Sucesso
+            if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $id_matricula,
+                    'action' => 'ZapSign: Envio Concluído',
+                    'description' => 'Processo de envio para o ZapSign finalizado com sucesso.',
+                    'payload' => ['response' => $response],
+                ]);
             }
 
         } catch (\Throwable $e) {
             \Log::error("Job SendPeriodosZapsingJob Failed: " . $e->getMessage());
+            
+            if (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $id_matricula,
+                    'action' => 'ZapSign: Erro no Envio',
+                    'description' => 'Falha durante o processo de envio para ZapSign: ' . $e->getMessage(),
+                    'payload' => ['error' => $e->getMessage()],
+                ]);
+            }
+
+            throw $e;
         }
     }
 }
