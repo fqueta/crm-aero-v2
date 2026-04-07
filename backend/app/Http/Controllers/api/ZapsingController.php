@@ -173,7 +173,7 @@ class ZapsingController extends Controller
 
         $status = $d['status'] ?? '';
         if ($status === 'signed') {
-            $emails = Qlib::qoption('zapsing_notify_emails') ?: ['contato@exemplo.com','suporte@exemplo.com'];
+            $emails = Qlib::qoption('zapsing_notify_emails') ?: ['quetafernando1@gmail.com','ger.maisaqui3@gmail.com'];
             if (is_string($emails)) $emails = \App\Services\Qlib::lib_json_array($emails);
             $ret['notify_brevo'] = BrevoService::notifySignatureCompleted($emails, $d);
         }
