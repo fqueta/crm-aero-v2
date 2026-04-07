@@ -188,10 +188,24 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const hasLinksAssinados = Boolean(meta?.salvar_links_assinados) || Object.keys(meta || {}).some((k) => k.startsWith('salvar_links_assinados_'));
   const contratoAceito = String((enrollment as any)?.contrato?.aceito_contrato || '').toLowerCase() === 'on';
   const isAssinado = hasLinksAssinados || contratoAceito;
-  const status = isAssinado ? 'assinado' : (statusAssinatura === 'aprovado' ? 'aprovado' : '');
+
+  // ZapSign Status Check
+  const rawZapsign = meta?.processo_assinatura;
+  const zapsignBase = typeof rawZapsign === 'string' ? (JSON.parse(rawZapsign) || {}) : (rawZapsign || {});
+  const zapsignData = zapsignBase?.enviar?.response || zapsignBase;
+  const hasZapsign = zapsignData && typeof zapsignData === 'object' && (zapsignData.token || zapsignData.signers);
+  const isZapsignPending = hasZapsign && !isAssinado;
+
+  const status = isAssinado ? 'assinado' : (isZapsignPending ? 'em_andamento' : (statusAssinatura === 'aprovado' ? 'aprovado' : ''));
+  
   const statusMessage = isAssinado
-    ? 'Está proposta ja está aprovada e assinada'
-    : (status === 'aprovado' ? 'A proposta foi aprovada e está aguardando assinatura digital.' : '');
+    ? 'Está proposta ja está aprovada e assinada.'
+    : (isZapsignPending 
+        ? 'Assinatura digital em andamento (ZapSign).' 
+        : (status === 'aprovado' ? 'A proposta foi aprovada e está aguardando assinatura digital.' : ''));
+  
+  const badgeLabel = isAssinado ? 'Assinada' : (isZapsignPending ? 'Assinatura em Andamento' : 'Aprovada');
+  const badgeColor = isAssinado ? 'bg-green-600 text-white' : (isZapsignPending ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white');
 
   return (
     <div className="space-y-6">
@@ -209,12 +223,12 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                   <CardTitle>Visualizar Proposta</CardTitle>
                   {status && (
                     <Badge
-                      variant={isAssinado ? 'default' : 'secondary'}
-                      className={isAssinado ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}
+                      variant="default"
+                      className={`${badgeColor}`}
                     >
                       <span className="inline-flex items-center gap-1">
                         {isAssinado ? <CheckCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
-                        {isAssinado ? 'Assinada' : 'Aprovada'}
+                        {badgeLabel}
                       </span>
                     </Badge>
                   )}
@@ -223,7 +237,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                 <CardContent className="print:p-0">
                 <div className="space-y-4 print:space-y-0">
                     {statusMessage && (
-                      <Alert className={`print:hidden ${isAssinado ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                      <Alert className={`print:hidden ${isAssinado ? 'bg-green-50 border-green-200' : (isZapsignPending ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200')}`}>
                         {isAssinado ? <CheckCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
                         <AlertTitle>Status da Proposta</AlertTitle>
                         <AlertDescription>{statusMessage}</AlertDescription>
