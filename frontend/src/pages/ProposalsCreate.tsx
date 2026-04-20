@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useClientById, useClientsList } from '@/hooks/clients';
+import { useResponsible, useResponsiblesList } from '@/hooks/responsaveis';
 import { useUsersList } from '@/hooks/users';
 // Removido hooks de funis/etapas: campos desativados temporariamente
 import { useCreateEnrollment } from '@/hooks/enrollments';
@@ -31,7 +32,9 @@ import SelectGeraValor from '@/components/school/SelectGeraValor';
 import { currencyApplyMask, currencyRemoveMaskToNumber, currencyRemoveMaskToString } from '@/lib/masks/currency';
 import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
 import { clientsService } from '@/services/clientsService';
+import { responsaveisService } from '@/services/responsaveisService';
 import BudgetPreview from '@/components/school/BudgetPreview';
+import QuickResponsibleModal, { createEmptyQuickResponsibleData } from '@/components/proposals/QuickResponsibleModal';
 
 import { useAircraftList } from '@/hooks/aircraft';
 import CourseModulesSelector from '@/components/school/CourseModulesSelector';
@@ -109,6 +112,8 @@ export default function ProposalsCreate() {
   // Responsible: visibility toggle and search term
   const [showResponsible, setShowResponsible] = useState(false);
   const [responsibleSearch, setResponsibleSearch] = useState('');
+  const [localResponsibles, setLocalResponsibles] = useState<any[]>([]);
+  const [proposalCurrency, setProposalCurrency] = useState<'BRL' | 'USD'>('BRL');
 
 
   
@@ -132,6 +137,9 @@ export default function ProposalsCreate() {
   const [quickPhone, setQuickPhone] = useState('');
   const [quickConsultantId, setQuickConsultantId] = useState('');
   const [quickClientLoading, setQuickClientLoading] = useState(false);
+  const [isQuickResponsibleOpen, setIsQuickResponsibleOpen] = useState(false);
+  const [quickResponsibleData, setQuickResponsibleData] = useState(createEmptyQuickResponsibleData());
+  const [quickResponsibleLoading, setQuickResponsibleLoading] = useState(false);
 
   const [isFuelTextOpen, setIsFuelTextOpen] = useState(false);
 
@@ -214,6 +222,115 @@ export default function ProposalsCreate() {
     }
   }
 
+  /**
+   * handleQuickResponsibleSubmit
+   * pt-BR: Cria um responsável rapidamente pelo endpoint dedicado e o seleciona no formulário.
+   * en-US: Quickly creates a guardian through the dedicated endpoint and selects it in the form.
+   */
+  async function handleQuickResponsibleSubmit() {
+    if (!quickResponsibleData.name.trim()) {
+      toast({ title: 'Erro', description: 'Nome é obrigatório.', variant: 'destructive' });
+      return;
+    }
+
+    const phoneClean = phoneRemoveMask(quickResponsibleData.phone);
+    const cpfClean = String(quickResponsibleData.cpf || '').replace(/\D/g, '');
+    const cepClean = String(quickResponsibleData.cep || '').replace(/\D/g, '');
+    if (quickResponsibleData.phone && phoneClean.length < 10) {
+      toast({ title: 'Erro', description: 'Telefone inválido.', variant: 'destructive' });
+      return;
+    }
+    if (cpfClean && cpfClean.length !== 11) {
+      toast({ title: 'Erro', description: 'CPF inválido.', variant: 'destructive' });
+      return;
+    }
+
+    setQuickResponsibleLoading(true);
+    try {
+      const payload: any = {
+        name: quickResponsibleData.name,
+        email: quickResponsibleData.email || undefined,
+        cpf: cpfClean || undefined,
+        tipo_pessoa: 'pf',
+        genero: 'ni',
+        status: 'actived',
+        autor: form.getValues('id_consultor') || user?.id || undefined,
+        config: {
+          celular: phoneClean || undefined,
+          nacionalidade: quickResponsibleData.nationality || undefined,
+          profissao: quickResponsibleData.profession || undefined,
+          estado_civil: quickResponsibleData.maritalStatus || undefined,
+          identidade: quickResponsibleData.identity || undefined,
+          rg: quickResponsibleData.identity || undefined,
+          cep: cepClean || undefined,
+          endereco: quickResponsibleData.address || undefined,
+          numero: quickResponsibleData.number || undefined,
+          complemento: quickResponsibleData.complement || undefined,
+          bairro: quickResponsibleData.bairro || undefined,
+          cidade: quickResponsibleData.city || undefined,
+          uf: quickResponsibleData.state || undefined,
+        },
+      };
+
+      const created = await responsaveisService.create(payload);
+
+      const normalizedCreated = {
+        ...created,
+        config: typeof (created as any)?.config === 'string'
+          ? (() => {
+              try {
+                return JSON.parse((created as any).config);
+              } catch {
+                return {};
+              }
+            })()
+          : ((created as any)?.config || {}),
+      };
+
+      setLocalResponsibles((prev) => {
+        const next = prev.filter((item) => String(item?.id) !== String(normalizedCreated.id));
+        return [normalizedCreated, ...next];
+      });
+      queryClient.setQueryData(['responsaveis', 'detail', String(normalizedCreated.id)], normalizedCreated);
+      await queryClient.invalidateQueries({ queryKey: ['responsaveis'] });
+
+      setTimeout(() => {
+        form.setValue('id_responsavel', String(normalizedCreated.id));
+        setResponsibleSearch('');
+        setShowResponsible(true);
+        setIsQuickResponsibleOpen(false);
+        setQuickResponsibleData(createEmptyQuickResponsibleData());
+        toast({ title: 'Sucesso', description: `Responsável ${normalizedCreated.name} criado e selecionado.` });
+      }, 200);
+    } catch (error: any) {
+      console.error(error);
+      const data = error?.response?.data ?? error?.body;
+      const apiMessage = (data && typeof data === 'object' && 'message' in data) ? String((data as any).message || '') : '';
+      const errorsObj = (data && typeof data === 'object' && 'errors' in data) ? (data as any).errors : undefined;
+      const collectedMsgs: string[] = [];
+      if (errorsObj && typeof errorsObj === 'object') {
+        Object.values(errorsObj).forEach((messages: any) => {
+          if (Array.isArray(messages) && messages[0]) collectedMsgs.push(String(messages[0]));
+          else if (typeof messages === 'string' && messages) collectedMsgs.push(messages);
+        });
+      }
+      const msg = (collectedMsgs.filter(Boolean)[0]) || apiMessage || error?.message || 'Erro ao criar responsável.';
+      toast({ title: 'Erro', description: msg, variant: 'destructive' });
+    } finally {
+      setQuickResponsibleLoading(false);
+    }
+  }
+
+  /**
+   * handleCloseQuickResponsibleModal
+   * pt-BR: Fecha o modal e limpa os dados temporarios do responsavel.
+   * en-US: Closes the modal and clears temporary responsible data.
+   */
+  function handleCloseQuickResponsibleModal() {
+    setIsQuickResponsibleOpen(false);
+    setQuickResponsibleData(createEmptyQuickResponsibleData());
+  }
+
   // Form setup
   const form = useForm<ProposalFormData>({
     resolver: zodResolver(proposalSchema),
@@ -232,7 +349,7 @@ export default function ProposalsCreate() {
       // pt-BR: Valor padrão vazio para situacao_id até o usuário selecionar.
       // en-US: Empty default for situacao_id until user selects.
       situacao_id: '',
-      id_responsavel: user?.id || '',
+      id_responsavel: '',
       orc_json: '',
       desconto: '0,00',
       inscricao: '',
@@ -254,9 +371,9 @@ export default function ProposalsCreate() {
   );
   const { data: clientDetailData } = useClientById(idClienteFromUrl, { enabled: !!idClienteFromUrl });
   const { data: consultantsData, isLoading: isLoadingConsultants } = useUsersList({ consultores: true, per_page: 20, sort: 'name', search: consultantSearch || undefined });
-  // Responsáveis: clientes com permission_id = 8
-  // Responsibles: clients filtered by permission_id = 8
-  const { data: responsiblesData, isLoading: isLoadingResponsibles } = useClientsList({ per_page: 50, search: responsibleSearch || undefined, permission_id: 8 } as any);
+  // Responsáveis: usar endpoint dedicado para listar e criar guardianes/responsáveis
+  // Responsibles: use the dedicated endpoint to list and create guardians
+  const { data: responsiblesData, isLoading: isLoadingResponsibles } = useResponsiblesList({ per_page: 50, search: responsibleSearch || undefined } as any);
   // Lista de todas as aeronaves para cálculo do curso tipo 2
   const { data: allAircraftData } = useAircraftList({ per_page: 200, active: true });
   const allAircraft = useMemo(() => {
@@ -335,9 +452,15 @@ export default function ProposalsCreate() {
       return [email, phone].filter(Boolean).join(' • ');
     }
   );
-  // Opções de responsáveis a partir de clientes com permission_id=8
-  // Responsible options from clients with permission_id=8
-  const responsiblesList = useMemo(() => (responsiblesData?.data || responsiblesData?.items || []), [responsiblesData]);
+  const selectedResponsibleId = form.watch('id_responsavel');
+  const { data: selectedResponsibleDetail } = useResponsible(String(selectedResponsibleId || ''), { enabled: !!selectedResponsibleId });
+  // Opções de responsáveis usando o endpoint dedicado
+  // Responsible options using the dedicated endpoint
+  const responsiblesList = useMemo(() => {
+    const apiList = (responsiblesData?.data || responsiblesData?.items || []);
+    const merged = [...localResponsibles, ...apiList];
+    return merged.filter((item, index, arr) => index === arr.findIndex((candidate) => String(candidate?.id) === String(item?.id)));
+  }, [responsiblesData, localResponsibles]);
   const responsibleOptions = useComboboxOptions<any>(
     responsiblesList,
     'id',
@@ -349,6 +472,18 @@ export default function ProposalsCreate() {
       return [email, phone].filter(Boolean).join(' • ');
     }
   );
+  const responsibleOptionsWithSelected = useMemo(() => {
+    const exists = responsibleOptions.some((option) => option.value === String(selectedResponsibleId || ''));
+    if (exists || !selectedResponsibleDetail) return responsibleOptions;
+    const desc = [
+      selectedResponsibleDetail?.email || '',
+      selectedResponsibleDetail?.config?.celular || selectedResponsibleDetail?.config?.telefone_residencial || '',
+    ].filter(Boolean).join(' • ');
+    return [
+      { value: String(selectedResponsibleDetail.id), label: String(selectedResponsibleDetail.name), description: desc },
+      ...responsibleOptions,
+    ];
+  }, [responsibleOptions, selectedResponsibleDetail, selectedResponsibleId]);
   // Removido: listas de funis e etapas
   const coursesList = useMemo(() => (courses?.data || courses?.items || []), [courses]);
   const classesList = useMemo(() => (classes?.data || classes?.items || []), [classes]);
@@ -476,6 +611,25 @@ export default function ProposalsCreate() {
     }
   }
 
+  // Efeito para preencher inscrição automaticamente ao selecionar curso/turma
+  useEffect(() => {
+    if (selectedCourse) {
+      const currentInscricao = form.getValues('inscricao');
+      const courseInscricao = selectedCourse.inscricao || selectedCourse.valor_inscricao || 0;
+      
+      // Se estiver vazio ou for R$ 0,00, preenche com o valor do curso
+      if (!currentInscricao || currentInscricao === 'R$ 0,00' || currentInscricao === '0,00') {
+          const valNum = typeof courseInscricao === 'number' 
+            ? courseInscricao 
+            : currencyRemoveMaskToNumber(String(courseInscricao));
+          
+          if (valNum > 0) {
+            form.setValue('inscricao', formatCurrencyBRL(valNum));
+          }
+      }
+    }
+  }, [selectedCourseId, form.watch('id_turma'), selectedCourse]);
+
   /**
    * normalizeCourseForSelect
    * pt-BR: Quando o curso é tipo=4, mapeia cada módulo (período) para incluir
@@ -561,6 +715,17 @@ export default function ProposalsCreate() {
   }
 
   /**
+   * formatValueByProposalCurrency
+   * pt-BR: Formata o valor monetário de acordo com a moeda selecionada na proposta.
+   */
+  function formatValueByProposalCurrency(value: number): string {
+    if (proposalCurrency === 'USD') {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value) || 0);
+    }
+    return formatCurrencyBRL(value);
+  }
+
+  /**
    * formatCurrencyBRL
    * pt-BR: Formata número em BRL para exibição (ex.: "R$ 23.820,00").
    * en-US: Formats a number into BRL for display (e.g., "R$ 23.820,00").
@@ -591,7 +756,7 @@ export default function ProposalsCreate() {
     const inscNum = currencyRemoveMaskToNumber(insc || '');
     const descNum = currencyRemoveMaskToNumber(desc || '');
     const totNum = (subNum || 0) + (inscNum || 0) - (descNum || 0);
-    const maskedTotal = formatCurrencyBRL(totNum);
+    const maskedTotal = formatValueByProposalCurrency(totNum);
     form.setValue('total', maskedTotal);
   }
 
@@ -638,8 +803,9 @@ export default function ProposalsCreate() {
    * pt-BR: Handler para o seletor de módulos (checklist). Atualiza subtotal e JSON.
    * en-US: Handler for module selector (checklist). Updates subtotal and JSON.
    */
-  function handleModulesSelectionChange({ modules, total, etapa1Discount }: { modules: any[]; total: number; etapa1Discount: number }) {
-    form.setValue('subtotal', formatCurrencyBRL(total));
+  function handleModulesSelectionChange({ modules, total, etapa1Discount, currency, dollarRate }: { modules: any[]; total: number; etapa1Discount: number; currency?: 'BRL' | 'USD'; dollarRate?: number }) {
+    if (currency) setProposalCurrency(currency);
+    form.setValue('subtotal', formatValueByProposalCurrency(total));
     // Salva o desconto da etapa 1 no estado do form para persistência
     form.setValue('etapa1_desconto', etapa1Discount);
     
@@ -659,7 +825,9 @@ export default function ProposalsCreate() {
         campo_id: 'id',
         modulos: modules,
         meta: {
-            etapa1_desconto: etapa1Discount
+            etapa1_desconto: etapa1Discount,
+            currency: currency || 'BRL',
+            dollarRate: dollarRate || 5.15
         }
       };
       try {
@@ -1114,7 +1282,7 @@ export default function ProposalsCreate() {
                           onSearch={setClientSearch}
                           searchTerm={clientSearch}
                           debounceMs={250}
-                          footer={({ setOpen }) => (
+                          header={({ setOpen }) => (
                             <Button 
                               variant="ghost" 
                               className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
@@ -1299,17 +1467,30 @@ export default function ProposalsCreate() {
                       <FormItem>
                         <FormLabel>Responsável</FormLabel>
                         <Combobox
-                          options={responsibleOptions}
+                          options={responsibleOptionsWithSelected}
                           value={field.value}
                           onValueChange={field.onChange}
                           placeholder="Selecione o responsável"
                           searchPlaceholder="Pesquisar responsável pelo nome..."
-                          emptyText={responsibleOptions.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
+                          emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
                           disabled={isLoadingResponsibles}
                           loading={isLoadingResponsibles}
                           onSearch={setResponsibleSearch}
                           searchTerm={responsibleSearch}
                           debounceMs={250}
+                          header={({ setOpen }) => (
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                              onClick={() => {
+                                setIsQuickResponsibleOpen(true);
+                                setOpen(false);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Cadastrar Novo Responsável
+                            </Button>
+                          )}
                         />
                         <FormMessage />
                       </FormItem>
@@ -1654,6 +1835,14 @@ export default function ProposalsCreate() {
           </div>
         </div>
       )}
+      <QuickResponsibleModal
+        open={isQuickResponsibleOpen}
+        loading={quickResponsibleLoading}
+        data={quickResponsibleData}
+        onChange={setQuickResponsibleData}
+        onClose={handleCloseQuickResponsibleModal}
+        onSubmit={handleQuickResponsibleSubmit}
+      />
     </div>
   );
 }

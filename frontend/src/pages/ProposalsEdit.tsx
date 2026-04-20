@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useClientById, useClientsList } from '@/hooks/clients';
+import { useResponsible, useResponsiblesList } from '@/hooks/responsaveis';
 import { useUsersList, useUser } from '@/hooks/users';
 import { useEnrollment, useUpdateEnrollment } from '@/hooks/enrollments';
 import { useEnrollmentSituationsList } from '@/hooks/enrollmentSituations';
@@ -29,6 +30,9 @@ import { RichTextEditor } from '@/components/ui/RichTextEditor';
 import SelectGeraValor from '@/components/school/SelectGeraValor';
 import { currencyApplyMask, currencyRemoveMaskToNumber, currencyRemoveMaskToString } from '@/lib/masks/currency';
 import BudgetPreview from '@/components/school/BudgetPreview';
+import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
+import { responsaveisService } from '@/services/responsaveisService';
+import QuickResponsibleModal, { createEmptyQuickResponsibleData } from '@/components/proposals/QuickResponsibleModal';
 
 import { useAircraftList } from '@/hooks/aircraft';
 import CourseModulesSelector from '@/components/school/CourseModulesSelector';
@@ -111,6 +115,11 @@ export default function ProposalsEdit() {
   const [courseSearch, setCourseSearch] = useState('');
   const [classSearch, setClassSearch] = useState('');
   const [responsibleSearch, setResponsibleSearch] = useState('');
+  const [localResponsibles, setLocalResponsibles] = useState<any[]>([]);
+  const [proposalCurrency, setProposalCurrency] = useState<'BRL' | 'USD'>('BRL');
+  const [isQuickResponsibleOpen, setIsQuickResponsibleOpen] = useState(false);
+  const [quickResponsibleData, setQuickResponsibleData] = useState(createEmptyQuickResponsibleData());
+  const [quickResponsibleLoading, setQuickResponsibleLoading] = useState(false);
 
   const [isFuelTextOpen, setIsFuelTextOpen] = useState(false);
 
@@ -121,6 +130,115 @@ export default function ProposalsEdit() {
       }
       setIsFuelTextOpen(true);
   };
+
+  /**
+   * handleQuickResponsibleSubmit
+   * pt-BR: Cria um responsável pelo endpoint dedicado e o seleciona no formulário de edição.
+   * en-US: Creates a guardian through the dedicated endpoint and selects it in the edit form.
+   */
+  async function handleQuickResponsibleSubmit() {
+    if (!quickResponsibleData.name.trim()) {
+      toast({ title: 'Erro', description: 'Nome é obrigatório.', variant: 'destructive' });
+      return;
+    }
+
+    const phoneClean = phoneRemoveMask(quickResponsibleData.phone);
+    const cpfClean = String(quickResponsibleData.cpf || '').replace(/\D/g, '');
+    const cepClean = String(quickResponsibleData.cep || '').replace(/\D/g, '');
+    if (quickResponsibleData.phone && phoneClean.length < 10) {
+      toast({ title: 'Erro', description: 'Telefone inválido.', variant: 'destructive' });
+      return;
+    }
+    if (cpfClean && cpfClean.length !== 11) {
+      toast({ title: 'Erro', description: 'CPF inválido.', variant: 'destructive' });
+      return;
+    }
+
+    setQuickResponsibleLoading(true);
+    try {
+      const payload: any = {
+        name: quickResponsibleData.name,
+        email: quickResponsibleData.email || undefined,
+        cpf: cpfClean || undefined,
+        tipo_pessoa: 'pf',
+        genero: 'ni',
+        status: 'actived',
+        autor: form.getValues('id_consultor') || user?.id || undefined,
+        config: {
+          celular: phoneClean || undefined,
+          nacionalidade: quickResponsibleData.nationality || undefined,
+          profissao: quickResponsibleData.profession || undefined,
+          estado_civil: quickResponsibleData.maritalStatus || undefined,
+          identidade: quickResponsibleData.identity || undefined,
+          rg: quickResponsibleData.identity || undefined,
+          cep: cepClean || undefined,
+          endereco: quickResponsibleData.address || undefined,
+          numero: quickResponsibleData.number || undefined,
+          complemento: quickResponsibleData.complement || undefined,
+          bairro: quickResponsibleData.bairro || undefined,
+          cidade: quickResponsibleData.city || undefined,
+          uf: quickResponsibleData.state || undefined,
+        },
+      };
+
+      const created = await responsaveisService.create(payload);
+
+      const normalizedCreated = {
+        ...created,
+        config: typeof (created as any)?.config === 'string'
+          ? (() => {
+              try {
+                return JSON.parse((created as any).config);
+              } catch {
+                return {};
+              }
+            })()
+          : ((created as any)?.config || {}),
+      };
+
+      setLocalResponsibles((prev) => {
+        const next = prev.filter((item) => String(item?.id) !== String(normalizedCreated.id));
+        return [normalizedCreated, ...next];
+      });
+      queryClient.setQueryData(['responsaveis', 'detail', String(normalizedCreated.id)], normalizedCreated);
+      await queryClient.invalidateQueries({ queryKey: ['responsaveis'] });
+
+      setTimeout(() => {
+        form.setValue('id_responsavel', String(normalizedCreated.id));
+        setResponsibleSearch('');
+        setShowResponsible(true);
+        setIsQuickResponsibleOpen(false);
+        setQuickResponsibleData(createEmptyQuickResponsibleData());
+        toast({ title: 'Sucesso', description: `Responsável ${normalizedCreated.name} criado e selecionado.` });
+      }, 200);
+    } catch (error: any) {
+      console.error(error);
+      const data = error?.response?.data ?? error?.body;
+      const apiMessage = (data && typeof data === 'object' && 'message' in data) ? String((data as any).message || '') : '';
+      const errorsObj = (data && typeof data === 'object' && 'errors' in data) ? (data as any).errors : undefined;
+      const collectedMsgs: string[] = [];
+      if (errorsObj && typeof errorsObj === 'object') {
+        Object.values(errorsObj).forEach((messages: any) => {
+          if (Array.isArray(messages) && messages[0]) collectedMsgs.push(String(messages[0]));
+          else if (typeof messages === 'string' && messages) collectedMsgs.push(messages);
+        });
+      }
+      const msg = (collectedMsgs.filter(Boolean)[0]) || apiMessage || error?.message || 'Erro ao criar responsável.';
+      toast({ title: 'Erro', description: msg, variant: 'destructive' });
+    } finally {
+      setQuickResponsibleLoading(false);
+    }
+  }
+
+  /**
+   * handleCloseQuickResponsibleModal
+   * pt-BR: Fecha o modal e limpa os dados temporarios do responsavel.
+   * en-US: Closes the modal and clears temporary responsible data.
+   */
+  function handleCloseQuickResponsibleModal() {
+    setIsQuickResponsibleOpen(false);
+    setQuickResponsibleData(createEmptyQuickResponsibleData());
+  }
 
   /**
    * form
@@ -140,7 +258,7 @@ export default function ProposalsEdit() {
       id_consultor: '',
       gera_valor: '',
       situacao_id: '',
-      id_responsavel: user?.id || '',
+      id_responsavel: '',
       orc_json: '',
       desconto: '0,00',
       inscricao: '',
@@ -166,7 +284,7 @@ export default function ProposalsEdit() {
   // Consultores: amplia per_page para aumentar chance do consultor selecionado estar na lista
   // Consultants: widen per_page to increase chance the selected consultant is present
   const { data: consultantsData, isLoading: isLoadingConsultants } = useUsersList({ consultores: true, per_page: 200, sort: 'name', search: consultantSearch || undefined });
-  const { data: responsiblesData, isLoading: isLoadingResponsibles } = useClientsList({ per_page: 50, search: responsibleSearch || undefined, permission_id: 8 } as any);
+  const { data: responsiblesData, isLoading: isLoadingResponsibles } = useResponsiblesList({ per_page: 50, search: responsibleSearch || undefined } as any);
   // Lista de todas as aeronaves para cálculo do curso tipo 2
   const { data: allAircraftData } = useAircraftList({ per_page: 200, active: true });
   const allAircraft = useMemo(() => {
@@ -174,6 +292,13 @@ export default function ProposalsEdit() {
   }, [allAircraftData]);
 
   const { data: enrollment, isLoading: isLoadingEnrollment } = useEnrollment(String(id || ''), { enabled: !!id });
+
+  // Hidrata a moeda a partir dos dados carregados
+  useEffect(() => {
+    if (enrollment?.orc?.meta?.currency) {
+        setProposalCurrency(enrollment.orc.meta.currency);
+    }
+  }, [enrollment]);
 
   const { data: courses, isLoading: isLoadingCourses } = useQuery({
     queryKey: ['courses', 'list', 200, courseSearch],
@@ -387,7 +512,13 @@ export default function ProposalsEdit() {
       ...consultantOptions,
     ];
   }, [consultantOptions, selectedConsultantDetail, selectedConsultantId]);
-  const responsiblesList = useMemo(() => (responsiblesData?.data || responsiblesData?.items || []), [responsiblesData]);
+  const selectedResponsibleId = form.watch('id_responsavel');
+  const { data: selectedResponsibleDetail } = useResponsible(String(selectedResponsibleId || ''), { enabled: !!selectedResponsibleId });
+  const responsiblesList = useMemo(() => {
+    const apiList = (responsiblesData?.data || responsiblesData?.items || []);
+    const merged = [...localResponsibles, ...apiList];
+    return merged.filter((item, index, arr) => index === arr.findIndex((candidate) => String(candidate?.id) === String(item?.id)));
+  }, [responsiblesData, localResponsibles]);
   const responsibleOptions = useComboboxOptions<any>(
     responsiblesList,
     'id',
@@ -399,6 +530,18 @@ export default function ProposalsEdit() {
       return [email, phone].filter(Boolean).join(' • ');
     }
   );
+  const responsibleOptionsWithSelected = useMemo(() => {
+    const exists = responsibleOptions.some((option) => option.value === String(selectedResponsibleId || ''));
+    if (exists || !selectedResponsibleDetail) return responsibleOptions;
+    const desc = [
+      selectedResponsibleDetail?.email || '',
+      selectedResponsibleDetail?.config?.celular || selectedResponsibleDetail?.config?.telefone_residencial || '',
+    ].filter(Boolean).join(' • ');
+    return [
+      { value: String(selectedResponsibleDetail.id), label: String(selectedResponsibleDetail.name), description: desc },
+      ...responsibleOptions,
+    ];
+  }, [responsibleOptions, selectedResponsibleDetail, selectedResponsibleId]);
   const coursesList = useMemo(() => (courses?.data || courses?.items || []), [courses]);
   const classesList = useMemo(() => (classes?.data || classes?.items || []), [classes]);
   const courseOptions = useComboboxOptions<any>(
@@ -451,6 +594,25 @@ export default function ProposalsEdit() {
     const list = coursesList || [];
     return list.find((c: any) => String(c.id) === id);
   }, [coursesList, selectedCourseId]);
+
+  // Efeito para preencher inscrição automaticamente ao selecionar curso/turma
+  useEffect(() => {
+    if (selectedCourse) {
+      const currentInscricao = form.getValues('inscricao');
+      const courseInscricao = selectedCourse.inscricao || selectedCourse.valor_inscricao || 0;
+      
+      // Se estiver vazio ou for R$ 0,00, preenche com o valor do curso
+      if (!currentInscricao || currentInscricao === 'R$ 0,00' || currentInscricao === '0,00') {
+          const valNum = typeof courseInscricao === 'number' 
+            ? courseInscricao 
+            : currencyRemoveMaskToNumber(String(courseInscricao));
+          
+          if (valNum > 0) {
+            form.setValue('inscricao', formatCurrencyBRL(valNum));
+          }
+      }
+    }
+  }, [selectedCourseId, form.watch('id_turma'), selectedCourse]);
 
   /**
    * getAircraftHourlyRate
@@ -535,31 +697,28 @@ export default function ProposalsEdit() {
   const orcJsonWatched = form.watch('orc_json');
 
   const initialEtapa1Discount = useMemo(() => {
-      try {
-          const enrollmentCourseId = String((enrollment as any)?.id_curso || '');
-          const currentCourseId = String(selectedCourseNormalized?.id || '');
-          
-          // Se estamos editando o curso original, usa o valor salvo
-          if (enrollmentCourseId === currentCourseId) {
-             const orc = (enrollment as any)?.orc;
-             return Number(orc?.meta?.etapa1_desconto || 0);
-          }
-          return 0;
-      } catch {
-          return 0;
-      }
-  }, [enrollment, selectedCourseNormalized]);
+    const orc = (enrollment as any)?.orc;
+    return Number(orc?.meta?.etapa1_desconto || 0);
+  }, [enrollment]);
+
+  const initialDollarRate = useMemo(() => {
+    const orc = (enrollment as any)?.orc;
+    return Number(orc?.meta?.dollarRate || 5.15);
+  }, [enrollment]);
 
   const initialType2Selections = useMemo(() => {
-      // Tenta hidratar as seleções iniciais a partir do orc salvo no banco (apenas se for o mesmo curso)
-      try {
-          const enrollmentCourseId = String((enrollment as any)?.id_curso || '');
-          const currentCourseId = String(selectedCourseNormalized?.id || '');
+    // Tenta hidratar as seleções iniciais a partir do orc salvo no banco (apenas se for o mesmo curso)
+    try {
+        const enrollmentCourseId = String((enrollment as any)?.id_curso || '');
+        const currentCourseId = String(selectedCourseNormalized?.id || '');
 
-          if (enrollmentCourseId !== currentCourseId) return undefined;
+        if (enrollmentCourseId !== currentCourseId) return undefined;
 
-          const orc = (enrollment as any)?.orc;
-          if (!orc || !Array.isArray(orc.modulos)) return undefined;
+        const orc = (enrollment as any)?.orc;
+        if (!orc || !Array.isArray(orc.modulos)) return undefined;
+        
+        // ... (rest of the logic remains same, just ensuring it's clearly bounded)
+        // [Existing logic follows]
           
           // Mapeia os módulos salvos para o formato esperado pelo seletor
           const modsNorm = Array.isArray(selectedCourseNormalized?.modulos) ? selectedCourseNormalized!.modulos : [];
@@ -716,6 +875,17 @@ export default function ProposalsEdit() {
   }
 
   /**
+   * formatValueByProposalCurrency
+   * pt-BR: Formata o valor monetário de acordo com a moeda selecionada na proposta.
+   */
+  function formatValueByProposalCurrency(value: number): string {
+    if (proposalCurrency === 'USD') {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value) || 0);
+    }
+    return formatCurrencyBRL(value);
+  }
+
+  /**
    * formatCurrencyBRL
    * pt-BR: Formata número em BRL.
    * en-US: Formats number in BRL.
@@ -756,7 +926,7 @@ export default function ProposalsEdit() {
     const inscNum = currencyRemoveMaskToNumber(insc || '');
     const descNum = currencyRemoveMaskToNumber(desc || '');
     const totNum = (subNum || 0) + (inscNum || 0) - (descNum || 0);
-    const maskedTotal = formatCurrencyBRL(totNum);
+    const maskedTotal = formatValueByProposalCurrency(totNum);
     form.setValue('total', maskedTotal);
   }
 
@@ -789,8 +959,9 @@ export default function ProposalsEdit() {
    * pt-BR: Handler para o seletor de módulos (checklist) de curso Tipo 2. Atualiza subtotal e JSON.
    * en-US: Handler for Type 2 course module selector (checklist). Updates subtotal and JSON.
    */
-  function handleModulesSelectionChange({ modules, total, etapa1Discount }: { modules: any[]; total: number; etapa1Discount: number }) {
-    form.setValue('subtotal', formatCurrencyBRL(total));
+  function handleModulesSelectionChange({ modules, total, etapa1Discount, currency, dollarRate }: { modules: any[]; total: number; etapa1Discount: number; currency?: 'BRL' | 'USD'; dollarRate?: number }) {
+    if (currency) setProposalCurrency(currency);
+    form.setValue('subtotal', formatValueByProposalCurrency(total));
     form.setValue('etapa1_desconto', etapa1Discount);
     
     // Atualiza gera_valor com string dummy se houver seleção, para validação visual se necessário
@@ -817,7 +988,9 @@ export default function ProposalsEdit() {
         modulos: modules,
         meta: {
             ...(currentOrc.meta || {}),
-            etapa1_desconto: etapa1Discount
+            etapa1_desconto: etapa1Discount,
+            currency: currency || 'BRL',
+            dollarRate: dollarRate || 5.15
         }
       };
       try {
@@ -1073,7 +1246,21 @@ export default function ProposalsEdit() {
     const inscricaoMaskedInit = formatCurrencyBRL(currencyRemoveMaskToNumber(safe('inscricao', form.getValues('inscricao') || '')));
     const subtotalMaskedInit = formatCurrencyBRL(currencyRemoveMaskToNumber(safe('subtotal', form.getValues('subtotal') || '')));
   const totalMaskedInit = formatCurrencyBRL(currencyRemoveMaskToNumber(safe('total', form.getValues('total') || '')));
-  form.reset({
+    const currentRespId = safe('id_responsavel', '');
+    // pt-BR: Só exibe a seção do responsável automaticamente se houver um ID válido (UUID/string não vazia e != '0')
+    const hasStoredResponsible = currentRespId && 
+                                currentRespId !== '0' && 
+                                currentRespId !== '' && 
+                                currentRespId !== 'null' && 
+                                currentRespId !== 'undefined';
+    
+    if (hasStoredResponsible) {
+      setShowResponsible(true);
+    } else {
+      setShowResponsible(false);
+    }
+
+    form.reset({
       id_cliente: safe('id_cliente', form.getValues('id_cliente')),
       id_curso: safe('id_curso', form.getValues('id_curso')),
       id_turma: safe('id_turma', form.getValues('id_turma')),
@@ -1089,7 +1276,7 @@ export default function ProposalsEdit() {
       // pt-BR: Preenche situacao_id se existir no registro
       // en-US: Fills situacao_id if present in the record
       situacao_id: String(safe('situacao_id', '')),
-      id_responsavel: safe('id_responsavel', form.getValues('id_responsavel')),
+      id_responsavel: currentRespId,
       orc_json: JSON.stringify((enrollment as any)?.orc ?? {}),
       desconto: descontoMaskedInit,
       inscricao: inscricaoMaskedInit,
@@ -1534,17 +1721,30 @@ export default function ProposalsEdit() {
                       <FormItem>
                         <FormLabel>Responsável</FormLabel>
                         <Combobox
-                          options={responsibleOptions}
+                          options={responsibleOptionsWithSelected}
                           value={field.value}
                           onValueChange={field.onChange}
                           placeholder="Selecione o responsável"
                           searchPlaceholder="Pesquisar responsável pelo nome..."
-                          emptyText={responsibleOptions.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
+                          emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
                           disabled={isLoadingResponsibles}
                           loading={isLoadingResponsibles}
                           onSearch={setResponsibleSearch}
                           searchTerm={responsibleSearch}
                           debounceMs={250}
+                          header={({ setOpen }) => (
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                              onClick={() => {
+                                setIsQuickResponsibleOpen(true);
+                                setOpen(false);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Cadastrar Novo Responsável
+                            </Button>
+                          )}
                         />
                         <FormMessage />
                       </FormItem>
@@ -1597,6 +1797,7 @@ export default function ProposalsEdit() {
                             formatCurrencyBRL={formatCurrencyBRL}
                             initialSelections={initialType2Selections}
                             initialEtapa1Discount={initialEtapa1Discount}
+                            initialDollarRate={initialDollarRate}
                         />
                     </div>
                   ) : (
@@ -1969,6 +2170,15 @@ export default function ProposalsEdit() {
                       </DialogFooter>
                   </DialogContent>
               </Dialog>
+
+              <QuickResponsibleModal
+                open={isQuickResponsibleOpen}
+                loading={quickResponsibleLoading}
+                data={quickResponsibleData}
+                onChange={setQuickResponsibleData}
+                onClose={handleCloseQuickResponsibleModal}
+                onSubmit={handleQuickResponsibleSubmit}
+              />
 
               {/* Espaço para o rodapé fixo não cobrir o conteúdo */}
               <div className="h-16" />

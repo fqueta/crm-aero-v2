@@ -565,6 +565,7 @@ class MatriculaController extends Controller
                 'funnel:id,name',
                 'stage:id,name,funnel_id',
                 'situacao:ID,post_title',
+                'responsavel:id,name,email,cpf,celular,config',
                 'parcelamentos'
             ])
             ->findOrFail($id);
@@ -581,6 +582,7 @@ class MatriculaController extends Controller
 
         // Nó de cliente estruturado
         $data['cliente'] = $matricula->cliente ? $this->mapClientNodeOutput($matricula->cliente) : null;
+        $data['responsavel'] = $matricula->responsavel ? $this->mapClientNodeOutput($matricula->responsavel) : null;
         $data['meta'] = $this->getAllMatriculaMeta($matricula['id']);
         $data['consultor'] = $this->mapClientNodeOutput(User::find($matricula['id_consultor']));
         // Parcelamentos via relação Eloquent para manter consistência com sync()
@@ -1318,6 +1320,309 @@ class MatriculaController extends Controller
         $ret['exec'] = true;
         $ret['contratos_pdf'] = $contratos_pdf;
         return $ret;
+    }
+
+    /**
+     * Metodo para renderizar os contratos do responsável financeiro de uma matricula
+     */
+    public function contratos_responsavel($id, $dm = [])
+    {
+        if (!$id) {
+            return response()->json(['error' => 'ID da matrícula é necessário'], 400);
+        }
+        if (!$dm) {
+            $dm = $this->dm($id);
+        }
+
+        if (!isset($dm['id_responsavel']) || !$dm['id_responsavel']) {
+            return ['error' => 'Responsável financeiro não definido para esta matrícula'];
+        }
+
+        $contratos = [];
+        if ($dm) {
+            // pt-BR: Prioridade 1 - Buscar contratos especificamente marcados como 'responsavel' para este curso/período.
+            // en-US: Priority 1 - Look for contracts specifically tagged as 'responsavel' for this course/period.
+            $specificResponsibleIds = \App\Models\Post::where('post_type', 'contratos')
+                ->where('config->tipo', 'responsavel')
+                ->where(function($q) use ($dm) {
+                    if (!empty($dm['id_curso'])) {
+                        $q->where('config->id_curso', (int)$dm['id_curso']);
+                    }
+                })
+                ->where('post_status', 'publish')
+                ->orderBy('menu_order')
+                ->pluck('ID')
+                ->toArray();
+
+            if (!empty($specificResponsibleIds)) {
+                $ids = $specificResponsibleIds;
+            } else {
+                // pt-BR: Fallback - Buscar ids padrão dos contratos do curso/período.
+                $id_periodos = $dm['orc']['modulos'][0]['id'] ?? null;
+                try {
+                    $d_periodo = (new PeriodoController())->show($id_periodos)->getData()->id_contratos;
+                } catch (\Exception $e) {
+                    $d_periodo = [];
+                }
+                $ids = $d_periodo ?? [];
+                if (is_array($ids) && count($ids)) {
+                    $ids = \App\Models\Post::where('post_type', 'contratos')
+                        ->whereIn('ID', $ids)
+                        ->orderBy('menu_order')
+                        ->orderByDesc('ID')
+                        ->pluck('ID')
+                        ->toArray();
+                }
+
+                if (empty($ids) && !empty($dm['id_curso']) && isset($dm['curso_tipo']) && $dm['curso_tipo'] == 2) {
+                    $ids = \App\Models\Post::where('post_type', 'contratos')
+                        ->where('config', 'like', '%"id_curso":' . $dm['id_curso'] . '%')
+                        ->where('post_status', 'publish')
+                        ->orderBy('menu_order')
+                        ->orderByDesc('ID')
+                        ->pluck('ID')
+                        ->toArray();
+                }
+            }
+
+            if ($ids && count($ids)) {
+                $cc = new ContratoController();
+
+                // Mapeia os dados do responsável para os tokens comuns usados no contrato
+                // pt-BR: Substitui os dados do aluno pelos do responsável financeiro para gerar o contrato em seu nome.
+                $dm['aluno'] = $dm['responsavel']['name'] ?? '';
+                $dm['cpf_aluno'] = $dm['responsavel']['cpf'] ?? '';
+                $dm['estado_civil'] = $dm['responsavel']['estado_civil'] ?? '';
+                $dm['nacionalidade'] = $dm['responsavel']['nacionalidade'] ?? '';
+                $dm['data_nascimento'] = $dm['responsavel']['config']['nascimento'] ?? '';
+                if ($dm['data_nascimento']) {
+                    $dm['data_nascimento'] = date('d/m/Y', strtotime($dm['data_nascimento']));
+                }
+                $dm['celular'] = $dm['responsavel']['config']['celular'] ?? '';
+                $dm['telefone'] = $dm['responsavel']['config']['telefone'] ?? '';
+                if ($dm['celular']) {
+                    $dm['celular'] = Qlib::mask($dm['celular'], '(99) 99999-9999');
+                }
+                if ($dm['telefone']) {
+                    $dm['telefone'] = Qlib::mask($dm['telefone'], '(99) 9999-9999');
+                }
+
+                $dm['curso'] = $dm['curso_nome'] ?? '';
+                $dm['nome_curso'] = $dm['curso'];
+                $dm['identidade'] = $dm['responsavel']['config']['rg'] ?? '';
+
+                // Adiciona tokens específicos do responsável caso o modelo os utilize
+                $dm['responsavel_nome'] = $dm['responsavel']['name'] ?? '';
+                $dm['responsavel_cpf'] = $dm['responsavel']['cpf'] ?? '';
+
+                $testemunhas = $this->testemunhas();
+                $dm['nome_testemunha1'] = $testemunhas[0]['name'] ?? '';
+                $dm['cpf_testemunha1'] = $testemunhas[0]['cpf'] ?? '';
+                $dm['nome_testemunha2'] = $testemunhas[1]['name'] ?? '';
+                $dm['cpf_testemunha2'] = $testemunhas[1]['cpf'] ?? '';
+                $dm['data_contrato_aceito'] = Qlib::dataLocal();
+
+                $assinar = $this->helper_assinar($testemunhas);
+                if (is_array($assinar) && count($assinar)) {
+                    $dm = array_merge($dm, $assinar);
+                }
+
+                foreach ($ids as $id_contrato) {
+                    try {
+                        $cont = $cc->show($id_contrato)->getData();
+                    } catch (\Exception $e) {
+                        continue;
+                    }
+                    $cont->conteudo = Qlib::apply_shortcodes($cont->conteudo, $dm);
+                    $conteudo = $cont->conteudo ?? '';
+                    $contratos[] = ['id' => $id_contrato, 'conteudo' => $conteudo, 'nome' => $cont->nome, 'slug' => $cont->slug];
+                }
+            }
+            return $contratos;
+        }
+        return ['error' => 'Matrícula não encontrada'];
+    }
+
+    /**
+     * Metodo para gerar um arquivos pdf estatico com os contratos do responsável financeiro
+     */
+    public function contratos_responsavel_pdf($id, $dm = [])
+    {
+        $ret['exec'] = false;
+        $contratos_pdf = [];
+        if (!$id) {
+            return response()->json(['error' => 'ID da matrícula é necessário'], 400);
+        }
+        if (!$dm) {
+            $dm = $this->dm($id);
+        }
+
+        $contratos = $this->contratos_responsavel($id, $dm);
+
+        if (isset($contratos['error'])) {
+            return response()->json($contratos, 400);
+        }
+
+        if ($contratos) {
+            $token = $dm['token'] ?? '';
+            $slug_periodo = $dm['orc']['modulos'][0]['slug'] ?? '';
+            $pasta = 'contratos/responsavel/' . $slug_periodo;
+            $id_matricula = $id;
+
+            if (is_array($contratos)) {
+                $campo_meta = 'contrato_responsavel_pdf';
+                Qlib::update_matriculameta($id_matricula, $campo_meta, Qlib::lib_array_json([]));
+                foreach ($contratos as $k => $cont) {
+                    $conteudo = $cont['conteudo'] ?? '';
+                    $titulo = $cont['slug'] ?? '';
+                    $dados = [
+                        'html' => $conteudo,
+                        'titulo' => $campo_meta,
+                        'nome_aquivo_savo' => 'resp_' . $titulo . '_' . $id_matricula . '_' . $k,
+                        'id_matricula' => $id_matricula,
+                        'token' => $token,
+                        'short_code' => 'resp_' . $titulo . '_' . $id_matricula,
+                        'pasta' => $pasta,
+                        'f_exibe' => 'server',
+                    ];
+                    $contratos_pdf[] = (new PdfController)->convert_html($dados);
+                }
+            }
+            $ret['exec'] = true;
+            $ret['contratos_pdf'] = $contratos_pdf;
+            // Salva o log do evento
+            try {
+                EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => (string)$id,
+                    'action' => 'responsible_contracts_generated',
+                    'description' => 'Contratos do responsável financeiro gerados com sucesso.',
+                    'payload' => $contratos_pdf,
+                    'actor_id' => (string)auth()->id(),
+                    'ip_address' => request()->ip(),
+                ]);
+            } catch (\Throwable $e) {
+            }
+        } else {
+            $ret['exec'] = false;
+            $ret['mens'] = 'Erro ao gerar os contratos do responsável';
+        }
+
+        return response()->json($ret);
+    }
+
+    /**
+     * Metodo para enviar o contrato do responsavel para zapsing
+     */
+    public function enviar_zapsign_responsavel(Request $request, $id)
+    {
+        $dm = $this->dm($id);
+        if (!$dm || !isset($dm['id_responsavel']) || !$dm['id_responsavel']) {
+            return response()->json(['error' => 'Responsável financeiro não definido para esta matrícula'], 400);
+        }
+
+        $id_matricula = (int)$id;
+        $ret['exec'] = false;
+
+        // Verifica se ja tem os links do contrato criados para o responsavel
+        $contratosMeta = Qlib::get_matriculameta($id_matricula, 'contrato_responsavel_pdf');
+        $contratos = false;
+        if (is_string($contratosMeta)) {
+            $contratos = json_decode($contratosMeta, true);
+        }
+
+        if (!is_array($contratos) || empty($contratos)) {
+            // Tenta gerar se não existir
+            $gerar = $this->contratos_responsavel_pdf($id_matricula, $dm);
+            $resGerar = $gerar->getData(true);
+            if (isset($resGerar['exec']) && $resGerar['exec']) {
+                $contratos = $resGerar['contratos_pdf'];
+            }
+        }
+
+        if (!is_array($contratos) || empty($contratos)) {
+            return response()->json(['error' => 'Não foi possível gerar os PDFs para o responsável financeiro'], 500);
+        }
+
+        $responsavel = $dm['responsavel'];
+        $nome = $responsavel['name'] ?? '';
+        $email = $responsavel['email'] ?? '';
+        $cpf = $responsavel['cpf'] ?? '';
+
+        $signers = [
+            "name" => $nome,
+            "email" => $email,
+            "cpf" => $cpf,
+            "send_automatic_email" => true,
+            "send_automatic_whatsapp" => false,
+            "auth_mode" => "CPF",
+            "order_group" => 1,
+        ];
+
+        $zpc = new ZapsingController;
+        $signersList = $zpc->signers_matricula($signers);
+
+        // Primeiro PDF vira o envelope principal
+        $mainPdf = $contratos[0]['url_pdf'] ?? $contratos[0]['url'];
+
+        $name = $nome . ' (RESPONSÁVEL) * ' . @$dm['curso_nome'] . ' - ' . @$dm['id'];
+        $externar_id = $id . '_' . $dm['id_responsavel'] . '_resp';
+
+        $body = [
+            "name" => trim($name),
+            "url_pdf" => $mainPdf,
+            "external_id" => $externar_id,
+            "folder_path" => '/CRM/Responsavel',
+            "signers" => $signersList,
+        ];
+
+        $enviar = $zpc->post([
+            "endpoint" => 'docs',
+            "body" => $body,
+        ]);
+
+        if (isset($enviar['exec']) && $enviar['exec']) {
+            $responseZapsign = $enviar['response'] ?? [];
+            $token_doc = $responseZapsign['token'] ?? false;
+
+            // Grava o processamento
+            Qlib::update_matriculameta($id_matricula, 'enviar_envelope_responsavel', json_encode($responseZapsign));
+            Qlib::update_matriculameta($id_matricula, 'processo_assinatura_responsavel', json_encode($responseZapsign));
+
+            // Envia os demais contratos como anexos
+            if (count($contratos) > 1) {
+                $anexos = array_slice($contratos, 1);
+                foreach ($anexos as $anexo) {
+                    $linkAnexo = $anexo['url_pdf'] ?? $anexo['url'] ?? false;
+                    $nomeAnexo = $anexo['nome_contrato'] ?? 'Anexo';
+                    if ($linkAnexo && $token_doc) {
+                        $zpc->enviar_anexo($token_doc, $linkAnexo, $nomeAnexo);
+                    }
+                }
+            }
+
+            $ret['exec'] = true;
+            $ret['mens'] = 'Contrato do responsável enviado com sucesso para ZapSign.';
+            $ret['response'] = $responseZapsign;
+
+            // Event log
+            try {
+                EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => (string)$id,
+                    'action' => 'zapsign_responsible_sent',
+                    'description' => 'Contrato enviado para o responsável financeiro via ZapSign.',
+                    'payload' => $responseZapsign,
+                    'actor_id' => (string)auth()->id(),
+                    'ip_address' => $request->ip(),
+                ]);
+            } catch (\Throwable $e) {
+            }
+        } else {
+            $ret['mens'] = 'Falha ao enviar para ZapSign: ' . ($enviar['error'] ?? 'Erro desconhecido');
+        }
+
+        return response()->json($ret);
     }
 
     /**

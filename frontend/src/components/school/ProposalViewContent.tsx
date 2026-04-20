@@ -9,6 +9,7 @@ import { currencyRemoveMaskToNumber } from '@/lib/masks/currency';
 import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
+import ResponsibleInfoCard from '@/components/school/ResponsibleInfoCard';
 import ProposalContractsTab from './ProposalContractsTab';
 import ProposalLogsTab from './ProposalLogsTab';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -214,6 +215,18 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const badgeLabel = isAssinado ? 'Assinada' : (isZapsignPending ? 'Assinatura em Andamento' : 'Aprovada');
   const badgeColor = isAssinado ? 'bg-green-600 text-white' : (isZapsignPending ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white');
 
+  const responsavelData = (enrollment as any)?.responsavel;
+  const rawZapsignResp = (enrollment as any)?.meta?.processo_assinatura_responsavel;
+  const zapsignDataResp = useMemo(() => {
+    if (!rawZapsignResp) return null;
+    try {
+      return typeof rawZapsignResp === 'string' ? JSON.parse(rawZapsignResp) : rawZapsignResp;
+    } catch {
+      return null;
+    }
+  }, [rawZapsignResp]);
+  const signatureLinkResp = zapsignDataResp?.signers?.[0]?.sign_url || zapsignDataResp?.signers?.[0]?.signing_link || '';
+
   return (
     <div className="space-y-6">
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
@@ -274,6 +287,13 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                     <div className="print:hidden">
                     <SignatureLinkCard link={linkAssinatura} />
                     </div>
+                    )}
+
+                    {/* Dados do Responsável Financeiro */}
+                    {responsavelData && (
+                      <div className="print:hidden">
+                        <ResponsibleInfoCard data={responsavelData} signatureLink={signatureLinkResp} />
+                      </div>
                     )}
 
                     <BudgetPreview

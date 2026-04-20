@@ -195,21 +195,11 @@ export default function BudgetPreview({
         <Table>
           <TableHeader>
             <TableRow className="bg-[#003366] hover:bg-[#003366]">
-              {isEtapa1 ? (
-                <>
-                  <TableHead className="w-[100px] text-center text-white font-bold whitespace-nowrap">{stageName}</TableHead>
-                  <TableHead className="text-white font-bold">Conteúdo</TableHead>
-                  <TableHead className="text-white font-bold">Aula</TableHead>
-                </>
-              ) : (
-                <>
-                  <TableHead className="w-[100px] text-white font-bold pl-4 whitespace-nowrap">{stageName}</TableHead>
-                  <TableHead className="text-white font-bold">Conteúdo</TableHead>
-                  <TableHead className="text-white font-bold">Aeronave</TableHead>
-                  <TableHead className="text-center text-white font-bold">Créditos</TableHead>
-                  <TableHead className="text-right text-white font-bold pr-4">Valor</TableHead>
-                </>
-              )}
+                <TableHead className="w-[100px] text-center text-white font-bold whitespace-nowrap">{stageName}</TableHead>
+                <TableHead className="text-white font-bold">Conteúdo</TableHead>
+                <TableHead className="text-white font-bold">{isEtapa1 ? 'Aula' : 'Aeronave'}</TableHead>
+                {!isEtapa1 && <TableHead className="text-center text-white font-bold">Créditos</TableHead>}
+                <TableHead className="text-right text-white font-bold pr-4">Valor</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -223,6 +213,7 @@ export default function BudgetPreview({
                     <TableCell className="text-center font-medium">{idx + 1}</TableCell>
                     <TableCell>{modTitle}</TableCell>
                     <TableCell>Ground School</TableCell>
+                    <TableCell className="text-right pr-4">{modValor}</TableCell>
                   </TableRow>
                  );
               } else {
@@ -230,7 +221,7 @@ export default function BudgetPreview({
                 const modAircraft = mod?.aircraft_name || mod?.aviao_nome || '—';
                 return (
                   <TableRow key={`${stageName}-${idx}`} className="even:bg-muted/10">
-                    <TableCell className="font-medium pl-4">{idx + 8}</TableCell> {/* Numeração continua fictícia ou baseada em index? Imagem mostra 8,9,10... */}
+                    <TableCell className="font-medium pl-4">{idx + (stageModules.length > 8 ? 8 : 1)}</TableCell>
                     <TableCell>{modTitle}</TableCell>
                     <TableCell>{modAircraft}</TableCell>
                     <TableCell className="text-center">{modCreditos}</TableCell>
@@ -341,9 +332,7 @@ export default function BudgetPreview({
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-[#003366] hover:bg-[#003366]">
-                       <TableHead className="w-[100px] text-white font-bold pl-4 whitespace-nowrap">Etapa 3</TableHead>
-                       <TableHead className="text-white font-bold text-center">Conteúdo</TableHead>
-                       <TableHead className="text-right text-white font-bold pr-4">Valor</TableHead>
+                       <TableHead className="w-[100px] text-white font-bold pl-4 whitespace-nowrap">Etapa 3</TableHead><TableHead className="text-white font-bold text-center">Conteúdo</TableHead><TableHead className="text-right text-white font-bold pr-4">Valor</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -378,8 +367,7 @@ export default function BudgetPreview({
                <Table className="border rounded-md bg-white shadow-sm mb-4">
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="font-bold text-black">Descrição</TableHead>
-                      <TableHead className="text-right font-bold text-black">Total</TableHead>
+                      <TableHead className="font-bold text-black">Descrição</TableHead><TableHead className="text-right font-bold text-black">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -421,8 +409,7 @@ export default function BudgetPreview({
 
                     {/* TOTAL DA PROPOSTA */}
                     <TableRow className="bg-muted/20 border-t-2">
-                      <TableCell className="font-bold text-green-600 text-lg uppercase">TOTAL DA PROPOSTA A VISTA:</TableCell>
-                      <TableCell className="text-right font-bold text-green-600 text-lg">{totalMasked}</TableCell>
+                      <TableCell className="font-bold text-green-600 text-lg uppercase">TOTAL DA PROPOSTA A VISTA:</TableCell><TableCell className="text-right font-bold text-green-600 text-lg">{totalMasked}</TableCell>
                     </TableRow>
                   </TableBody>
                </Table>

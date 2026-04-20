@@ -229,6 +229,8 @@ Route::name('api.')->prefix('v1')->middleware([
             'matriculas' => 'id'
         ]]);
         Route::post('matriculas/simulador-combustivel', [\App\Http\Controllers\api\MatriculaController::class, 'simuladorCombustivelApi'])->name('matriculas.simulador-combustivel');
+        Route::post('matriculas/{id}/gerar-contratos-responsavel', [\App\Http\Controllers\api\MatriculaController::class, 'contratos_responsavel_pdf'])->name('matriculas.gerar-contratos-responsavel');
+        Route::post('matriculas/{id}/enviar-zapsign-responsavel', [\App\Http\Controllers\api\MatriculaController::class, 'enviar_zapsign_responsavel'])->name('matriculas.enviar-zapsign-responsavel');
         Route::patch('matriculas/{id}/etapa', [\App\Http\Controllers\api\MatriculaController::class, 'updateStageRapid'])->name('matriculas.update-stage');
         // Logs de eventos
         Route::get('event-logs', [\App\Http\Controllers\api\EventLogController::class, 'index'])->name('event-logs.index');

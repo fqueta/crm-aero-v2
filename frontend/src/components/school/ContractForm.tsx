@@ -10,6 +10,13 @@ import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
 import { periodsService } from '@/services/periodsService';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { CreateContractInput, UpdateContractInput, ContractRecord } from '@/types/contracts';
 
 /**
@@ -39,6 +46,7 @@ export function ContractForm({
       slug: '',
       conteudo: '',
       id_curso: undefined,
+      tipo: 'geral',
       ativo: 'draft',
     },
   });
@@ -85,6 +93,7 @@ export function ContractForm({
       conteudo: d?.conteudo ?? d?.content ?? '',
       id_curso: d?.id_curso ?? undefined,
       periodo: d?.periodo ?? '',
+      tipo: d?.tipo ?? 'geral',
       ativo: (d?.ativo as any) ?? 'draft',
     });
   }, [initialData]);
@@ -231,16 +240,34 @@ export function ContractForm({
       )}
 
       {/* Status por último */}
-      <div className="space-y-1">
-        <Label>Status</Label>
-        <div className="flex items-center gap-3">
-          <Switch
-            checked={(form.watch('ativo') as any) === 'publish'}
-            onCheckedChange={(checked) => form.setValue('ativo', checked ? ('publish' as any) : ('draft' as any))}
-          />
-          <span className="text-sm text-muted-foreground">
-            {(form.watch('ativo') as any) === 'publish' ? 'Publicado' : 'Rascunho'}
-          </span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label>Status</Label>
+          <div className="flex items-center gap-3 h-10">
+            <Switch
+              checked={(form.watch('ativo') as any) === 'publish'}
+              onCheckedChange={(checked) => form.setValue('ativo', checked ? ('publish' as any) : ('draft' as any))}
+            />
+            <span className="text-sm text-muted-foreground">
+              {(form.watch('ativo') as any) === 'publish' ? 'Publicado' : 'Rascunho'}
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <Label>Tipo de Contrato</Label>
+          <Select
+            value={String(form.watch('tipo') || 'geral')}
+            onValueChange={(val) => form.setValue('tipo', val)}
+          >
+            <SelectTrigger className="w-full h-10">
+              <SelectValue placeholder="Selecione o tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="geral">Geral (Aluno)</SelectItem>
+              <SelectItem value="responsavel">Responsável Financeiro</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

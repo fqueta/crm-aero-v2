@@ -14,6 +14,7 @@ export interface ContractRecord {
   conteudo?: string;
   id_curso?: number | string | null;
   periodo?: string | null;
+  tipo?: string | null;
   ativo: ContractStatus;
 }
 
@@ -26,6 +27,7 @@ export interface CreateContractInput {
   conteudo?: string;
   id_curso?: number | string | null;
   periodo?: string | null;
+  tipo?: string | null;
   ativo?: ContractStatus;
 }
 
@@ -38,6 +40,7 @@ export interface UpdateContractInput {
   conteudo?: string;
   id_curso?: number | string | null;
   periodo?: string | null;
+  tipo?: string | null;
   ativo?: ContractStatus;
 }
 

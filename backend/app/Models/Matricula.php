@@ -152,4 +152,13 @@ class Matricula extends Model
     {
         return $this->belongsTo(EnrollmentSituation::class, 'situacao_id', 'ID');
     }
+
+    /**
+     * Relacionamento: responsável (usuário) associado à matrícula.
+     * EN: Responsible (user) related to the enrollment.
+     */
+    public function responsavel()
+    {
+        return $this->belongsTo(User::class, 'id_responsavel');
+    }
 }

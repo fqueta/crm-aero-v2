@@ -63,6 +63,7 @@ class ContratoController extends Controller
                 'conteudo' => $item->post_content,
                 'id_curso' => $item->config['id_curso'] ?? ($item->post_parent ?: null),
                 'periodo' => $item->config['periodo'] ?? null,
+                'tipo' => $item->config['tipo'] ?? 'geral',
                 'ativo' => $item->post_status,
             ];
         });
@@ -107,6 +108,7 @@ class ContratoController extends Controller
         $post->config = [
             'id_curso' => $data['id_curso'] ?? null,
             'periodo' => $data['periodo'] ?? null,
+            'tipo' => $data['tipo'] ?? 'geral',
         ];
 
         $post->save();
@@ -196,6 +198,7 @@ class ContratoController extends Controller
             'conteudo' => $post->post_content,
             'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
             'periodo' => $post->config['periodo'] ?? null,
+            'tipo' => $post->config['tipo'] ?? 'geral',
             'ativo' => $post->post_status,
         ]);
     }
@@ -253,6 +256,9 @@ class ContratoController extends Controller
         if (array_key_exists('periodo', $data)) {
             $config['periodo'] = $data['periodo'];
         }
+        if (array_key_exists('tipo', $data)) {
+            $config['tipo'] = $data['tipo'];
+        }
         $post->config = $config;
 
         $post->save();
@@ -264,6 +270,7 @@ class ContratoController extends Controller
             'conteudo' => $post->post_content,
             'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
             'periodo' => $post->config['periodo'] ?? null,
+            'tipo' => $post->config['tipo'] ?? 'geral',
             'ativo' => $post->post_status,
         ]);
     }

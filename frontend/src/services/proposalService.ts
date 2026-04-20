@@ -80,6 +80,14 @@ class ProposalService extends BaseApiService {
     // pt-BR: Envia os documentos atuais para assinatura.
     return this.get(`/pdf/matriculas/${matriculaId}?send_zapsign=1`);
   }
+
+  async generateResponsibleContracts(matriculaId: string) {
+    return this.post(`/matriculas/${matriculaId}/gerar-contratos-responsavel`, {});
+  }
+
+  async sendResponsibleToZapsign(matriculaId: string) {
+    return this.post(`/matriculas/${matriculaId}/enviar-zapsign-responsavel`, {});
+  }
 }
 
 export const proposalService = new ProposalService();

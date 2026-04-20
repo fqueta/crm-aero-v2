@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\Responsible;
 use App\Models\Stage;
 use App\Models\User;
 use App\Services\PermissionService;
@@ -29,6 +30,7 @@ class ClientController extends Controller
     public function __construct()
     {
         $this->cliente_permission_id = Qlib::qoption('permission_client_id');
+        Responsible::setPermissionId((int) $this->responsavel_permission_id);
         $this->routeName = request()->route()->getName();
         $this->permissionService = new PermissionService();
         $this->sec = request()->segment(3);
@@ -720,17 +722,15 @@ class ClientController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        if (!$this->permissionService->isHasPermission('view')) {
-            return response()->json(['error' => 'Acesso negado'], 403);
-        }
+        // if (!$this->permissionService->isHasPermission('view')) {
+        //     return response()->json(['error' => 'Acesso negado'], 403);
+        // }
 
         $perPage = $request->input('per_page', 10);
         $order_by = $request->input('order_by', 'created_at');
         $order = $request->input('order', 'desc');
 
-        $query = Client::withoutGlobalScope('client')
-            ->where('permission_id', $this->responsavel_permission_id)
-            ->orderBy($order_by, $order);
+        $query = Responsible::query()->orderBy($order_by, $order);
 
         // Não exibir registros marcados como deletados ou excluídos
         $query->where(function($q) {
@@ -799,9 +799,9 @@ class ClientController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        if (!$this->permissionService->isHasPermission('create')) {
-            return response()->json(['error' => 'Acesso negado'], 403);
-        }
+        // if (!$this->permissionService->isHasPermission('create')) {
+        //     return response()->json(['error' => 'Acesso negado'], 403);
+        // }
 
         // Remover máscara do celular
         if ($request->filled('celular')) {
@@ -856,13 +856,11 @@ class ClientController extends Controller
         $validated['ativo'] = $validated['ativo'] ?? 's';
         $validated['status'] = $validated['status'] ?? 'actived';
         $validated['tipo_pessoa'] = $validated['tipo_pessoa'] ?? 'pf';
-        $validated['permission_id'] = $this->responsavel_permission_id; // força responsável
         $validated['config'] = isset($validated['config']) ? $this->sanitizeInput($validated['config']) : [];
         if (is_array($validated['config'])) {
             $validated['config'] = json_encode($validated['config']);
         }
-
-        $client = Client::create($validated);
+        $client = Responsible::create($validated);
         if (is_string($client->config)) {
             $client->config = json_decode($client->config, true) ?? [];
         }
@@ -883,13 +881,12 @@ class ClientController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        if (!$this->permissionService->isHasPermission('view')) {
-            return response()->json(['error' => 'Acesso negado'], 403);
-        }
+        // if (!$this->permissionService->isHasPermission('view')) {
+        //     return response()->json(['error' => 'Acesso negado'], 403);
+        // }
 
-        $client = Client::withoutGlobalScope('client')
+        $client = Responsible::query()
             ->where('id', $id)
-            ->where('permission_id', $this->responsavel_permission_id)
             ->firstOrFail();
 
         if (is_string($client->config)) {
@@ -912,13 +909,12 @@ class ClientController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        if (!$this->permissionService->isHasPermission('edit')) {
-            return response()->json(['error' => 'Acesso negado'], 403);
-        }
+        // if (!$this->permissionService->isHasPermission('edit')) {
+        //     return response()->json(['error' => 'Acesso negado'], 403);
+        // }
 
-        $clientToUpdate = Client::withoutGlobalScope('client')
+        $clientToUpdate = Responsible::query()
             ->where('id', $id)
-            ->where('permission_id', $this->responsavel_permission_id)
             ->firstOrFail();
 
         $request->merge([
@@ -965,7 +961,7 @@ class ClientController extends Controller
             unset($validated['password']);
         }
 
-        // Garantir permission_id=8
+        // Garantir que o registro continue no escopo de responsáveis
         $validated['permission_id'] = $this->responsavel_permission_id;
 
         if (isset($validated['config'])) {
@@ -1002,9 +998,8 @@ class ClientController extends Controller
             return response()->json(['error' => 'Acesso negado'], 403);
         }
 
-        $client = Client::withoutGlobalScope('client')
+        $client = Responsible::query()
             ->where('id', $id)
-            ->where('permission_id', $this->responsavel_permission_id)
             ->firstOrFail();
 
         $client->update([
@@ -1041,8 +1036,7 @@ class ClientController extends Controller
         $order_by = $request->input('order_by', 'created_at');
         $order = $request->input('order', 'desc');
 
-        $query = Client::withoutGlobalScope('client')
-            ->where('permission_id', $this->responsavel_permission_id)
+        $query = Responsible::query()
             ->where('deletado', 's')
             ->orderBy($order_by, $order);
 
@@ -1113,10 +1107,9 @@ class ClientController extends Controller
             return response()->json(['error' => 'Acesso negado'], 403);
         }
 
-        $client = Client::withoutGlobalScope('client')
+        $client = Responsible::query()
             ->where('id', $id)
             ->where('deletado', 's')
-            ->where('permission_id', $this->responsavel_permission_id)
             ->firstOrFail();
 
         $client->update([
@@ -1144,9 +1137,8 @@ class ClientController extends Controller
             return response()->json(['error' => 'Acesso negado'], 403);
         }
 
-        $client = Client::withoutGlobalScope('client')
+        $client = Responsible::query()
             ->where('id', $id)
-            ->where('permission_id', $this->responsavel_permission_id)
             ->firstOrFail();
 
         $client->delete();

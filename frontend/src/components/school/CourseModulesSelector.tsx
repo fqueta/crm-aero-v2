@@ -5,6 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { currencyRemoveMaskToNumber, currencyRemoveMaskToString, currencyApplyMask } from '@/lib/masks/currency';
+import { DollarSign, Plane } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 
 interface CourseModulesSelectorProps {
   course: any;
@@ -14,6 +19,7 @@ interface CourseModulesSelectorProps {
   formatCurrencyBRL: (value: number) => string;
   initialSelections?: Record<number, ModuleSelection>;
   initialEtapa1Discount?: number;
+  initialDollarRate?: number;
 }
 
 interface ModuleSelection {
@@ -23,15 +29,22 @@ interface ModuleSelection {
   price: number;
 }
 
+type CurrencyType = 'BRL' | 'USD';
+
 export default function CourseModulesSelector({ 
   course, 
   aircrafts, 
   onChange,
-  getAircraftHourlyRate,
+  getAircraftHourlyRate: getAircraftHourlyRateProp,
   formatCurrencyBRL,
   initialSelections: providedInitialSelections,
-  initialEtapa1Discount
+  initialEtapa1Discount,
+  initialDollarRate
 }: CourseModulesSelectorProps) {
+  const { toast } = useToast();
+  const [currency, setCurrency] = useState<CurrencyType>('BRL');
+  const [dollarRate, setDollarRate] = useState<number>(initialDollarRate || 5.15);
+  const [globalAircraftId, setGlobalAircraftId] = useState<string>('');
   // Inicializa o estado com base nos módulos do curso
   const initialSelections = useMemo(() => {
     // Se tiver seleções iniciais fornecidas (ex: edição), usa elas como base
@@ -78,43 +91,57 @@ export default function CourseModulesSelector({
   const [selections, setSelections] = useState<Record<number, ModuleSelection>>(initialSelections);
   const [etapa1Discount, setEtapa1Discount] = useState<number>(initialEtapa1Discount || 0);
 
-  // Sincroniza initialEtapa1Discount se mudar (para edição)
   useEffect(() => {
     if (initialEtapa1Discount !== undefined) {
       setEtapa1Discount(initialEtapa1Discount);
     }
   }, [initialEtapa1Discount]);
 
-  // Atualiza seleções se initialSelections mudar (hidratação tardia)
-  useEffect(() => {
-    // Se o curso mudar, precisamos re-inicializar o estado base, MAS preservando edições do usuário se possível.
-    // A lógica anterior estava um pouco confusa. Vamos simplificar.
+  // Filtra aeronaves vinculadas ao curso de forma global
+  const courseLinkedAircrafts = useMemo(() => {
+    const linked = course?.aeronaves || course?.aviao || [];
+    const linkedArray = Array.isArray(linked) ? linked : [];
     
-    setSelections(prev => {
-        const modules = Array.isArray(course?.modulos) ? course.modulos : [];
-        const next: Record<number, ModuleSelection> = {};
+    // Se não houver nada vinculado no cadastro do curso, mostra todas como fallback
+    if (linkedArray.length === 0) return aircrafts;
 
+    // Normaliza os identificadores vinculados (podem ser IDs ou Tokens)
+    const linkedIdentifiers = linkedArray.map(item => String(item.id || item));
+    
+    return aircrafts.filter(a => {
+        const idMatch = linkedIdentifiers.includes(String(a.id));
+        const tokenMatch = a.token && linkedIdentifiers.includes(String(a.token));
+        return idMatch || tokenMatch;
+    });
+  }, [course, aircrafts]);
+
+  const hydratedRef = React.useRef<string | null>(null);
+
+  // Atualiza seleções se o curso mudar (reset) ou se houver hidratação inicial
+  useEffect(() => {
+    const modules = Array.isArray(course?.modulos) ? course.modulos : [];
+    if (modules.length === 0) return;
+
+    const currentCourseId = String(course?.id || '');
+    
+    // pt-BR: Se já hidratamos este curso específico com dados do banco, não fazemos nada
+    // en-US: If we already hydrated this specific course with DB data, do nothing
+    if (hydratedRef.current === currentCourseId) {
+        return;
+    }
+
+    // pt-BR: Só prosseguimos se tivermos os módulos do curso carregados
+    if (modules.length === 0) return;
+
+    setSelections(prev => {
+        const next: Record<number, ModuleSelection> = {};
         modules.forEach((mod: any, idx: number) => {
-            // Se houver providedInitialSelections para este índice, use-o (prioridade máxima - vindo do BD)
+            // pt-BR: Se houver providedInitialSelections para este índice, essa é a prioridade na hidratação
             if (providedInitialSelections && providedInitialSelections[idx]) {
-                next[idx] = providedInitialSelections[idx];
+                next[idx] = { ...providedInitialSelections[idx], course_id_ref: currentCourseId };
                 return;
             }
 
-            // Se já tivermos um estado local para este índice, use-o (preserva edições em andamento)
-            // CUIDADO: Se mudou de curso, o índice pode referir a outro módulo.
-            // O ideal seria verificar se o ID ou título do módulo mudou, mas CourseModulesSelector
-            // geralmente é montado para um curso específico. Se o curso muda, o componente deve remountar ou resetar.
-            // Assumindo que o componente é resetado ou que o parent limpa o estado.
-            
-            // Mas se course muda, queremos resetar para os defaults do novo curso,
-            // a menos que providedInitialSelections diga o contrário.
-            // Como saber se course mudou? useEffect dependencies.
-            
-            // Vamos assumir que se providedInitialSelections existe, ele é a fonte da verdade.
-            // Se não, usamos os defaults do curso.
-            
-            // Vamos calcular o default deste módulo
             let defaultPrice = 0;
             if (mod.valor) {
                 defaultPrice = typeof mod.valor === 'number' 
@@ -122,50 +149,26 @@ export default function CourseModulesSelector({
                     : currencyRemoveMaskToNumber(String(mod.valor));
             }
             
-            // Se já existe no estado anterior, mantemos?
-            // Só se fizer sentido. Se o usuário trocou o curso no dropdown pai, o estado anterior é lixo.
-            // O componente pai (ProposalsCreate/Edit) deve estar passando um `key` ou o React gerencia.
-            // Se não, precisamos resetar.
-            
-            // Para garantir que valores iniciais (como 100,00) apareçam quando o curso é carregado pela primeira vez:
-            // Se prev[idx] não existe, usa default.
-            // Se prev[idx] existe, e tem price 0 mas o módulo tem valor, talvez devêssemos atualizar?
-            // Não, porque o usuário pode ter zerado manualmente.
-            
-            // Melhor estratégia:
-            // Se providedInitialSelections mudou, ele vence.
-            // Se course mudou, reinicia com defaults.
-            // Como diferenciar "course mudou" de "outra renderização"?
-            // O useEffect roda quando [course, providedInitialSelections] muda.
-            
-            // Se providedInitialSelections está presente, usamos ele.
-            // Se não, usamos defaults do curso.
-            
-            // O problema é que se o usuário editar (setSelections), isso não dispara esse useEffect,
-            // então o estado local é preservado.
-            // Mas se course mudar, esse useEffect dispara. E aí sobrescrevemos tudo com defaults do NOVO curso.
-            // Isso parece correto.
-            
             next[idx] = {
                 selected: false,
                 credits: Number(mod.limite || 0),
                 aircraftId: '',
-                price: defaultPrice
-            };
+                price: defaultPrice,
+                course_id_ref: currentCourseId
+            } as any;
         });
         
-        // Se tiver providedInitialSelections, sobrescreve o que tiver
+        // pt-BR: Só marcamos como hidratado se realmente recebemos dados para hidratar
+        // ou se o curso mudou (reset). Se providedInitialSelections ainda for undefined/null,
+        // esperamos a próxima execução para tentar pegar os dados do banco.
         if (providedInitialSelections) {
-             Object.entries(providedInitialSelections).forEach(([k, v]) => {
-                 const i = Number(k);
-                 if (next[i]) next[i] = v;
-             });
+            hydratedRef.current = currentCourseId;
         }
-        
+
         return next;
     });
 
-  }, [course, providedInitialSelections]);
+  }, [course?.id, providedInitialSelections]);
 
 
   // Agrupa módulos por etapa
@@ -186,6 +189,53 @@ export default function CourseModulesSelector({
     return groups;
   }, [course]);
 
+  // Helper local para obter valor da hora respeitando a moeda selecionada (Padronizado BRL/USD)
+  const getAircraftRate = (aircraft: any, targetCurrency: CurrencyType = currency) => {
+    if (!aircraft?.pacotes) return 0;
+    try {
+      const pacotes = typeof aircraft.pacotes === 'string' ? JSON.parse(aircraft.pacotes) : aircraft.pacotes;
+      const pacotesList = Array.isArray(pacotes) ? pacotes : Object.values(pacotes);
+      
+      const pkg = pacotesList[0] as any;
+      if (!pkg) return 0;
+
+      // Busca estrita pelas chaves padronizadas
+      if (targetCurrency === 'USD') {
+        const val = pkg['Hora Seca (USD)'] || pkg['hora-seca_dolar'] || pkg['hora-seca-dolar'] || pkg['usd'];
+        return val ? currencyRemoveMaskToNumber(String(val)) : 0;
+      }
+
+      // Para BRL, tenta a chave padronizada primeiro
+      const valBrl = pkg['Hora Seca (BRL)'] || pkg['hora-seca'] || pkg['brl'];
+      if (valBrl) {
+        return currencyRemoveMaskToNumber(String(valBrl));
+      }
+
+      // Fallback para lógica original apenas se a chave padronizada não existir (Retrocompatibilidade)
+      return getAircraftHourlyRateProp(aircraft);
+    } catch (err) {
+      console.error("Erro ao calcular valor da aeronave:", err);
+      return 0;
+    }
+  };
+
+  // Helper para formatar moeda dinamicamente
+  // Nota: Agora sempre mostramos o valor final em BRL conforme solicitado, 
+  // mas podemos usar formatValueUSD para detalhes específicos.
+  const formatValue = (val: number) => {
+    return formatCurrencyBRL(val);
+  };
+
+  const formatValueUSD = (val: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+  };
+
+  // Helper para obter o preço final aplicado (já convertido para BRL se for USD)
+  const getAppliedRate = (aircraft: any) => {
+    const rawRate = getAircraftRate(aircraft);
+    return currency === 'USD' ? rawRate * dollarRate : rawRate;
+  };
+
   // Atualiza o estado quando uma seleção muda
   const handleSelectionChange = (idx: number, field: keyof ModuleSelection, value: any) => {
     setSelections(prev => {
@@ -193,22 +243,10 @@ export default function CourseModulesSelector({
       const next = { ...current, [field]: value };
       
       // Recalcula preço se mudar créditos ou aeronave (apenas se tiver aeronave selecionada)
-      if (field === 'credits' || field === 'aircraftId') {
+      if (field === 'credits' || field === 'aircraftId' || (field as any) === 'currency_change') {
         const aircraft = aircrafts.find(a => String(a.id) === String(next.aircraftId));
-        // Se tiver aeronave, calcula; se não, mantém o preço atual (pode ser manual) ou zero
         if (aircraft) {
-            const rate = getAircraftHourlyRate(aircraft);
-            next.price = next.credits * rate;
-        } else if (field === 'aircraftId' && !value) {
-            // Se limpou a aeronave, zera o preço? Ou mantém manual?
-            // Geralmente, se depende de aeronave e remove, vira zero.
-            // Mas para Etapa 1, não tem aeronave.
-            // Vamos checar se o módulo original é Etapa 1? Não temos acesso fácil aqui sem lookup.
-            // Mas se aircraftId ficou vazio, assumimos que o preço não é derivado de aeronave
-            // A MENOS que fosse antes.
-            // Para simplificar: se o usuário limpou a aeronave, assumimos que ele quer zerar ou editar manualmente.
-            // Mas se ele editou manualmente, não queremos sobrescrever.
-            // Então só sobrescrevemos se tiver aeronave.
+            next.price = next.credits * getAppliedRate(aircraft);
         }
       }
       
@@ -230,25 +268,82 @@ export default function CourseModulesSelector({
       const newState = { ...prev };
       newState[idx] = { ...newState[idx], selected: checked };
 
-      // Se marcou (checked = true) e é Etapa 2 (ou tem aircrafts disponíveis)
-      // e ainda não tem aeronave selecionada, seleciona a primeira automaticamente
-      if (checked) {
+      // Se marcou e temos uma aeronave global selecionada, aplica ela
+      if (checked && globalAircraftId) {
           const module = course?.modulos?.[idx];
-          // Verifica se o módulo permite aeronaves
-          const allowedAircrafts = getAllowedAircrafts(module);
+          const allowed = getAllowedAircrafts(module);
+          const canApply = allowed.some(a => String(a.id) === String(globalAircraftId));
           
-          if (allowedAircrafts.length > 0 && !newState[idx].aircraftId) {
-              // Seleciona a primeira aeronave disponível
-              const firstAircraft = allowedAircrafts[0];
-              newState[idx].aircraftId = String(firstAircraft.id);
-              
-              // Calcula o valor inicial baseado na aeronave selecionada
-              const rate = getAircraftHourlyRate(firstAircraft);
-              newState[idx].price = newState[idx].credits * rate;
+          if (canApply) {
+              newState[idx].aircraftId = globalAircraftId;
+              const aircraft = aircrafts.find(a => String(a.id) === String(globalAircraftId));
+              if (aircraft) {
+                  newState[idx].price = newState[idx].credits * getAppliedRate(aircraft);
+              }
           }
       }
 
       return newState;
+    });
+  };
+
+  // Efeito para recalcular tudo se a moeda ou cotação mudar
+  useEffect(() => {
+    setSelections(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(key => {
+        const idx = Number(key);
+        const sel = next[idx];
+        if (sel.aircraftId) {
+          const aircraft = aircrafts.find(a => String(a.id) === String(sel.aircraftId));
+          if (aircraft) {
+            next[idx] = { ...sel, price: sel.credits * getAppliedRate(aircraft) };
+          }
+        }
+      });
+      return next;
+    });
+  }, [currency, dollarRate]);
+
+  // Handler para aplicar aeronave global em massa
+  const handleApplyGlobalAircraft = (id: string) => {
+    setGlobalAircraftId(id === 'none' ? '' : id);
+    if (!id || id === 'none') {
+        // Se selecionou 'none', podemos opcionalmente limpar todas as aeronaves dos módulos
+        // mas o comportamento esperado geralmente é apenas parar de aplicar automaticamente.
+        // Vamos apenas atualizar o ID global e retornar.
+        return;
+    }
+
+    setSelections(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(key => {
+        const idx = Number(key);
+        const module = course?.modulos?.[idx];
+        const etapaStr = String(module?.etapa || '').toLowerCase();
+        
+        // pt-BR: Pula se for etapa 1 (teoria) ou se for o módulo de matrícula/avulso que não usa aeronave
+        const isTeoria = etapaStr.includes('etapa 1') || etapaStr.includes('etapa1') || etapaStr.includes('teoria');
+
+        if (isTeoria) return;
+
+        const allowed = getAllowedAircrafts(module);
+        const canApply = allowed.some(a => String(a.id) === String(id));
+
+        if (canApply) {
+           next[idx] = { ...next[idx], selected: true, aircraftId: id };
+           const aircraft = aircrafts.find(a => String(a.id) === String(id));
+           if (aircraft) {
+             next[idx].price = next[idx].credits * getAppliedRate(aircraft);
+           }
+        }
+      });
+      return next;
+    });
+
+    toast?.({
+        title: "Aeronave Aplicada",
+        description: "A aeronave foi aplicada a todos os módulos compatíveis da etapa prática.",
     });
   };
 
@@ -281,32 +376,36 @@ export default function CourseModulesSelector({
     // Subtrai desconto da Etapa 1 do total geral
     total = Math.max(0, total - etapa1Discount);
 
-    onChange({ modules: selectedItems, total, etapa1Discount });
-  }, [selections, course, aircrafts, etapa1Discount]); // Remove onChange from deps to avoid loop if parent recreates it constantly
+    onChange({ 
+        modules: selectedItems, 
+        total, 
+        etapa1Discount,
+        currency,
+        dollarRate,
+        symbol: 'R$' // Sempre R$ no final pois a proposta é gerada em reais
+    } as any);
+  }, [selections, course, aircrafts, etapa1Discount, currency, dollarRate]);
 
   const handleSelectAllGroup = (groupItems: { index: number }[], checked: boolean) => {
     setSelections(prev => {
       const next = { ...prev };
       groupItems.forEach(({ index }) => {
-        // Se desmarcar, apenas desmarca. Se marcar, mantém estado anterior ou inicializa.
-        // Importante: Não limpar aircraftId ao desmarcar para não perder o contexto se o usuário marcar de novo.
-        next[index] = { ...next[index], selected: checked };
-
-        // Auto-select aircraft and calculate price if checked
-        if (checked) {
-            const module = course?.modulos?.[index];
-            const allowedAircrafts = getAllowedAircrafts(module);
-            
-            if (allowedAircrafts.length > 0 && !next[index].aircraftId) {
-                // Select first available aircraft
-                const firstAircraft = allowedAircrafts[0];
-                next[index].aircraftId = String(firstAircraft.id);
-                
-                // Calculate price
-                const rate = getAircraftHourlyRate(firstAircraft);
-                next[index].price = next[index].credits * rate;
-            }
+        const item = { ...next[index], selected: checked };
+        
+        // Se estiver marcando e houver aeronave global, aplica logo
+        if (checked && globalAircraftId) {
+             const module = course?.modulos?.[index];
+             const allowed = getAllowedAircrafts(module);
+              if (allowed.some(a => String(a.id) === String(globalAircraftId))) {
+                  item.aircraftId = globalAircraftId;
+                  const aircraft = aircrafts.find(a => String(a.id) === String(globalAircraftId));
+                  if (aircraft) {
+                      item.price = item.credits * getAppliedRate(aircraft);
+                  }
+              }
         }
+        
+        next[index] = item;
       });
       return next;
     });
@@ -314,14 +413,102 @@ export default function CourseModulesSelector({
 
   // Helper para filtrar aeronaves permitidas
   const getAllowedAircrafts = (module: any) => {
-    const allowedIds = module?.aviao || [];
-    if (!allowedIds || allowedIds.length === 0) return [];
-    const allowedSet = new Set(allowedIds.map(String));
-    return aircrafts.filter((a: any) => allowedSet.has(String(a.id)));
+    // 1. Tenta pegar aeronaves específicas do módulo
+    const moduleAllowedIds = module?.aviao || [];
+    if (Array.isArray(moduleAllowedIds) && moduleAllowedIds.length > 0) {
+      const allowedSet = new Set(moduleAllowedIds.map(String));
+      return aircrafts.filter((a: any) => {
+          const idMatch = allowedSet.has(String(a.id));
+          const tokenMatch = a.token && allowedSet.has(String(a.token));
+          return idMatch || tokenMatch;
+      });
+    }
+
+    // 2. Se o módulo não tiver restrição, usa a lista global vinculada ao curso
+    return courseLinkedAircrafts;
   };
 
   return (
     <div className="space-y-6">
+      {/* Controles Globais */}
+      <Card className="bg-muted/30 border-dashed">
+        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-6">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase font-semibold">Moeda da Proposta</Label>
+              <div className="flex items-center bg-background rounded-md border p-0.5 w-fit">
+                <Button 
+                    variant={currency === 'BRL' ? 'default' : 'ghost'} 
+                    size="sm" 
+                    className="h-7 px-3 text-xs gap-1.5"
+                    onClick={() => setCurrency('BRL')}
+                >
+                    <span className="font-bold">R$</span> Real
+                </Button>
+                <Button 
+                    variant={currency === 'USD' ? 'default' : 'ghost'} 
+                    size="sm" 
+                    className="h-7 px-3 text-xs gap-1.5"
+                    onClick={() => setCurrency('USD')}
+                >
+                    <DollarSign className="w-3 h-3" /> Dólar (Ref)
+                </Button>
+              </div>
+            </div>
+
+            {currency === 'USD' && (
+              <div className="space-y-1 w-[120px] animate-in slide-in-from-left-2 duration-300">
+                <Label className="text-xs text-muted-foreground uppercase font-semibold">Cotação US$</Label>
+                <div className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-bold">R$</span>
+                    <Input 
+                        type="text"
+                        className="h-8 pl-7 text-sm font-medium"
+                        value={currencyApplyMask(String(dollarRate.toFixed(2)))}
+                        onChange={(e) => setDollarRate(currencyRemoveMaskToNumber(e.target.value))}
+                    />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1 min-w-[280px]">
+              <Label className="text-xs text-muted-foreground uppercase font-semibold">Aplicar aeronave em massa</Label>
+              <Select value={globalAircraftId} onValueChange={handleApplyGlobalAircraft}>
+                <SelectTrigger className="h-8 bg-background">
+                    <div className="flex items-center gap-2">
+                        <Plane className="w-3.5 h-3.5 text-muted-foreground" />
+                        <SelectValue placeholder="Selecione para aplicar a todos" />
+                    </div>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="none">Nenhuma (limpar seleção global)</SelectItem>
+                    {courseLinkedAircrafts.map(a => {
+                        const usdRate = getAircraftRate(a, 'USD');
+                        const brlRate = getAircraftRate(a, 'BRL');
+                        
+                        const displayRate = currency === 'USD' 
+                            ? `${formatValueUSD(usdRate)}/h (~ ${formatValue(usdRate * dollarRate)}/h)`
+                            : `${formatValue(brlRate)}/h`;
+
+                        return (
+                            <SelectItem key={a.id} value={String(a.id)}>
+                                {a.nome || a.matricula} ({displayRate})
+                            </SelectItem>
+                        );
+                    })}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="hidden md:block">
+            <Badge variant="outline" className="bg-background py-1 px-3 border-primary/20 text-primary">
+                Configuração Tipo 2 — Baseado em Horas de Voo
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
       {Object.entries(groupedModules).map(([etapa, items]) => {
         const normalizedEtapa = String(etapa || '').toLowerCase().replace(/\s/g, '');
         const isEtapa1 = normalizedEtapa === 'etapa1';
@@ -333,10 +520,61 @@ export default function CourseModulesSelector({
         return (
           <div key={etapa} className="space-y-4">
             <Card className="border-l-4 border-l-primary/20">
-              <CardHeader className="py-3 bg-muted/10">
+              <CardHeader className="py-2 px-4 bg-muted/10 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
                   {etapa}
                 </CardTitle>
+                <div className="flex items-center gap-2">
+                    <Button 
+                        type="button"
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 text-[10px] uppercase font-bold text-muted-foreground hover:text-red-600"
+                        onClick={() => {
+                            setSelections(prev => {
+                                const next = { ...prev };
+                                items.forEach(({ index }) => {
+                                    if (next[index]) next[index] = { ...next[index], price: 0 };
+                                });
+                                return next;
+                            });
+                        }}
+                    >
+                        Zerar Valores
+                    </Button>
+                    <Button 
+                        type="button"
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-7 text-[10px] uppercase font-bold text-muted-foreground"
+                        onClick={() => {
+                            setSelections(prev => {
+                                const next = { ...prev };
+                                items.forEach(({ index, module }) => {
+                                    if (next[index]) {
+                                        let defaultPrice = 0;
+                                        if (module.valor) {
+                                            defaultPrice = typeof module.valor === 'number' 
+                                                ? module.valor 
+                                                : currencyRemoveMaskToNumber(String(module.valor));
+                                        }
+                                        
+                                        // Se não for etapa 1, tenta recalcular baseado na aeronave se houver
+                                        if (!isEtapa1 && next[index].aircraftId) {
+                                            const ak = aircrafts.find(a => String(a.id) === String(next[index].aircraftId));
+                                            if (ak) defaultPrice = next[index].credits * getAppliedRate(ak);
+                                        }
+
+                                        next[index] = { ...next[index], price: defaultPrice };
+                                    }
+                                });
+                                return next;
+                            });
+                        }}
+                    >
+                        Restaurar Padrão
+                    </Button>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -344,14 +582,14 @@ export default function CourseModulesSelector({
                     <TableRow>
                       <TableHead className="w-[50px] text-center">
                         <Checkbox
-                            checked={allSelected ? true : isIndeterminate ? 'indeterminate' : false}
-                            onCheckedChange={(checked) => handleSelectAllGroup(items, checked === true)}
+                          checked={allSelected ? true : isIndeterminate ? 'indeterminate' : false}
+                          onCheckedChange={(checked) => handleSelectAllGroup(items, checked === true)}
                         />
                       </TableHead>
                       <TableHead>Fase / Módulo</TableHead>
-                      {!isEtapa1 && <TableHead className="w-[120px]">Créditos</TableHead>}
-                      {!isEtapa1 && <TableHead className="w-[350px]">Aeronave</TableHead>}
-                      {!isEtapa1 && <TableHead className="w-[120px] text-right">Valor</TableHead>}
+                      {!isEtapa1 && <TableHead className="w-[100px]">Créditos</TableHead>}
+                      {!isEtapa1 && <TableHead className="w-[300px]">Aeronave</TableHead>}
+                      <TableHead className="w-[140px] text-right">Valor</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -368,20 +606,22 @@ export default function CourseModulesSelector({
                               onCheckedChange={(checked) => handleCheckboxChange(index, checked as boolean)}
                             />
                           </TableCell>
-                          <TableCell className="font-medium">
+                          <TableCell className="font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px]">
                             {module.titulo || module.nome}
                           </TableCell>
+                          
                           {!isEtapa1 && (
-                          <TableCell>
-                            <Input 
-                              type="number" 
-                              className="h-8 w-20" 
-                              value={sel.credits}
-                              onChange={(e) => handleSelectionChange(index, 'credits', Number(e.target.value))}
-                              disabled={!sel.selected}
-                            />
-                          </TableCell>
+                            <TableCell>
+                              <Input 
+                                type="number" 
+                                className="h-8 w-20" 
+                                value={sel.credits}
+                                onChange={(e) => handleSelectionChange(index, 'credits', Number(e.target.value))}
+                                disabled={!sel.selected}
+                              />
+                            </TableCell>
                           )}
+                          
                           {!isEtapa1 && (
                             <TableCell>
                               {hasAircraftOption ? (
@@ -394,16 +634,25 @@ export default function CourseModulesSelector({
                                     <SelectValue placeholder="Selecione" />
                                   </SelectTrigger>
                                   <SelectContent className="min-w-[300px] bg-white dark:bg-slate-950 text-black dark:text-white border border-gray-200 shadow-md z-[9999]">
-                                    {allowedAircrafts.map((a: any) => (
-                                      <SelectItem 
-                                        key={String(a.id)} 
-                                        value={String(a.id)}
-                                        className="text-black dark:text-white focus:bg-slate-100 dark:focus:bg-slate-800"
-                                      >
-                                        {/* Usa o nome se disponível (ex: Paulistinha), senão usa matricula ou fallback */}
-                                        {a.nome || a.matricula || a.post_title || `Aeronave ${a.id}`}
-                                      </SelectItem>
-                                    ))}
+                                    {allowedAircrafts.map((a: any) => {
+                                      const usdRate = getAircraftRate(a, 'USD');
+                                      const brlRate = getAircraftRate(a, 'BRL');
+                                      const label = a.nome || a.matricula || a.post_title || `Aeronave ${a.id}`;
+                                      
+                                      const displayRate = currency === 'USD'
+                                        ? `${formatValueUSD(usdRate)}/h (~ ${formatValue(usdRate * dollarRate)}/h)`
+                                        : `${formatValue(brlRate)}/h`;
+
+                                      return (
+                                        <SelectItem 
+                                          key={String(a.id)} 
+                                          value={String(a.id)}
+                                          className="text-black dark:text-white focus:bg-slate-100 dark:focus:bg-slate-800"
+                                        >
+                                          {label} — {displayRate}
+                                        </SelectItem>
+                                      );
+                                    })}
                                   </SelectContent>
                                 </Select>
                               ) : (
@@ -411,23 +660,37 @@ export default function CourseModulesSelector({
                               )}
                             </TableCell>
                           )}
-                          {!isEtapa1 && (
-                          <TableCell className="text-right font-medium">
-                            {isEtapa1 ? (
-                                <Input
-                                    className="h-8 w-28 text-right ml-auto"
-                                    value={formatCurrencyBRL(sel.price)}
-                                    onChange={(e) => {
-                                       const val = currencyRemoveMaskToNumber(e.target.value);
-                                       handleSelectionChange(index, 'price', val);
-                                    }}
-                                    disabled={!sel.selected}
+
+                          <TableCell>
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="relative w-32">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-bold">R$</span>
+                                <Input 
+                                  type="text"
+                                  className="h-8 pl-7 text-right text-xs font-semibold"
+                                  value={currencyApplyMask(String(sel.price.toFixed(2)))}
+                                  onChange={(e) => handleSelectionChange(index, 'price', currencyRemoveMaskToNumber(e.target.value))}
+                                  disabled={!sel.selected}
                                 />
-                            ) : (
-                                formatCurrencyBRL(sel.price)
-                            )}
+                              </div>
+                              
+                              {sel.selected && sel.aircraftId && !isEtapa1 && (
+                                <div className="text-[10px] text-muted-foreground text-right leading-tight opacity-70">
+                                    {(() => {
+                                        const ak = aircrafts.find(a => String(a.id) === String(sel.aircraftId));
+                                        const r = ak ? getAircraftRate(ak) : 0;
+                                        return (
+                                            currency === 'USD' ? (
+                                                <>({sel.credits}h x {formatValueUSD(r)}/h x R$ {dollarRate.toFixed(2)})</>
+                                            ) : (
+                                                <>({sel.credits}h x {formatValue(r)}/h)</>
+                                            )
+                                        );
+                                    })()}
+                                </div>
+                              )}
+                            </div>
                           </TableCell>
-                          )}
                         </TableRow>
                       );
                     })}
@@ -461,7 +724,7 @@ export default function CourseModulesSelector({
         <div className="text-right">
           <span className="text-sm text-muted-foreground mr-2">Total Estimado:</span>
           <span className="text-xl font-bold">
-            {formatCurrencyBRL(Object.values(selections).filter(s => s.selected).reduce((acc, curr) => acc + curr.price, 0))}
+            {formatValue(Object.values(selections).filter(s => s.selected).reduce((acc, curr) => acc + curr.price, 0))}
           </span>
         </div>
       </div>

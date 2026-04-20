@@ -45,6 +45,8 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
   const [isSaving, setIsSaving] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isSendingZapsign, setIsSendingZapsign] = useState(false);
+  const [isRegeneratingResp, setIsRegeneratingResp] = useState(false);
+  const [isSendingZapsignResp, setIsSendingZapsignResp] = useState(false);
 
   const { toast } = useToast();
 
@@ -78,7 +80,10 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
   }, [clientId, enrollmentId]);
 
   // Processamento dos metadados para Assinatura Digital
-  const { pdfsToSend, sentDocs, rawParsedContracts, zapsignDoc, localSignedUrl, localExtraDocs } = useMemo(() => {
+  const { 
+    pdfsToSend, sentDocs, rawParsedContracts, zapsignDoc, localSignedUrl, localExtraDocs,
+    pdfsToSendResp, sentDocsResp, zapsignDocResp, localSignedUrlResp, hasZapsignResp
+  } = useMemo(() => {
     const listToSend: { name: string; url: string; original?: any }[] = [];
     const listSent: { name: string; url: string; signer?: any }[] = [];
     let parsedContracts: PdfContractItem[] = [];
@@ -177,6 +182,49 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
         extraList = Object.values(localLinksObj.extra);
     }
 
+    // --- RESPONSÁVEL FINANCEIRO ---
+    const listToSendResp: { name: string; url: string; original?: any }[] = [];
+    const listSentResp: { name: string; url: string; signer?: any }[] = [];
+    
+    // 1. PDFs Gerados para o Responsável
+    const rawContratosResp = meta?.contrato_responsavel_pdf;
+    if (rawContratosResp) {
+        try {
+            const parsed = typeof rawContratosResp === 'string' ? JSON.parse(rawContratosResp) : rawContratosResp;
+            const items = Array.isArray(parsed) ? parsed : (typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [parsed]);
+            items.forEach((item: any) => {
+                if (item && typeof item === 'object' && item.url) {
+                    listToSendResp.push({
+                        name: item.nome_contrato || item.nome_arquivo || 'Contrato Responsável',
+                        url: item.url,
+                        original: item
+                    });
+                }
+            });
+        } catch (e) {}
+    }
+
+    // 2. ZapSign do Responsável
+    const rawZapsignResp = meta?.processo_assinatura_responsavel;
+    const zapsignDataResp = typeof rawZapsignResp === 'string' ? (JSON.parse(rawZapsignResp) || {}) : (rawZapsignResp || {});
+    const signersListResp = zapsignDataResp?.signers;
+
+    if (Array.isArray(signersListResp)) {
+        signersListResp.forEach((s: any) => {
+            const link = s.sign_url || s.signing_link;
+            if (link) {
+                listSentResp.push({
+                    name: `Link Responsável: ${s.name}`,
+                    url: link,
+                    signer: s
+                });
+            }
+        });
+    }
+
+    // 3. Arquivo assinado do Responsável (se houver)
+    let localUrlResp = zapsignDataResp?.signed_file || '';
+
     return { 
         pdfsToSend: listToSend, 
         sentDocs: listSent, 
@@ -184,7 +232,13 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
         zapsignSigners: Array.isArray(signersList) ? signersList : [],
         zapsignDoc: zapsignData,
         localSignedUrl: localUrl,
-        localExtraDocs: extraList
+        localExtraDocs: extraList,
+        // --- RESPONSÁVEL FINANCEIRO ---
+        pdfsToSendResp: listToSendResp,
+        sentDocsResp: listSentResp,
+        zapsignDocResp: zapsignDataResp,
+        localSignedUrlResp: localUrlResp,
+        hasZapsignResp: Object.keys(zapsignDataResp).length > 0
     };
   }, [meta]);
 
@@ -324,6 +378,50 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
     }
   };
 
+  const handleRegenerateResp = async () => {
+    if (!enrollmentId) return;
+    if (!confirm("Deseja gerar os contratos utilizando os dados do Responsável Financeiro? Isso criará novos arquivos PDF específicos para ele.")) return;
+
+    setIsRegeneratingResp(true);
+    try {
+      await proposalService.generateResponsibleContracts(enrollmentId);
+      
+      toast({ 
+          title: 'Sucesso', 
+          description: 'Documentos do responsável gerados. A página será recarregada.' 
+      });
+
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (error) {
+      console.error(error);
+      toast({ title: 'Erro', description: 'Não foi possível gerar os documentos do responsável.', variant: 'destructive' });
+    } finally {
+      setIsRegeneratingResp(false);
+    }
+  };
+
+  const handleSendZapsignResp = async () => {
+    if (!enrollmentId) return;
+    if (!confirm("Deseja enviar o contrato para o ZapSign do Responsável Financeiro?")) return;
+
+    setIsSendingZapsignResp(true);
+    try {
+      await proposalService.sendResponsibleToZapsign(enrollmentId);
+      
+      toast({ 
+          title: 'Sucesso', 
+          description: 'Contrato enviado para o ZapSign do Responsável.' 
+      });
+
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (error) {
+      console.error(error);
+      toast({ title: 'Erro', description: 'Não foi possível enviar para o ZapSign do responsável.', variant: 'destructive' });
+    } finally {
+        setIsSendingZapsignResp(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -370,7 +468,27 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
                                 className={hasZapsign ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100" : ""}
                             >
                                 {isSendingZapsign ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                                {hasZapsign ? 'Reenviar para ZapSign' : 'Enviar p/ ZapSign'}
+                                {hasZapsign ? 'Reenviar ZapSign (Aluno)' : 'Enviar ZapSign (Aluno)'}
+                            </Button>
+                        )}
+
+                        {isAdmin && (
+                            <Button variant="outline" size="sm" onClick={handleRegenerateResp} disabled={isRegeneratingResp} className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100">
+                                {isRegeneratingResp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                                Gerar Contrato (Resp.)
+                            </Button>
+                        )}
+
+                        {isAdmin && (
+                            <Button 
+                                variant={hasZapsignResp ? "secondary" : "default"}
+                                size="sm" 
+                                onClick={handleSendZapsignResp} 
+                                disabled={isSendingZapsignResp}
+                                className={hasZapsignResp ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100" : "bg-indigo-600 hover:bg-indigo-700 text-white"}
+                            >
+                                {isSendingZapsignResp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                                {hasZapsignResp ? 'Reenviar ZapSign (Resp.)' : 'Enviar ZapSign (Resp.)'}
                             </Button>
                         )}
 
@@ -642,6 +760,92 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* --- SEÇÃO DO RESPONSÁVEL FINANCEIRO --- */}
+                {(pdfsToSendResp.length > 0 || sentDocsResp.length > 0) && (
+                    <div className="mt-8 pt-6 border-t border-dashed">
+                        <div className="flex items-center gap-2 mb-4">
+                            <CheckCircle2 className="h-5 w-5 text-indigo-600" />
+                            <h3 className="text-lg font-bold tracking-tight text-indigo-900 dark:text-indigo-400">Responsável Financeiro</h3>
+                            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Contrato Dedicado</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* PDFs do Responsável */}
+                            <Card className="bg-indigo-50/30 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-900/30">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wide opacity-80">
+                                        <FileText className="h-4 w-4 text-indigo-600" />
+                                        Documentos (Responsável)
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <ul className="space-y-2">
+                                        {pdfsToSendResp.map((doc, idx) => (
+                                            <li key={idx} className="flex items-center justify-between text-xs p-2 bg-white dark:bg-zinc-900 rounded border border-indigo-100 dark:border-indigo-900/30">
+                                                <span className="truncate mr-2 font-medium" title={doc.name}>{doc.name}</span>
+                                                <Button variant="ghost" size="sm" asChild className="h-6 w-6 p-0 hover:bg-indigo-50">
+                                                    <a href={doc.url} target="_blank" rel="noopener noreferrer">
+                                                        <ExternalLink className="h-3 w-3 text-indigo-600" />
+                                                    </a>
+                                                </Button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </CardContent>
+                            </Card>
+
+                            {/* ZapSign do Responsável */}
+                            <Card className="bg-indigo-50/30 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-900/30">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wide opacity-80">
+                                        <Zap className="h-4 w-4 text-indigo-600" />
+                                        Status ZapSign (Responsável)
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {sentDocsResp.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {sentDocsResp.map((doc, idx) => (
+                                                <div key={idx} className="bg-white dark:bg-zinc-900 p-3 rounded-lg border border-indigo-100 dark:border-indigo-900/30 shadow-sm">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 truncate pr-2 max-w-[60%]">{doc.signer?.name || 'Assinante'}</span>
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${
+                                                            doc.signer?.status === 'signed' ? 'bg-green-600 text-white' : 
+                                                            'bg-amber-500 text-white animate-pulse'
+                                                        }`}>
+                                                            {doc.signer?.status === 'signed' ? 'ASSINADO' : 'PENDENTE'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button variant="outline" size="sm" className="flex-1 h-7 text-[10px] border-indigo-200" asChild>
+                                                            <a href={doc.url} target="_blank" rel="noopener noreferrer">Abrir Link</a>
+                                                        </Button>
+                                                        <CopyButton text={doc.url} />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            
+                                            {localSignedUrlResp && (
+                                                <Button variant="default" size="sm" className="w-full h-8 text-xs bg-green-600 hover:bg-green-700" asChild>
+                                                    <a href={localSignedUrlResp} target="_blank" rel="noopener noreferrer">
+                                                        <FileText className="h-3 w-3 mr-2" />
+                                                        Baixar Contrato Resp. Assinado
+                                                    </a>
+                                                </Button>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground italic flex items-center gap-2">
+                                            <AlertCircle className="h-3 w-3" />
+                                            Aguardando envio para ZapSign
+                                        </p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                )}
             </CardContent>
         </Card>
 
