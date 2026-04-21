@@ -1,5 +1,6 @@
+﻿import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, MapPin, User, Building, Calendar, GraduationCap, Briefcase, FileText, DollarSign, Edit, Eye, Trash2 } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, User, Building, Calendar, GraduationCap, Briefcase, FileText, DollarSign, Edit, Eye, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +26,8 @@ export default function ClientView() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const [isMatriculasCollapsed, setIsMatriculasCollapsed] = useState(false);
+  const [isPropostasCollapsed, setIsPropostasCollapsed] = useState(false);
   // pt-BR: Flag para ativar uso de dados mockados
   // en-US: Flag to enable mocked data usage
   const useMock = import.meta.env.VITE_USE_MOCK_CLIENTS === 'true';
@@ -290,7 +293,7 @@ export default function ClientView() {
 
   /**
    * resolveConsultantName
-   * pt-BR: Resolve o nome do consultor associado à matrícula/proposta.
+   * pt-BR: Resolve o nome do consultor associado Ã  matrícula/proposta.
    * en-US: Resolves consultant name associated with the enrollment/proposal.
    */
   const resolveConsultantName = (e: any): string => {
@@ -394,7 +397,7 @@ export default function ClientView() {
     const course = String(enroll?.course_name || enroll?.curso_nome || enroll?.curso?.nome || '').trim();
     const name = String(enroll?.name || enroll?.descricao || '').trim();
     const base = student || name || `#${String(enroll?.id || '')}`;
-    return course ? `${base} • ${course}` : base;
+    return course ? `${base} â€¢ ${course}` : base;
   };
 
   /**
@@ -489,7 +492,7 @@ export default function ClientView() {
         <Card>
           <CardContent className="p-6">
             <div className="text-center space-y-4">
-              {/* Ícone baseado no tipo de erro */}
+              {/* Ãcone baseado no tipo de erro */}
               <div className="flex justify-center">
                 {errorInfo.type === 'server-error' && (
                   <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
@@ -1002,9 +1005,25 @@ export default function ClientView() {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Matrículas */}
-          <div>
-            <div className="text-sm font-medium text-muted-foreground mb-2">Matrículas</div>
-            {useMock ? (
+          <div className="space-y-4">
+            <div 
+              className="flex items-center justify-between cursor-pointer group"
+              onClick={() => setIsMatriculasCollapsed(!isMatriculasCollapsed)}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">
+                {isMatriculasCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                Matrículas
+              </div>
+              {isMatriculasCollapsed && !isLoadingMat && (enrollmentsMatResp?.data?.length || enrollmentsMatResp?.items?.length) > 0 && (
+                <Badge variant="secondary" className="text-[10px] h-4">
+                  {(enrollmentsMatResp?.data?.length || enrollmentsMatResp?.items?.length)} registros
+                </Badge>
+              )}
+            </div>
+
+            {!isMatriculasCollapsed && (
+              <div className="animate-in fade-in duration-300">
+                {useMock ? (
               <p className="text-sm text-muted-foreground">Modo demonstração: dados de matrículas indisponíveis.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -1071,11 +1090,31 @@ export default function ClientView() {
               </div>
             )}
           </div>
+        )}
+      </div>
 
-          {/* Propostas */}
-          <div>
-            <div className="text-sm font-medium text-muted-foreground mb-2">Propostas</div>
-            {useMock ? (
+      <Separator className="my-4" />
+
+      {/* Propostas */}
+          <div className="space-y-4">
+            <div 
+              className="flex items-center justify-between cursor-pointer group"
+              onClick={() => setIsPropostasCollapsed(!isPropostasCollapsed)}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground group-hover:text-primary transition-colors">
+                {isPropostasCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                Propostas
+              </div>
+              {isPropostasCollapsed && !isLoadingProp && (enrollmentsPropResp?.data?.length || enrollmentsPropResp?.items?.length) > 0 && (
+                <Badge variant="secondary" className="text-[10px] h-4">
+                  {(enrollmentsPropResp?.data?.length || enrollmentsPropResp?.items?.length)} registros
+                </Badge>
+              )}
+            </div>
+
+            {!isPropostasCollapsed && (
+              <div className="animate-in fade-in duration-300">
+                {useMock ? (
               <p className="text-sm text-muted-foreground">Modo demonstração: histórico de propostas indisponível.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -1142,7 +1181,9 @@ export default function ClientView() {
               </div>
             )}
           </div>
-        </CardContent>
+        )}
+      </div>
+    </CardContent>
       </Card>
 
       {/* Informações do Sistema */}
@@ -1177,3 +1218,12 @@ export default function ClientView() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+

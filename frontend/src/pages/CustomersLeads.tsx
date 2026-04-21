@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layers, Plus, NotebookPen, MoreHorizontal, Eye, MessageSquare, FileText } from 'lucide-react';
+import { Layers, Plus, NotebookPen, MoreHorizontal, Eye, MessageSquare, FileText, BookOpen, User2, Calendar, Clock, Hash } from 'lucide-react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1530,9 +1530,9 @@ function StageColumn({
 
   return (
     <div
-      className={`flex flex-col rounded-xl border-none bg-muted/40 transition-colors ${
+      className={`flex flex-col rounded-2xl border-none bg-zinc-50/50 backdrop-blur-sm transition-all duration-300 shadow-inner ${
         // Drag-over visual feedback
-        dropActive ? 'ring-2 ring-primary/50 bg-primary/5' : ''
+        dropActive ? 'ring-2 ring-primary/50 bg-primary/5 shadow-2xl' : ''
       }`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -1671,11 +1671,6 @@ function StageColumn({
 function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegisterAttendance, isRecentlyMoved, dense, lastAttendanceTimestamp }: { client: ClientRecord; funnelId: string; onDragStart?: () => void; onDragEnd?: () => void; onRegisterAttendance?: () => void; isRecentlyMoved?: boolean; dense?: boolean; lastAttendanceTimestamp?: string }) {
   const navigate = useNavigate();
   const location = useLocation();
-  /**
-   * Dropdown actions feedback
-   * pt-BR: Usa toast para feedback rápido nas ações que ainda serão implementadas.
-   * en-US: Uses toast for quick feedback on actions that are yet to be implemented.
-   */
   const { toast } = useToast();
 
   /**
@@ -1687,7 +1682,6 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
    */
   const goToView = () => {
     const q = funnelId ? `?funnel=${encodeURIComponent(String(funnelId))}` : '';
-    // Envia state.from para que a View/Edição saibam voltar à origem
     navigate(`/admin/clients/${client.id}/view${q}`, { state: { from: location } });
   };
 
@@ -1715,65 +1709,69 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
 
   return (
     <div
-      className={`group relative rounded-xl border border-border/40 bg-card transition-all duration-200 cursor-grab active:cursor-grabbing ${dense ? 'p-3' : 'p-4'} shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-primary/20 ${
+      className={`group relative rounded-2xl border border-border/50 bg-card transition-all duration-300 cursor-grab active:cursor-grabbing ${dense ? 'p-3' : 'p-5'} shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-primary/30 ${
         isRecentlyMoved ? 'ring-2 ring-primary ring-offset-2' : ''
       }`}
       onClick={goToView}
-      title={`Visualizar cliente ${client.name}`}
+      title={`Visualizar cliente #${client.id}`}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="font-semibold text-sm leading-tight text-card-foreground break-words line-clamp-2 pr-1">{client.name}</div>
-        {/* Right-side actions: status + dropdown */}
-        <div className="flex items-start gap-1 shrink-0 -mt-0.5">
-          <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal tracking-wide bg-secondary/50 text-secondary-foreground/80 hover:bg-secondary/70">{statusLabel}</Badge>
-          {/*
-           * DropdownMenu on card
-           * pt-BR: Menu com opções Detalhes, Conversas, Propostas.
-           * en-US: Menu with options Details, Conversations, Proposals.
-           */}
+      {/* Header: ID e Status */}
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          <div className="flex items-center justify-center bg-secondary/20 text-secondary-foreground rounded-lg p-1.5 h-7 w-7 shrink-0">
+             <Hash className="h-3.5 w-3.5 opacity-70" />
+          </div>
+          <span className="text-[11px] font-bold text-muted-foreground/60 tracking-widest">{client.id}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap">
+            {statusLabel}
+          </Badge>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100"
                 onClick={(e) => e.stopPropagation()}
-                title="Ações"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} className="w-40">
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); goToView(); }}>
-                <Eye className="mr-2 h-4 w-4" /> Detalhes
+                <Eye className="mr-2 h-4 w-4 opacity-70" /> Detalhes
               </DropdownMenuItem>
-              {/* pt-BR: Editar mantendo contexto do funil; en-US: Edit preserving funnel context */}
               <DropdownMenuItem onClick={(e) => { 
                 e.stopPropagation(); 
                 const q = funnelId ? `?funnel=${encodeURIComponent(String(funnelId))}` : ''; 
                 navigate(`/admin/clients/${client.id}/edit${q}`);
               }}>
-                <MessageSquare className="mr-2 h-4 w-4" /> Editar
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast({ title: 'Conversas', description: 'Em breve: histórico de conversas do cliente.' }); }}>
-                <MessageSquare className="mr-2 h-4 w-4" /> Conversas
+                <MessageSquare className="mr-2 h-4 w-4 opacity-70" /> Editar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleCreateProposal(); }}>
-                <FileText className="mr-2 h-4 w-4" /> Propostas
+                <FileText className="mr-2 h-4 w-4 opacity-70" /> Propostas
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2.5">
-         {/* Adicionar icone de email se quiser */}
-         <span className="truncate max-w-full opacity-80">{client.email || 'Sem email'}</span>
+
+      {/* Body: Nome e Email */}
+      <div className="space-y-2">
+        <div className="font-bold text-[15px] leading-tight text-foreground truncate-2-lines group-hover:text-primary transition-colors pr-1">{client.name}</div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/80 truncate opacity-80">
+           {client.email || 'Sem email'}
+        </div>
       </div>
       
-      {lastAttendanceTimestamp && (
-        <div className="mt-2.5 pt-2 border-t border-border/30 flex items-center justify-between">
-            <div className="text-[10px] font-medium text-muted-foreground/70">
+      {/* Footer: Atendimento */}
+      <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
+        {lastAttendanceTimestamp ? (
+          <>
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-tight">
+              <Clock className="h-3 w-3" />
               {(() => {
                  const d = new Date(lastAttendanceTimestamp);
                  const now = new Date();
@@ -1788,28 +1786,24 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
              <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[10px] px-2 ml-auto -mr-1 text-primary/80 hover:text-primary hover:bg-primary/5"
-                onClick={(e) => { e.stopPropagation(); onRegisterAttendance && onRegisterAttendance(); }}
-                title="Registrar atendimento"
-            >
-                <NotebookPen className="h-3 w-3 mr-1.5" /> Registrar
-            </Button>
-        </div>
-      )}
-
-      {(!lastAttendanceTimestamp) && (
-          <div className="mt-3 flex justify-end">
-             <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-[10px] px-2.5 bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground w-full justify-start transition-all"
+                className="h-7 text-[10px] font-bold uppercase tracking-wider px-2.5 ml-auto -mr-1 text-primary/80 hover:text-primary hover:bg-primary/5"
                 onClick={(e) => { e.stopPropagation(); onRegisterAttendance && onRegisterAttendance(); }}
             >
-                <NotebookPen className="h-3.5 w-3.5 mr-2 opacity-70" /> 
-                <span className="opacity-90">Registrar atendimento</span>
+                <NotebookPen className="h-3.5 w-3.5 mr-1.5" /> Registrar
             </Button>
-          </div>
-      )}
+          </>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-[10px] font-bold uppercase tracking-wider px-3 bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground w-full justify-start transition-all"
+            onClick={(e) => { e.stopPropagation(); onRegisterAttendance && onRegisterAttendance(); }}
+          >
+            <NotebookPen className="h-4 w-4 mr-2.5 opacity-60" /> 
+            Registrar atendimento
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1833,6 +1827,7 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
   const course = (enrollment as any)?.curso_nome || (enrollment as any)?.course_name || (enrollment as any)?.curso || '';
   const turma = (enrollment as any)?.turma_nome || '';
   const status = (enrollment as any)?.status || '—';
+  const consultant = (enrollment as any)?.autor_name || '';
   const amountBRL = formatBRL(getEnrollmentAmountBRL(enrollment));
 
   /**
@@ -1856,40 +1851,78 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
 
   return (
     <div
-      className={`group relative rounded-xl border border-border/40 bg-card transition-all duration-200 cursor-grab active:cursor-grabbing ${dense ? 'p-3' : 'p-4'} shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-primary/20 ${isRecentlyMoved ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+      className={`group relative rounded-2xl border border-border/50 bg-card transition-all duration-300 cursor-grab active:cursor-grabbing ${dense ? 'p-3' : 'p-5'} shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-primary/30 ${isRecentlyMoved ? 'ring-2 ring-primary ring-offset-2' : ''}`}
       onClick={goToView}
-      title={`Visualizar matrícula ${enrollment.id}`}
+      title={`Visualizar proposta #${enrollment.id}`}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="font-medium text-sm truncate" title={title}>{title}</div>
-        <div className="flex items-center gap-1">
-          <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal tracking-wide bg-muted text-muted-foreground">{status}</Badge>
+      {/* Header: ID e Status */}
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          <div className="flex items-center justify-center bg-primary/10 text-primary rounded-lg p-1.5 h-7 w-7 shrink-0">
+             <Hash className="h-3.5 w-3.5 " />
+          </div>
+          <span className="text-[11px] font-bold text-muted-foreground/70 tracking-widest">{enrollment.id}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap">
+            {status}
+          </Badge>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()} title="Ações">
+              <button className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
                 <MoreHorizontal className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem onClick={goToView}>
-                <Eye className="mr-2 h-4 w-4" /> Visualizar
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} className="w-40">
+              <DropdownMenuItem onClick={goToView} className="cursor-pointer">
+                <Eye className="mr-2 h-4 w-4 opacity-70" /> Visualizar
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={goToEdit}>
-                <FileText className="mr-2 h-4 w-4" /> Editar
+              <DropdownMenuItem onClick={goToEdit} className="cursor-pointer">
+                <FileText className="mr-2 h-4 w-4 opacity-70" /> Editar
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
-      <div className="text-xs font-medium text-muted-foreground/80 truncate mt-2.5" title={course}>{course || 'Curso não informado'}</div>
-      {turma && (
-        <div className="text-[11px] text-muted-foreground truncate mt-1" title={turma}>{turma}</div>
-      )}
-      <div className="mt-3 pt-2.5 border-t border-border/40 flex items-center justify-between">
-         <span className="text-sm font-semibold text-primary">{amountBRL}</span>
+
+      {/* Body: Nome e Detalhes */}
+      <div className="space-y-3">
+        <div className="font-bold text-[15px] leading-tight text-foreground truncate-2-lines group-hover:text-primary transition-colors" title={title}>
+          {title}
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground/80 font-medium truncate" title={course}>
+            <div className="flex items-center justify-center h-4.5 w-4.5 rounded bg-muted/40 p-0.5">
+              <BookOpen className="h-3 w-3" />
+            </div>
+            {course || 'Curso não informado'}
+          </div>
+          {turma && (
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 tracking-tight truncate" title={turma}>
+              <div className="flex items-center justify-center h-4.5 w-4.5 rounded bg-muted/40 p-0.5">
+                <Layers className="h-3 w-3" />
+              </div>
+              {turma}
+            </div>
+          )}
+          {consultant && (
+             <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 tracking-tight truncate">
+                <User2 className="h-3 w-3 " />
+                {consultant}
+             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer: Valor com destaque */}
+      <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
+         <div className="bg-primary/5 px-2.5 py-1 rounded-lg border border-primary/10">
+            <span className="text-sm font-bold text-primary tracking-tight">{amountBRL}</span>
+         </div>
       </div>
     </div>
   );
@@ -1989,7 +2022,7 @@ function StageColumnSales({
 
   return (
     <div
-      className={`flex flex-col rounded-xl border-none bg-muted/40 transition-colors ${dropActive ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}
+      className={`flex flex-col rounded-2xl border-none bg-zinc-50/50 backdrop-blur-sm transition-all duration-300 shadow-inner ${dropActive ? 'ring-2 ring-primary/50 bg-primary/5 shadow-2xl' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDropTargetStageId(stage.id); }}
       onDragLeave={() => setDropTargetStageId(null)}
       onDrop={() => onDropEnrollmentOnStage(String(stage.id))}

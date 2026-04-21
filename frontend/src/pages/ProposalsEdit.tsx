@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useClientById, useClientsList } from '@/hooks/clients';
 import { useResponsible, useResponsiblesList } from '@/hooks/responsaveis';
@@ -20,8 +21,9 @@ import { turmasService } from '@/services/turmasService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Save, CheckCircle, Pencil } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Pencil, Plus, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import EditFooterBar from '@/components/ui/edit-footer-bar';
 
 const DEFAULT_FUEL_TEXT = `<p>O custo estimado de combustível para esta proposta é de <strong>{valor}</strong>. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento. O cálculo final será baseado no preço vigente na data em que o combustível for abastecido, sendo assim, esse valor pode variar.</p>`;
@@ -125,6 +127,8 @@ export default function ProposalsEdit() {
   const [quickResponsibleEditId, setQuickResponsibleEditId] = useState<string | null>(null);
 
   const [isFuelTextOpen, setIsFuelTextOpen] = useState(false);
+  const [isParcelamentoCollapsed, setIsParcelamentoCollapsed] = useState(false);
+  const [isBudgetPreviewCollapsed, setIsBudgetPreviewCollapsed] = useState(false);
 
   const handleOpenFuelText = () => {
       const current = form.getValues('meta_texto_combustivel');
@@ -561,7 +565,10 @@ export default function ProposalsEdit() {
    * pt-BR: Lista de consultores vinda da API (paginada).
    * en-US: Consultants list from API (paginated).
    */
-  const consultantsList = useMemo(() => (consultantsData?.data || consultantsData?.items || []), [consultantsData]);
+  const consultantsList = useMemo(() => 
+    (consultantsData?.data || consultantsData?.items || [])
+    .filter((u: any) => (Number(u?.permission_id) || 0) < 6), 
+  [consultantsData]);
   /**
    * consultantOptions
    * pt-BR: Opções do combobox geradas a partir da lista de consultores.
@@ -1466,6 +1473,20 @@ export default function ProposalsEdit() {
   }
 
   /**
+   * insertTag
+   * pt-BR: Insere um shortcode na posição atual do cursor no editor contenteditable.
+   * en-US: Inserts a shortcode at the current cursor position in the contenteditable editor.
+   */
+  function insertTag(tag: string) {
+    const editor = document.querySelector('[contenteditable="true"]');
+    if (editor) {
+      // pt-BR: Se o editor estiver focado, document.execCommand insere na posição do cursor.
+      // en-US: If the editor is focused, document.execCommand inserts at the cursor position.
+      document.execCommand('insertText', false, tag);
+    }
+  }
+
+  /**
    * discountPreviewHtml
    * pt-BR: HTML do preview com shortcodes resolvidos, atualizado em tempo real.
    * en-US: Preview HTML with resolved shortcodes, updated in real time.
@@ -1606,281 +1627,321 @@ export default function ProposalsEdit() {
     }
   }, [form]);
 
+  // Componente auxiliar para cards de métricas
+  const StatCard = ({ label, value, icon: Icon, colorClass }: { label: string, value: string, icon: any, colorClass: string }) => (
+    <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+      <div className={`p-3 rounded-lg ${colorClass} bg-opacity-10 dark:bg-opacity-20`}>
+        <Icon className={`w-5 h-5 ${colorClass.replace('bg-', 'text-')}`} />
+      </div>
+      <div>
+        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">{label}</p>
+        <p className="text-lg font-bold tracking-tight">{value || 'R$ 0,00'}</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center">
-        <Button variant="ghost" size="sm" onClick={handleBack}>
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="sm" onClick={handleBack} className="hover:bg-zinc-100 dark:hover:bg-zinc-800">
           <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao funil
         </Button>
+        
+        <div className="flex items-center gap-2">
+          {enrollment && (
+            <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-widest bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+              ID: {id}
+            </Badge>
+          )}
+        </div>
       </div>
-      <Card>
-        <CardHeader>
-          {/**
-           * HeaderWithToggle
-           * pt-BR: Cabeçalho com título e botão de mostrar/ocultar "Responsável".
-           * en-US: Header with title and button to toggle "Responsible" visibility.
-           */}
+
+      <Card className="border-none shadow-none bg-transparent">
+        <CardHeader className="px-0 pt-0">
           <div className="flex items-center justify-between">
-            <CardTitle>Editar Proposta</CardTitle>
+            <div>
+              <CardTitle className="text-3xl font-bold tracking-tight">Editar Proposta</CardTitle>
+              <CardDescription className="text-zinc-500 dark:text-zinc-400 mt-1">Configure os detalhes comerciais, prazos e condições do curso.</CardDescription>
+            </div>
             <Button
               variant="outline"
               size="sm"
               type="button"
+              className="h-9 px-4 rounded-full border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
               onClick={() => setShowResponsible((s) => !s)}
-              aria-label={showResponsible ? 'Ocultar Responsável' : 'Selecionar Responsável'}
             >
-              {showResponsible ? 'Ocultar Responsável' : 'Selecionar Responsável'}
+              {showResponsible ? (
+                <><Users className="w-4 h-4 mr-2 text-zinc-500" /> Ocultar Responsável</>
+              ) : (
+                <><User className="w-4 h-4 mr-2 text-blue-500" /> Selecionar Responsável</>
+              )}
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Cliente */}
-                <FormField
-                  control={form.control}
-                  name="id_cliente"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cliente *</FormLabel>
-                      {idClienteFromUrl ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 text-sm py-2 px-3 border rounded-md bg-muted/30">
-                            {clientDetailData?.name ? String(clientDetailData.name) : `Cliente ${idClienteFromUrl}`}
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() => handleEditClient(idClienteFromUrl)}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" /> Editar Cliente
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1">
-                            <Combobox
-                              options={clientOptions}
-                              value={field.value}
-                              onValueChange={field.onChange}
-                              placeholder="Selecione o cliente"
-                              searchPlaceholder="Pesquisar cliente pelo nome..."
-                              emptyText={clientOptions.length === 0 ? 'Nenhum cliente encontrado' : 'Digite para filtrar'}
-                              disabled={isLoadingClients || isLoadingEnrollment}
-                              loading={isLoadingClients || isLoadingEnrollment}
-                              onSearch={setClientSearch}
-                              searchTerm={clientSearch}
-                              debounceMs={250}
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() => handleEditClient(String(field.value || ''))}
-                            disabled={!field.value}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" /> Editar Cliente
-                          </Button>
-                        </div>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Consultor */}
-                <FormField
-                  control={form.control}
-                  name="id_consultor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Consultor *</FormLabel>
-                      <Combobox
-                        options={consultantOptionsWithSelected}
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder="Selecione o consultor"
-                        searchPlaceholder="Pesquisar consultor pelo nome..."
-                        emptyText={consultantOptionsWithSelected.length === 0 ? 'Nenhum consultor encontrado' : 'Digite para filtrar'}
-                        disabled={isLoadingConsultants}
-                        loading={isLoadingConsultants}
-                        onSearch={setConsultantSearch}
-                        searchTerm={consultantSearch}
-                        debounceMs={250}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Situação */}
-                <FormField
-                  control={form.control}
-                  name="situacao_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Situação</FormLabel>
-                      <Select value={field.value || ''} onValueChange={field.onChange} disabled={isLoadingSituations}>
-                        <SelectTrigger className="w-full h-10">
-                          <SelectValue placeholder="Selecione a situação" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.isArray((situationsData as any)?.data || (situationsData as any)?.items)
-                            ? (((situationsData as any).data || (situationsData as any).items).map((s: any) => (
-                                <SelectItem key={String(s.id)} value={String(s.id)}>
-                                  {String(s.name || s.nome || `Situação ${s.id}`)}
-                                </SelectItem>
-                              )))
-                            : (
-                              <></>
-                            )}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
               
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Curso */}
-                <FormField
-                  control={form.control}
-                  name="id_curso"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Curso *</FormLabel>
-                      <Combobox
-                        options={courseOptions}
-                        value={field.value}
-                        onValueChange={(val) => {
-                          field.onChange(val);
-                          form.setValue('id_turma', '');
-                          // Ao mudar o curso, limpamos parcelamento selecionado
-                          // When changing course, clear selected installment table
-                          form.setValue('parcelamento_id', '');
-                        }}
-                        placeholder="Selecione o curso"
-                        searchPlaceholder="Pesquisar curso pelo nome..."
-                        emptyText={courseOptions.length === 0 ? 'Nenhum curso encontrado' : 'Digite para filtrar'}
-                        disabled={isLoadingCourses}
-                        loading={isLoadingCourses}
-                        onSearch={setCourseSearch}
-                        searchTerm={courseSearch}
-                        debounceMs={250}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Turma */}
-                <FormField
-                  control={form.control}
-                  name="id_turma"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Turma *</FormLabel>
-                      <Combobox
-                        options={classOptionsWithFallback}
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder="Selecione a turma"
-                        searchPlaceholder="Pesquisar turma pelo nome..."
-                        emptyText={!selectedCourseId ? 'Selecione um curso primeiro' : classOptionsWithFallback.length === 0 ? 'Nenhuma turma encontrada' : 'Digite para filtrar'}
-                        disabled={!selectedCourseId || isLoadingClasses}
-                        loading={isLoadingClasses}
-                        onSearch={setClassSearch}
-                        searchTerm={classSearch}
-                        debounceMs={250}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              
-
-              {showResponsible && (
-                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+              {/* Seção 1: Identificação */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 px-1">
+                  <div className="h-4 w-1 bg-blue-600 rounded-full"></div>
+                  <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500">Identificação e Status</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800">
+                  {/* Cliente */}
                   <FormField
                     control={form.control}
-                    name="id_responsavel"
+                    name="id_cliente"
+                    render={({ field }) => (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Cliente vinculado</FormLabel>
+                        {idClienteFromUrl ? (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 text-sm py-2.5 px-4 border rounded-xl bg-white dark:bg-zinc-950 font-medium">
+                              {clientDetailData?.name ? String(clientDetailData.name) : `Cliente ${idClienteFromUrl}`}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-10 w-10 rounded-xl shrink-0"
+                              onClick={() => handleEditClient(idClienteFromUrl)}
+                              title="Editar Perfil do Cliente"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1">
+                              <Combobox
+                                options={clientOptions}
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                placeholder="Selecione o cliente"
+                                searchPlaceholder="Pesquisar..."
+                                emptyText="Nenhum cliente"
+                                disabled={isLoadingClients || isLoadingEnrollment}
+                                loading={isLoadingClients || isLoadingEnrollment}
+                                onSearch={setClientSearch}
+                                searchTerm={clientSearch}
+                                debounceMs={250}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-10 w-10 rounded-xl shrink-0"
+                              onClick={() => handleEditClient(String(field.value || ''))}
+                              disabled={!field.value}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Consultor */}
+                  <FormField
+                    control={form.control}
+                    name="id_consultor"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Responsável</FormLabel>
-                        <div className="flex items-start gap-2">
-                          <div className="flex-1">
-                            <Combobox
-                              options={responsibleOptionsWithSelected}
-                              value={field.value}
-                              onValueChange={field.onChange}
-                              placeholder="Selecione o responsável"
-                              searchPlaceholder="Pesquisar responsável pelo nome..."
-                              emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
-                              disabled={isLoadingResponsibles}
-                              loading={isLoadingResponsibles}
-                              onSearch={setResponsibleSearch}
-                              searchTerm={responsibleSearch}
-                              debounceMs={250}
-                              header={({ setOpen }) => (
-                                <Button
-                                  variant="ghost"
-                                  className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
-                                  onClick={() => {
-                                    setIsQuickResponsibleOpen(true);
-                                    setOpen(false);
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4 mr-2" />
-                                  Cadastrar Novo Responsável
-                                </Button>
+                        <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Consultor Responsável</FormLabel>
+                        <Combobox
+                          options={consultantOptionsWithSelected}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder="Selecione o consultor"
+                          searchPlaceholder="Pesquisar..."
+                          emptyText="Nenhum consultor"
+                          disabled={isLoadingConsultants}
+                          loading={isLoadingConsultants}
+                          onSearch={setConsultantSearch}
+                          searchTerm={consultantSearch}
+                          debounceMs={250}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Situação */}
+                  <FormField
+                    control={form.control}
+                    name="situacao_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Situação atual</FormLabel>
+                        <Select value={field.value || ''} onValueChange={field.onChange} disabled={isLoadingSituations}>
+                          <SelectTrigger className="w-full h-10 rounded-xl">
+                            <SelectValue placeholder="Selecione..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.isArray((situationsData as any)?.data || (situationsData as any)?.items)
+                              ? (((situationsData as any).data || (situationsData as any).items).map((s: any) => (
+                                  <SelectItem key={String(s.id)} value={String(s.id)}>
+                                    {String(s.name || s.nome || `Situação ${s.id}`)}
+                                  </SelectItem>
+                                )))
+                              : (
+                                <></>
                               )}
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() => handleEditResponsible(String(field.value || ''))}
-                            disabled={!field.value}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" /> Editar Responsável
-                          </Button>
-                        </div>
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-              )}
+              </div>
 
-              {/* Observações */}
-              <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+              
+
+              {/* Seção 2: Configuração da Proposta */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 px-1">
+                  <div className="h-4 w-1 bg-emerald-600 rounded-full"></div>
+                  <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500">Configuração do Curso</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800">
+                  {/* Curso */}
+                  <FormField
+                    control={form.control}
+                    name="id_curso"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Curso Principal</FormLabel>
+                        <Combobox
+                          options={courseOptions}
+                          value={field.value}
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            form.setValue('id_turma', '');
+                            form.setValue('parcelamento_id', '');
+                          }}
+                          placeholder="Selecione o curso"
+                          searchPlaceholder="Pesquisar..."
+                          emptyText="Nenhum curso"
+                          disabled={isLoadingCourses}
+                          loading={isLoadingCourses}
+                          onSearch={setCourseSearch}
+                          searchTerm={courseSearch}
+                          debounceMs={250}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Turma */}
+                  <FormField
+                    control={form.control}
+                    name="id_turma"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Turma e Semestre</FormLabel>
+                        <Combobox
+                          options={classOptionsWithFallback}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          placeholder="Selecione a turma"
+                          searchPlaceholder="Pesquisar..."
+                          emptyText={!selectedCourseId ? 'Selecione curso' : 'Nenhuma turma'}
+                          disabled={!selectedCourseId || isLoadingClasses}
+                          loading={isLoadingClasses}
+                          onSearch={setClassSearch}
+                          searchTerm={classSearch}
+                          debounceMs={250}
+                        />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {showResponsible && (
+                    <FormField
+                      control={form.control}
+                      name="id_responsavel"
+                      render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                          <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Responsável Adicional</FormLabel>
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1">
+                              <Combobox
+                                options={responsibleOptionsWithSelected}
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                placeholder="Selecione o responsável"
+                                searchPlaceholder="Pesquisar..."
+                                emptyText="Nenhum responsável"
+                                disabled={isLoadingResponsibles}
+                                loading={isLoadingResponsibles}
+                                onSearch={setResponsibleSearch}
+                                searchTerm={responsibleSearch}
+                                debounceMs={250}
+                                header={({ setOpen }) => (
+                                  <Button
+                                    variant="ghost"
+                                    className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                                    onClick={() => {
+                                      setIsQuickResponsibleOpen(true);
+                                      setOpen(false);
+                                    }}
+                                  >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Cadastrar Novo Responsável
+                                  </Button>
+                                )}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-10 w-10 rounded-xl shrink-0"
+                              onClick={() => handleEditResponsible(String(field.value || ''))}
+                              disabled={!field.value}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Seção 3: Observações Internas */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 px-1">
+                  <div className="h-4 w-1 bg-amber-500 rounded-full"></div>
+                  <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500">Observações Gerais</h3>
+                </div>
+
                 <FormField
                   control={form.control}
                   name="obs"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Observações</FormLabel>
+                    <FormItem className="rounded-2xl border bg-white dark:bg-zinc-950/50 shadow-sm overflow-hidden">
+                      <div className="px-4 py-2 bg-zinc-50/80 dark:bg-zinc-900/50 flex items-center gap-2 border-b">
+                        <MessageSquare className="w-4 h-4 text-zinc-500" />
+                        <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground m-0">Texto Interno</FormLabel>
+                      </div>
                       <FormControl>
-                        {/**
-                         * pt-BR: Substitui textarea por WYSIWYG, armazenando HTML em `obs`.
-                         * en-US: Replace textarea with WYSIWYG, storing HTML in `obs`.
-                         */}
                         <RichTextEditor
                           value={field.value || ''}
                           onChange={field.onChange}
-                          placeholder="Digite qualquer observação"
+                          placeholder="Digite qualquer observação relevante para o histórico da proposta..."
                         />
                       </FormControl>
                       <FormMessage />
@@ -1889,128 +1950,153 @@ export default function ProposalsEdit() {
                 />
               </div>
 
-              {/* SelectGeraValor — renderiza quando turma selecionada */}
+              {/* Seção 4: Configuração Técnica (Módulos/Gera Valor) */}
               {form.watch('id_turma') && (
-                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                  {String(selectedCourse?.tipo) === '2' ? (
-                    <div className="space-y-2">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 px-1">
+                    <div className="h-4 w-1 bg-purple-600 rounded-full"></div>
+                    <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500">Seleção de Módulos e Preços</h3>
+                  </div>
+
+                  <div className="p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800">
+                    {String(selectedCourse?.tipo) === '2' ? (
+                      <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <FormLabel>Módulos do Curso (Selecione as fases)</FormLabel>
-                            <Button variant="ghost" size="sm" type="button" onClick={handleOpenFuelText}>
-                                <Pencil className="w-3 h-3 mr-1" /> Editar Texto Combustível
-                            </Button>
+                          <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block">Grade de Módulos do Curso</FormLabel>
+                          <Button variant="ghost" size="sm" type="button" onClick={handleOpenFuelText} className="text-[10px] uppercase font-bold tracking-widest text-blue-600">
+                            <Pencil className="w-3 h-3 mr-1" /> Editar Texto Combustível
+                          </Button>
                         </div>
                         <CourseModulesSelector
-                            course={selectedCourseNormalized}
-                            aircrafts={allAircraft}
-                            onChange={handleModulesSelectionChange}
-                            getAircraftHourlyRate={getAircraftHourlyRate}
-                            formatCurrencyBRL={formatCurrencyBRL}
-                            initialSelections={initialType2Selections}
-                            initialEtapa1Discount={initialEtapa1Discount}
-                            initialDollarRate={initialDollarRate}
+                          course={selectedCourseNormalized}
+                          aircrafts={allAircraft}
+                          onChange={handleModulesSelectionChange}
+                          getAircraftHourlyRate={getAircraftHourlyRate}
+                          formatCurrencyBRL={formatCurrencyBRL}
+                          initialSelections={initialType2Selections}
+                          initialEtapa1Discount={initialEtapa1Discount}
+                          initialDollarRate={initialDollarRate}
                         />
-                    </div>
-                  ) : (
-                    <FormField
-                      control={form.control}
-                      name="gera_valor"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Gerar Valor</FormLabel>
-                          <SelectGeraValor
-                            course={selectedCourse}
-                            value={field.value}
-                            onChange={handleGeraValorChange}
-                            name="gera_valor"
-                            disabled={!selectedCourse}
-                          />
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
+                      </div>
+                    ) : (
+                      <FormField
+                        control={form.control}
+                        name="gera_valor"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block mb-2">Comportamento de Preço</FormLabel>
+                            <SelectGeraValor
+                              course={selectedCourse}
+                              value={field.value}
+                              onChange={handleGeraValorChange}
+                              name="gera_valor"
+                              disabled={!selectedCourse}
+                            />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </div>
                 </div>
               )}
 
-              {/* Valores opcionais */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField control={form.control} name="desconto" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Desconto</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="R$ 0,00"
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="inscricao" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Inscrição</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="R$ 0,00"
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="subtotal" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Subtotal</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="R$ 0,00"
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
+              {/* Seção 5: Financeiro e Condições */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 px-1">
+                  <div className="h-4 w-1 bg-indigo-600 rounded-full"></div>
+                  <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500">Resumo e Condições Financeiras</h3>
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField control={form.control} name="total" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Total</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="R$ 0,00"
-                        value={field.value || ''}
-                        readOnly
-                        onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField
-                  control={form.control}
-                  name="validade"
-                  render={({ field }) => (
+                {/* Cards de Métricas */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <StatCard label="Subtotal Bruto" value={form.watch('subtotal')} icon={TableIcon} colorClass="bg-zinc-100" />
+                  <StatCard label="Inscrição / Matrícula" value={form.watch('inscricao')} icon={Wallet} colorClass="bg-blue-100" />
+                  <StatCard label="Desconto Aplicado" value={form.watch('desconto')} icon={CircleDollarSign} colorClass="bg-emerald-100" />
+                  <StatCard label="Total Líquido" value={form.watch('total')} icon={CheckCircle} colorClass="bg-emerald-600 !text-white" />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800">
+                  {/* Desconto Input */}
+                  <FormField control={form.control} name="desconto" render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Validade (dias)</FormLabel>
-                      <Select value={field.value || ''} onValueChange={field.onChange}>
-                        <SelectTrigger className="w-full h-10">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="7">7</SelectItem>
-                          <SelectItem value="14">14</SelectItem>
-                          <SelectItem value="30">30</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Valor do Desconto</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            className="pl-8"
+                            placeholder="R$ 0,00"
+                            value={field.value || ''}
+                            onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                          />
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                        </div>
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
-                  )}
-                />
+                  )} />
+                  
+                  {/* Inscrição Input */}
+                  <FormField control={form.control} name="inscricao" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Taxa de Inscrição</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            className="pl-8"
+                            placeholder="R$ 0,00"
+                            value={field.value || ''}
+                            onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                          />
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* Subtotal Input */}
+                  <FormField control={form.control} name="subtotal" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Ajuste de Subtotal</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            className="pl-8"
+                            placeholder="R$ 0,00"
+                            value={field.value || ''}
+                            onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                          />
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* Validade */}
+                  <FormField
+                    control={form.control}
+                    name="validade"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Validade da Proposta</FormLabel>
+                        <Select value={field.value || ''} onValueChange={field.onChange}>
+                          <SelectTrigger className="w-full h-10 rounded-xl">
+                            <SelectValue placeholder="Selecione prazo..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="7">7 dias</SelectItem>
+                            <SelectItem value="14">14 dias</SelectItem>
+                            <SelectItem value="30">30 dias</SelectItem>
+                            <SelectItem value="60">60 dias</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
 
               {/**
@@ -2021,10 +2107,22 @@ export default function ProposalsEdit() {
                *        Contains the Installment Table select and the Discount Text field.
                */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Gerenciamento de Parcelamento</CardTitle>
+                <CardHeader 
+                  className="flex flex-row items-center justify-between cursor-pointer group"
+                  onClick={() => setIsParcelamentoCollapsed(!isParcelamentoCollapsed)}
+                >
+                  <div className="flex items-center gap-2">
+                    {isParcelamentoCollapsed ? <ChevronDown className="h-5 w-5 transition-transform" /> : <ChevronUp className="h-5 w-5 transition-transform" />}
+                    <CardTitle>Gerenciamento de Parcelamento</CardTitle>
+                  </div>
+                  {isParcelamentoCollapsed && activeRowResolved && (
+                    <Badge variant="secondary" className="px-2 py-0 h-5 text-[10px]">
+                      {activeRowResolved.parcela}x de {activeRowResolved.parcelaComDesconto || activeRowResolved.valor}
+                    </Badge>
+                  )}
                 </CardHeader>
-              <CardContent>
+                {!isParcelamentoCollapsed && (
+                  <CardContent className="animate-in fade-in duration-300">
                   {/* Seleção de Tabela de Parcelamento */}
                   <div className="grid grid-cols-1 gap-4">
                     <FormField
@@ -2178,7 +2276,32 @@ export default function ProposalsEdit() {
                       name="meta_texto_desconto"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Texto de Desconto</FormLabel>
+                          <div className="flex items-center justify-between">
+                            <FormLabel>Texto de Desconto</FormLabel>
+                            
+                            {/* pt-BR: Atalhos para shortcodes do parcelamento */}
+                            <div className="flex flex-wrap gap-1.5">
+                              {[
+                                { label: '{total_parcelas}', desc: 'Total de Parc.' },
+                                { label: '{valor_parcela}', desc: 'Valor da Parc.' },
+                                { label: '{desconto_pontualidade}', desc: 'Desconto' },
+                                { label: '{parcela_com_desconto}', desc: 'Líquido' }
+                              ].map((v) => (
+                                <button
+                                  key={v.label}
+                                  type="button"
+                                  className="text-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-400 font-mono hover:bg-blue-100 transition-colors"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    insertTag(v.label);
+                                  }}
+                                  title={v.desc}
+                                >
+                                  {v.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <FormControl>
                             <RichTextEditor
                               value={field.value || ''}
@@ -2228,30 +2351,48 @@ export default function ProposalsEdit() {
                       <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: discountPreviewHtml }} />
                     </CardContent>
                   </Card>
-                </CardContent>
+                  </CardContent>
+                )}
               </Card>
 
-              <BudgetPreview
-                title="Proposta Comercial"
-                clientName={selectedClient?.name || selectedClient?.nome || ''}
-                clientId={selectedClient?.id ? String(selectedClient.id) : undefined}
-                clientPhone={selectedClient?.config?.celular || selectedClient?.config?.telefone_residencial || ''}
-                clientEmail={selectedClient?.email || ''}
-                course={selectedCourseNormalized as any}
-                courseName={selectedCourseNormalized?.titulo || selectedCourseNormalized?.nome || ''}
-                turmaName={classOptionsWithFallback.find(t => String(t.value) === String(form.watch('id_turma')))?.label || ''}
-                module={normalizeModuleForTipo4(selectedModule ?? moduleFromEnrollment) as any}
-                modules={previewModules}
-                discountLabel="Desconto"
-                discountAmountMasked={form.watch('desconto') || ''}
-                subtotalMasked={form.watch('subtotal') || ''}
-                totalMasked={form.watch('total') || ''}
-                validityDate={computeValidityDate(form.watch('validade'))}
-                validityDays={form.watch('validade')}
-                etapa1Discount={form.watch('etapa1_desconto') || 0}
-                inscricaoMasked={form.watch('inscricao') || ''}
-                fuelExternalText={form.watch('meta_texto_combustivel')}
-              />
+              <div className="mt-6">
+                <Card>
+                  <CardHeader 
+                    className="flex flex-row items-center justify-between cursor-pointer group"
+                    onClick={() => setIsBudgetPreviewCollapsed(!isBudgetPreviewCollapsed)}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isBudgetPreviewCollapsed ? <ChevronDown className="h-5 w-5 transition-transform" /> : <ChevronUp className="h-5 w-5 transition-transform" />}
+                      <CardTitle>Proposta Comercial (Preview)</CardTitle>
+                    </div>
+                  </CardHeader>
+                  {!isBudgetPreviewCollapsed && (
+                    <CardContent className="animate-in fade-in duration-300">
+                      <BudgetPreview
+                        title="Proposta Comercial"
+                        clientName={selectedClient?.name || selectedClient?.nome || ''}
+                        clientId={selectedClient?.id ? String(selectedClient.id) : undefined}
+                        clientPhone={selectedClient?.config?.celular || selectedClient?.config?.telefone_residencial || ''}
+                        clientEmail={selectedClient?.email || ''}
+                        course={selectedCourseNormalized as any}
+                        courseName={selectedCourseNormalized?.titulo || selectedCourseNormalized?.nome || ''}
+                        turmaName={classOptionsWithFallback.find(t => String(t.value) === String(form.watch('id_turma')))?.label || ''}
+                        module={normalizeModuleForTipo4(selectedModule ?? moduleFromEnrollment) as any}
+                        modules={previewModules}
+                        discountLabel="Desconto"
+                        discountAmountMasked={form.watch('desconto') || ''}
+                        subtotalMasked={form.watch('subtotal') || ''}
+                        totalMasked={form.watch('total') || ''}
+                        validityDate={computeValidityDate(form.watch('validade'))}
+                        validityDays={form.watch('validade')}
+                        etapa1Discount={form.watch('etapa1_desconto') || 0}
+                        inscricaoMasked={form.watch('inscricao') || ''}
+                        fuelExternalText={form.watch('meta_texto_combustivel')}
+                      />
+                    </CardContent>
+                  )}
+                </Card>
+              </div>
 
               <Dialog open={isFuelTextOpen} onOpenChange={setIsFuelTextOpen}>
                   <DialogContent className="max-w-3xl">
@@ -2266,6 +2407,20 @@ export default function ProposalsEdit() {
                           name="meta_texto_combustivel"
                           render={({ field }) => (
                               <FormItem>
+                                  <div className="flex items-center justify-between mb-1">
+                                      <FormLabel>Texto Personalizado</FormLabel>
+                                      <button
+                                          type="button"
+                                          className="text-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-400 font-mono hover:bg-blue-100 transition-colors"
+                                          onMouseDown={(e) => {
+                                              e.preventDefault();
+                                              insertTag('{valor}');
+                                          }}
+                                          title="Insere o valor calculado de combustível"
+                                      >
+                                          {'{valor}'}
+                                      </button>
+                                  </div>
                                   <FormControl>
                                       <RichTextEditor
                                           value={field.value || ''}

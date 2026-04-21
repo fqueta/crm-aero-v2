@@ -18,6 +18,8 @@ import { InstallmentParcel, InstallmentPayload, InstallmentRecord, InstallmentTx
 import { PaginatedResponse } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { currencyApplyMask, currencyRemoveMaskToString } from '@/lib/masks/currency';
+import { Plus, Trash2, ChevronDown, ChevronUp, Layers, Table as TableIcon, Info, MessageSquare, Settings } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 /**
  * TableInstallment
@@ -132,7 +134,12 @@ export default function TableInstallment() {
       const nextValor = computePerParcelValue(valor, pp.parcela);
       return nextValor ? { ...pp, valor: nextValor } : pp;
     }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valor]);
+
+  const [isClassesCollapsed, setIsClassesCollapsed] = useState(false);
+  const [isInstallmentsCollapsed, setIsInstallmentsCollapsed] = useState(false);
+  const [isTx2Collapsed, setIsTx2Collapsed] = useState(true); // pt-BR: Inicia recolhido por ser configuração avançada
 
   // Configuração tx2 (linhas dinâmicas)
   const [configTx2, setConfigTx2] = useState<InstallmentTx2Config[]>([
@@ -599,6 +606,20 @@ export default function TableInstallment() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCreateRoute, isEditRoute, routeId]);
 
+  /**
+   * insertTag
+   * pt-BR: Insere um shortcode na posição atual do cursor no editor contenteditable.
+   * en-US: Inserts a shortcode at the current cursor position in the contenteditable editor.
+   */
+  function insertTag(tag: string) {
+    const editor = document.querySelector('[contenteditable="true"]');
+    if (editor) {
+      // pt-BR: Se o editor estiver focado, document.execCommand insere na posição do cursor.
+      // en-US: If the editor is focused, document.execCommand inserts at the cursor position.
+      document.execCommand('insertText', false, tag);
+    }
+  }
+
   return (
     // pt-BR: Usa container padrão para igualar espaçamento/largura ao ProposalsEdit.
     // en-US: Use standard container to match spacing/width with ProposalsEdit.
@@ -622,11 +643,11 @@ export default function TableInstallment() {
             {editingId ? 'Atualize os dados do parcelamento selecionado.' : 'Vincule ao curso e às turmas, configure parcelas e textos (tx2).'}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-4 rounded-lg bg-zinc-50/50 dark:bg-zinc-900/20 border border-zinc-100 dark:border-zinc-800">
             {/* Curso */}
-            <div>
-              <Label>Curso</Label>
+            <div className="md:col-span-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block font-bold">Curso Vinculado</Label>
               <Combobox
                 options={courseOptions}
                 value={selectedCourseId}
@@ -639,221 +660,337 @@ export default function TableInstallment() {
 
             {/* Nome */}
             <div>
-              <Label>Nome</Label>
-              <Input placeholder="Desconto" value={nome} onChange={(e) => setNome(e.target.value)} />
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block font-bold">Nome da Tabela</Label>
+              <Input placeholder="Ex: Tabela de Verão" value={nome} onChange={(e) => setNome(e.target.value)} />
               {formErrors?.nome && (
-                <p className="text-sm text-destructive mt-1">{formErrors.nome}</p>
+                <p className="text-[10px] text-destructive mt-1 font-medium">{formErrors.nome}</p>
               )}
             </div>
 
             {/* Valor */}
             <div>
-              <Label>Valor</Label>
-              <Input
-                placeholder="R$ 0,00"
-                inputMode="numeric"
-                value={valor}
-                onChange={(e) => setValor(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-              />
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block font-bold">Valor Base do Curso</Label>
+              <div className="relative">
+                <Input
+                  className="pl-8"
+                  placeholder="R$ 0,00"
+                  inputMode="numeric"
+                  value={valor}
+                  onChange={(e) => setValor(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+              </div>
               {formErrors?.valor && (
-                <p className="text-sm text-destructive mt-1">{formErrors.valor}</p>
+                <p className="text-[10px] text-destructive mt-1 font-medium">{formErrors.valor}</p>
               )}
             </div>
 
             {/* Ativo */}
-            <div>
-              <Label>Ativo</Label>
-              <div className="flex items-center gap-3 py-2">
+            <div className="flex flex-col">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block font-bold">Status de Operação</Label>
+              <div className="flex items-center gap-3 py-2 h-10 px-3 bg-white dark:bg-zinc-950 border rounded-md">
                 <Switch
                   id="ativo-switch"
                   checked={ativo === 's'}
                   onCheckedChange={(checked) => setAtivo(checked ? 's' : 'n')}
                 />
-                <span className="text-sm text-muted-foreground">{ativo === 's' ? 'Sim' : 'Não'}</span>
+                <span className="text-sm font-medium">
+                  {ativo === 's' ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">Ativo</span>
+                  ) : (
+                    <span className="text-zinc-500">Inativo</span>
+                  )}
+                </span>
               </div>
             </div>
-
-            {/* Tipo do Curso removido do UI por solicitação */}
-
-            
           </div>
 
+          <Separator />
+
           {/* Turmas vinculadas */}
-          <div className="mt-6 space-y-3">
-            <Label>Turmas vinculadas ao curso (previsão)</Label>
-            <p className="text-xs text-muted-foreground">Se nenhuma turma for escolhida, a tabela será aplicada a todas as turmas do curso selecionado.</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
-              <Combobox
-                options={classOptions}
-                value={classToAdd}
-                onValueChange={setClassToAdd}
-                placeholder={selectedCourseId ? 'Selecionar turma do curso' : 'Selecione um curso primeiro'}
-                emptyText={classesQuery.isLoading ? 'Carregando...' : 'Digite para filtrar'}
-                loading={classesQuery.isLoading || classesQuery.isFetching}
-                onSearch={setClassSearch}
-                searchTerm={classSearch}
-                debounceMs={250}
-                disabled={!selectedCourseId}
-              />
-              <div>
-                <Button type="button" onClick={addClassToSelection} disabled={!classToAdd}>Adicionar turma</Button>
+          <div className="rounded-lg border bg-white dark:bg-zinc-950/50 shadow-sm overflow-hidden">
+            <div 
+              className="px-4 py-3 bg-zinc-50/80 dark:bg-zinc-900/50 flex items-center justify-between cursor-pointer"
+              onClick={() => setIsClassesCollapsed(!isClassesCollapsed)}
+            >
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="font-bold text-sm tracking-tight">Turmas Vinculadas</span>
+                <Badge variant="outline" className="ml-2 font-mono text-[10px] h-4">
+                  {selectedClassIds.length || 'Todas'}
+                </Badge>
               </div>
-              <div className="md:col-span-1">
-                <div className="flex flex-wrap gap-2">
+              {isClassesCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            </div>
+            
+            {!isClassesCollapsed && (
+              <div className="p-4 space-y-4 animate-in slide-in-from-top-1 duration-200">
+                <p className="text-xs text-muted-foreground">Se nenhuma turma for escolhida, a tabela será aplicada a todas as turmas do curso selecionado.</p>
+                <div className="flex flex-col md:flex-row gap-3 items-start">
+                  <div className="w-full md:w-80">
+                    <Combobox
+                      options={classOptions}
+                      value={classToAdd}
+                      onValueChange={setClassToAdd}
+                      placeholder={selectedCourseId ? 'Selecionar turma' : 'Selecione um curso primeiro'}
+                      emptyText={classesQuery.isLoading ? 'Carregando...' : 'Digite para filtrar'}
+                      loading={classesQuery.isLoading || classesQuery.isFetching}
+                      onSearch={setClassSearch}
+                      searchTerm={classSearch}
+                      debounceMs={250}
+                      disabled={!selectedCourseId}
+                    />
+                  </div>
+                  <Button type="button" size="sm" variant="secondary" onClick={addClassToSelection} disabled={!classToAdd} className="h-10">
+                    <Plus className="w-4 h-4 mr-2" /> Adicionar Turma
+                  </Button>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 pt-2 border-t mt-4">
                   {selectedClassIds.map((cid) => (
-                    <span key={cid} className="inline-flex items-center gap-2 bg-secondary text-secondary-foreground px-2 py-1 rounded">
-                      {cid}
-                      <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => removeClassFromSelection(cid)}>Remover</Button>
-                    </span>
+                    <Badge key={cid} variant="secondary" className="pl-3 pr-1 py-1 gap-1 group">
+                      <span className="text-xs font-medium">{cid}</span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-5 w-5 p-0 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                        onClick={() => removeClassFromSelection(cid)}
+                      >
+                        <Trash2 className="w-3 h-3 text-red-500" />
+                      </Button>
+                    </Badge>
                   ))}
                   {selectedClassIds.length === 0 && (
-                    <span className="text-xs text-muted-foreground">Nenhuma turma adicionada</span>
+                    <div className="flex items-center gap-2 text-zinc-400 py-1">
+                      <Info className="w-3 h-3" />
+                      <span className="text-[10px] uppercase font-bold tracking-widest">Aplicável a todas as turmas</span>
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Parcelas */}
-          <div className="mt-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Parcelas</Label>
-              <Button type="button" onClick={addParcelaRow}>Adicionar parcela</Button>
+          <div className="rounded-lg border bg-white dark:bg-zinc-950/50 shadow-sm overflow-hidden">
+            <div 
+              className="px-4 py-3 bg-zinc-50/80 dark:bg-zinc-900/50 flex items-center justify-between cursor-pointer"
+              onClick={() => setIsInstallmentsCollapsed(!isInstallmentsCollapsed)}
+            >
+              <div className="flex items-center gap-2">
+                <TableIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="font-bold text-sm tracking-tight">Grade de Parcelas</span>
+                <Badge variant="outline" className="ml-2 font-mono text-[10px] h-4">
+                  {parcelas.length} {parcelas.length === 1 ? 'Opção' : 'Opções'}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-4">
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  className="h-8 text-[10px] font-bold uppercase"
+                  onClick={(e) => { e.stopPropagation(); addParcelaRow(); }}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Adicionar Parcela
+                </Button>
+                {isInstallmentsCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </div>
             </div>
-            <div className="space-y-3">
-              {parcelas.map((p, idx) => (
-                <div key={p.index} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-                  <div>
-                    <Label>Opção</Label>
-                    {/*
-                      Select de 1 a 10 para o índice da opção
-                      1–10 options select for the option index
-                    */}
-                    <Select
-                      value={String(p.index)}
-                      onValueChange={(v) => setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, index: Number(v) } : pp))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {optionRangeMemo.map((n) => {
-                          const disabled = parcelas.some((pp, i) => i !== idx && Number(pp.index) === n);
-                          return (
-                            <SelectItem key={n} value={String(n)} disabled={disabled}>{n}</SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Total Parcelas</Label>
-                    {/*
-                      Select 1–12 para quantidade total de parcelas.
-                      1–12 options select for total installments.
-                    */}
-                    <Select
-                      value={String(p.parcela || '')}
-                      onValueChange={(v) => {
-                        setParcelas(prev => prev.map((pp, i) => {
-                          if (i !== idx) return pp;
-                          const next = { ...pp, parcela: v };
-                          // Auto-cálculo: se o valor total (campo acima) estiver preenchido, recalcula o valor da linha
-                          if (valor) {
-                            next.valor = computePerParcelValue(valor, v) || next.valor;
-                          }
-                          return next;
-                        }));
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                          <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {/* <div>
-                    <Label>Tipo Entrada</Label>
-                    <Input value={p.tipo_entrada} onChange={(e) => setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, tipo_entrada: e.target.value } : pp))} />
-                  </div>
-                  <div>
-                    <Label>Entrada</Label>
-                    <Input value={p.entrada || ''} onChange={(e) => setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, entrada: e.target.value } : pp))} />
-                  </div> */}
-                  {/* <div>
-                    <Label>Juros</Label>
-                    <Input value={p.juros || ''} onChange={(e) => setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, juros: e.target.value } : pp))} />
-                  </div> */}
-                  <div>
-                    <Label>Valor <span className="text-muted-foreground text-xs">(Se não preenchido, será o valor do curso)</span></Label>
-                    <Input
-                      value={p.valor || ''}
-                      inputMode="numeric"
-                      onChange={(e) => {
-                        const masked = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
-                        setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, valor: masked } : pp));
-                      }}
-                    />
-                  </div>
-                  {/* Desconto (componente moeda) */}
-                  <div>
-                    <Label>Desconto</Label>
-                    <Input
-                      value={p.desconto || ''}
-                      inputMode="numeric"
-                      onChange={(e) => {
-                        const masked = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
-                        setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, desconto: masked } : pp));
-                      }}
-                    />
-                    {invalidDiscountIndices.has(p.index) && (
-                      <div className="text-red-600 text-xs mt-1">Desconto não pode ser maior que o Valor.</div>
-                    )}
-                  </div>
-                  <div className="md:col-span-4 flex justify-end">
-                    <Button type="button" variant="outline" onClick={() => removeParcelaRow(p.index)}>Remover</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            
+            {!isInstallmentsCollapsed && (
+              <div className="p-0 animate-in slide-in-from-top-1 duration-200 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-zinc-100/50 dark:bg-zinc-800/30 border-b">
+                    <tr>
+                      <th className="py-2 px-4 text-left font-bold text-[10px] uppercase tracking-widest text-zinc-500 w-24">Opção</th>
+                      <th className="py-2 px-4 text-left font-bold text-[10px] uppercase tracking-widest text-zinc-500 w-32">Total Parc.</th>
+                      <th className="py-2 px-4 text-left font-bold text-[10px] uppercase tracking-widest text-zinc-500">Valor Unitário</th>
+                      <th className="py-2 px-4 text-left font-bold text-[10px] uppercase tracking-widest text-zinc-500">Desconto</th>
+                      <th className="py-2 px-4 text-right font-bold text-[10px] uppercase tracking-widest text-zinc-500 w-20">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parcelas.map((p, idx) => (
+                      <tr key={p.index} className="border-b last:border-0 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                        <td className="p-3">
+                          <Select
+                            value={String(p.index)}
+                            onValueChange={(v) => setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, index: Number(v) } : pp))}
+                          >
+                            <SelectTrigger className="h-8 text-xs font-bold">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {optionRangeMemo.map((n) => {
+                                const disabled = parcelas.some((pp, i) => i !== idx && Number(pp.index) === n);
+                                return (
+                                  <SelectItem key={n} value={String(n)} disabled={disabled}>{n}</SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="p-3">
+                          <Select
+                            value={String(p.parcela || '')}
+                            onValueChange={(v) => {
+                              setParcelas(prev => prev.map((pp, i) => {
+                                if (i !== idx) return pp;
+                                const next = { ...pp, parcela: v };
+                                if (valor) {
+                                  next.valor = computePerParcelValue(valor, v) || next.valor;
+                                }
+                                return next;
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="-" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                                <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="p-3">
+                          <div className="relative">
+                            <Input
+                              className="h-8 pl-6 text-xs"
+                              value={p.valor || ''}
+                              inputMode="numeric"
+                              onChange={(e) => {
+                                const masked = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
+                                setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, valor: masked } : pp));
+                              }}
+                            />
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">R$</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="relative">
+                            <Input
+                              className={`h-8 pl-6 text-xs ${invalidDiscountIndices.has(p.index) ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                              value={p.desconto || ''}
+                              inputMode="numeric"
+                              onChange={(e) => {
+                                const masked = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
+                                setParcelas(prev => prev.map((pp, i) => i === idx ? { ...pp, desconto: masked } : pp));
+                                }}
+                            />
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono">R$</span>
+                          </div>
+                          {invalidDiscountIndices.has(p.index) && (
+                            <div className="text-red-600 text-[10px] mt-1 font-medium">Extra maior que valor.</div>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30" 
+                            onClick={() => removeParcelaRow(p.index)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Config tx2 */}
-          <div className="mt-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Configuração tx2</Label>
-              <Button type="button" onClick={addTx2Row}>Adicionar texto</Button>
+          <div className="rounded-lg border bg-white dark:bg-zinc-950/50 shadow-sm overflow-hidden">
+            <div 
+              className="px-4 py-3 bg-zinc-50/80 dark:bg-zinc-900/50 flex items-center justify-between cursor-pointer"
+              onClick={() => setIsTx2Collapsed(!isTx2Collapsed)}
+            >
+              <div className="flex items-center gap-2">
+                <Settings className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
+                <span className="font-bold text-sm tracking-tight">Configurações Adicionais (tx2)</span>
+                <Badge variant="outline" className="ml-2 font-mono text-[10px] h-4">
+                  {configTx2.length} Item(ns)
+                </Badge>
+              </div>
+              <div className="flex items-center gap-4">
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  variant="outline"
+                  className="h-8 text-[10px] font-bold uppercase"
+                  onClick={(e) => { e.stopPropagation(); addTx2Row(); }}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Adicionar Parâmetro
+                </Button>
+                {isTx2Collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </div>
             </div>
-            <div className="space-y-3">
-              {configTx2.map((c, idx) => (
-                <div key={idx} className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end">
-                  <div>
-                    <Label>Label</Label>
-                    <Input value={c.name_label} onChange={(e) => setConfigTx2(prev => prev.map((cc, i) => i === idx ? { ...cc, name_label: e.target.value } : cc))} />
+            
+            {!isTx2Collapsed && (
+              <div className="p-4 space-y-3 animate-in slide-in-from-top-1 duration-200">
+                {configTx2.map((c, idx) => (
+                  <div key={idx} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end p-3 border rounded-lg bg-zinc-50/30">
+                    <div>
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Rótulo (Label)</Label>
+                      <Input value={c.name_label} onChange={(e) => setConfigTx2(prev => prev.map((cc, i) => i === idx ? { ...cc, name_label: e.target.value } : cc))} />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">Valor / Descrição</Label>
+                        <Input value={c.name_valor} onChange={(e) => setConfigTx2(prev => prev.map((cc, i) => i === idx ? { ...cc, name_valor: e.target.value } : cc))} />
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-10 w-10 p-0 text-zinc-400 hover:text-red-500" onClick={() => removeTx2Row(idx)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <Label>Valor/Descrição</Label>
-                    <Input value={c.name_valor} onChange={(e) => setConfigTx2(prev => prev.map((cc, i) => i === idx ? { ...cc, name_valor: e.target.value } : cc))} />
-                  </div>
-                  <div className="md:col-span-2 flex justify-end">
-                    <Button type="button" variant="outline" onClick={() => removeTx2Row(idx)}>Remover</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+                {configTx2.length === 0 && (
+                  <div className="text-center py-6 text-zinc-400 text-xs">Nenhum parâmetro tx2 cadastrado.</div>
+                )}
+              </div>
+            )}
           </div>
-          <div className="mt-2">
-          {/* Obs */}
-            <div className="md:col-span-2">
-              <Label>Observações</Label>
+
+          {/* Observações */}
+          <div className="rounded-lg border bg-white dark:bg-zinc-950/50 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-zinc-50/80 dark:bg-zinc-900/50 flex items-center justify-between border-b">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="font-bold text-sm tracking-tight font-bold uppercase tracking-widest text-[10px] h-4">Observações e Shortcodes</span>
+              </div>
+              
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: '{total_parcelas}', desc: 'Total Parc.' },
+                  { label: '{valor_parcela}', desc: 'Vlr. Parc.' },
+                  { label: '{desconto_pontualidade}', desc: 'Desc.' },
+                  { label: '{parcela_com_desconto}', desc: 'Líquido' }
+                ].map((v) => (
+                  <button
+                    key={`obs-${v.label}`}
+                    type="button"
+                    className="text-[10px] bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded text-blue-700 dark:text-blue-400 font-mono hover:bg-blue-100 transition-colors"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      insertTag(v.label);
+                    }}
+                    title={v.desc}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="p-4">
               <RichTextEditor
                 value={obs}
                 onChange={setObs}
-                placeholder="Adicione observações formatadas (negrito, listas, etc.)"
+                placeholder="Adicione observações da tabela para o contrato..."
               />
             </div>
           </div>

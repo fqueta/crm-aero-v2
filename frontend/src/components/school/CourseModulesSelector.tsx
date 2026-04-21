@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { currencyRemoveMaskToNumber, currencyRemoveMaskToString, currencyApplyMask } from '@/lib/masks/currency';
-import { DollarSign, Plane } from 'lucide-react';
+import { DollarSign, Plane, ChevronDown, ChevronUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -90,6 +90,11 @@ export default function CourseModulesSelector({
 
   const [selections, setSelections] = useState<Record<number, ModuleSelection>>(initialSelections);
   const [etapa1Discount, setEtapa1Discount] = useState<number>(initialEtapa1Discount || 0);
+  const [collapsedEtapas, setCollapsedEtapas] = useState<Record<string, boolean>>({});
+
+  const toggleEtapa = (etapa: string) => {
+    setCollapsedEtapas(prev => ({ ...prev, [etapa]: !prev[etapa] }));
+  };
 
   useEffect(() => {
     if (initialEtapa1Discount !== undefined) {
@@ -516,67 +521,81 @@ export default function CourseModulesSelector({
         const allSelected = items.every(({ index }) => selections[index]?.selected);
         const someSelected = items.some(({ index }) => selections[index]?.selected);
         const isIndeterminate = someSelected && !allSelected;
+        const isCollapsed = collapsedEtapas[etapa];
 
         return (
           <div key={etapa} className="space-y-4">
-            <Card className="border-l-4 border-l-primary/20">
-              <CardHeader className="py-2 px-4 bg-muted/10 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                  {etapa}
-                </CardTitle>
+            <Card className="border-l-4 border-l-primary/20 overflow-hidden">
+              <CardHeader 
+                className="py-2 px-4 bg-muted/10 flex flex-row items-center justify-between cursor-pointer hover:bg-muted/20 transition-colors"
+                onClick={() => toggleEtapa(etapa)}
+              >
                 <div className="flex items-center gap-2">
-                    <Button 
-                        type="button"
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-7 text-[10px] uppercase font-bold text-muted-foreground hover:text-red-600"
-                        onClick={() => {
-                            setSelections(prev => {
-                                const next = { ...prev };
-                                items.forEach(({ index }) => {
-                                    if (next[index]) next[index] = { ...next[index], price: 0 };
-                                });
-                                return next;
-                            });
-                        }}
-                    >
-                        Zerar Valores
-                    </Button>
-                    <Button 
-                        type="button"
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-7 text-[10px] uppercase font-bold text-muted-foreground"
-                        onClick={() => {
-                            setSelections(prev => {
-                                const next = { ...prev };
-                                items.forEach(({ index, module }) => {
-                                    if (next[index]) {
-                                        let defaultPrice = 0;
-                                        if (module.valor) {
-                                            defaultPrice = typeof module.valor === 'number' 
-                                                ? module.valor 
-                                                : currencyRemoveMaskToNumber(String(module.valor));
-                                        }
-                                        
-                                        // Se não for etapa 1, tenta recalcular baseado na aeronave se houver
-                                        if (!isEtapa1 && next[index].aircraftId) {
-                                            const ak = aircrafts.find(a => String(a.id) === String(next[index].aircraftId));
-                                            if (ak) defaultPrice = next[index].credits * getAppliedRate(ak);
-                                        }
-
-                                        next[index] = { ...next[index], price: defaultPrice };
-                                    }
-                                });
-                                return next;
-                            });
-                        }}
-                    >
-                        Restaurar Padrão
-                    </Button>
+                  {isCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+                  <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                    {etapa}
+                  </CardTitle>
+                  {isCollapsed && someSelected && (
+                    <Badge variant="secondary" className="text-[9px] h-4">
+                      {items.filter(i => selections[i.index]?.selected).length} selecionados
+                    </Badge>
+                  )}
                 </div>
+                {!isCollapsed && (
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-[10px] uppercase font-bold text-muted-foreground hover:text-red-600"
+                          onClick={() => {
+                              setSelections(prev => {
+                                  const next = { ...prev };
+                                  items.forEach(({ index }) => {
+                                      if (next[index]) next[index] = { ...next[index], price: 0 };
+                                  });
+                                  return next;
+                              });
+                          }}
+                      >
+                          Zerar Valores
+                      </Button>
+                      <Button 
+                          type="button"
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-[10px] uppercase font-bold text-muted-foreground"
+                          onClick={() => {
+                              setSelections(prev => {
+                                  const next = { ...prev };
+                                  items.forEach(({ index, module }) => {
+                                      if (next[index]) {
+                                          let defaultPrice = 0;
+                                          if (module.valor) {
+                                              defaultPrice = typeof module.valor === 'number' 
+                                                  ? module.valor 
+                                                  : currencyRemoveMaskToNumber(String(module.valor));
+                                          }
+                                          
+                                          // Se não for etapa 1, tenta recalcular baseado na aeronave se houver
+                                          if (!isEtapa1 && next[index].aircraftId) {
+                                              const ak = aircrafts.find(a => String(a.id) === String(next[index].aircraftId));
+                                              if (ak) defaultPrice = next[index].credits * getAppliedRate(ak);
+                                          }
+
+                                          next[index] = { ...next[index], price: defaultPrice };
+                                      }
+                                  });
+                                  return next;
+                              });
+                          }}
+                      >
+                          Restaurar Padrão
+                      </Button>
+                  </div>
+                )}
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className={`p-0 transition-all duration-300 ${isCollapsed ? 'hidden' : 'block'}`}>
                 <Table>
                   <TableHeader>
                     <TableRow>
