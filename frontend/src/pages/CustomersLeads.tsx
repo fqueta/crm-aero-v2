@@ -1724,7 +1724,9 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
           <div className="flex items-center justify-center bg-secondary/20 text-secondary-foreground rounded-lg p-1.5 h-7 w-7 shrink-0">
              <Hash className="h-3.5 w-3.5 opacity-70" />
           </div>
-          <span className="text-[11px] font-bold text-muted-foreground/60 tracking-widest">{client.id}</span>
+          <span className="text-[11px] font-bold text-muted-foreground/60 tracking-widest" title={client.id}>
+            {String(client.id).length > 8 ? `${String(client.id).substring(0, 8)}...` : client.id}
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap">
@@ -1864,7 +1866,9 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
           <div className="flex items-center justify-center bg-primary/10 text-primary rounded-lg p-1.5 h-7 w-7 shrink-0">
              <Hash className="h-3.5 w-3.5 " />
           </div>
-          <span className="text-[11px] font-bold text-muted-foreground/70 tracking-widest">{enrollment.id}</span>
+          <span className="text-[11px] font-bold text-muted-foreground/70 tracking-widest" title={enrollment.id}>
+            {String(enrollment.id).length > 8 ? `${String(enrollment.id).substring(0, 8)}...` : enrollment.id}
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap">
