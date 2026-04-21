@@ -137,21 +137,30 @@ class ZapsingController extends Controller
         $token = isset($d['external_id']) ? $d['external_id'] : false;
         $tk_periodo = false;
         $id_matricula = false;
+        $is_resp = false;
+        $campo_processo = $this->campo_processo;
+
         if($token){
             $arr_token = explode('_',$token);
             $id_matricula = isset($arr_token[0]) ? (int)$arr_token[0] : false;
             $tk_periodo = isset($arr_token[1]) ? $arr_token[1] : false;
+            
+            // Verifica se é um contrato de responsável
+            if (end($arr_token) === 'resp') {
+                $is_resp = true;
+                $campo_processo = 'processo_assinatura_responsavel';
+            }
         }
         $signed_file = isset($d['signed_file']) ? $d['signed_file'] : false;
         if($id_matricula && $signed_file){
             //baixar e salver
             $ret = $this->baixar_assinados($d,$tk_periodo);
             //salvar hisorico do webhook
-            $ret['salvar_webhook'] = Qlib::update_matriculameta($id_matricula, $this->campo_processo,json_encode($d));
+            $ret['salvar_webhook'] = Qlib::update_matriculameta($id_matricula, $campo_processo,json_encode($d));
 
         } elseif ($id_matricula) {
              // Mesmo se não tiver signed_file, vamos tentar atualizar o processo
-             $ret['salvar_webhook'] = Qlib::update_matriculameta($id_matricula, $this->campo_processo,json_encode($d));
+             $ret['salvar_webhook'] = Qlib::update_matriculameta($id_matricula, $campo_processo,json_encode($d));
         }
 
         // Registro de Log/Evento no histórico da matrícula
@@ -215,13 +224,20 @@ class ZapsingController extends Controller
         $signed_file = isset($config['signed_file']) ? $config['signed_file'] : false;
         $name = isset($config['name']) ? $config['name'] : false;
         $extra_docs = isset($config['extra_docs']) ? $config['extra_docs'] : [];
-        $arr_token = explode('_',$token);
+        $arr_token = explode('_', (string)$token);
         $id_matricula = '';
+        $is_resp = false;
+
         if(isset($arr_token[0])){
             $id_matricula = $arr_token[0];
         }
         if(isset($arr_token[1])){
             $tk_periodo = $arr_token[1];
+        }
+        
+        // Verifica se é responsável
+        if (end($arr_token) === 'resp') {
+            $is_resp = true;
         }
         // Log de diagnóstico no ZapsingController
         \App\Models\EventLog::create([
@@ -251,17 +267,22 @@ class ZapsingController extends Controller
                     }
                 }
             }
-            //Replace $post_id with $id_matricula to use the same variable for matricula identification
             //salvar o array com todos o links dos contratos assinados..
             // dd($tk_periodo);
             $ret['arr'] = $arr;
+            
+            $prefix_links = $this->campo_links;
+            if ($is_resp) {
+                $prefix_links = 'salvar_links_assinados_responsavel';
+            }
+
             if($tk_periodo){
-                $slug = $this->campo_links.'_'.$tk_periodo;
+                $slug = $prefix_links.'_'.$tk_periodo;
                 $ret['salvar_links_assinados'] = Qlib::update_matriculameta($id_matricula,$slug,Qlib::lib_array_json($arr));
                 $ret['slug'] = $slug;
 
             }else{
-                $ret['salvar_links_assinados'] = Qlib::update_matriculameta($id_matricula,$this->campo_links,Qlib::lib_array_json($arr));
+                $ret['salvar_links_assinados'] = Qlib::update_matriculameta($id_matricula,$prefix_links,Qlib::lib_array_json($arr));
             }
         }
         return $ret;
