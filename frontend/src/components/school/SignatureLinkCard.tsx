@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Copy, Check, ExternalLink } from 'lucide-react';
+import { Copy, Check, ExternalLink, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 
@@ -50,18 +50,18 @@ export default function SignatureLinkCard({ link }: SignatureLinkCardProps) {
   if (!link) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base font-medium flex items-center gap-2">
-           Link para Assinatura
+    <Card className="border-none shadow-sm rounded-2xl bg-blue-50/30 overflow-hidden border border-blue-100/50">
+      <CardHeader className="pb-3 border-b border-blue-100/30">
+        <CardTitle className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-blue-800">
+           <ExternalLink className="h-4 w-4" /> Link para Assinatura
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-5">
         <div className="flex items-center space-x-2">
           <Input 
             value={link} 
             readOnly 
-            className="font-mono text-sm bg-muted/50" 
+            className="font-mono text-[11px] bg-white border-blue-100 h-10 focus-visible:ring-blue-500" 
             onClick={(e) => e.currentTarget.select()}
           />
           <Button
@@ -69,20 +69,23 @@ export default function SignatureLinkCard({ link }: SignatureLinkCardProps) {
             size="icon"
             onClick={handleCopy}
             title="Copiar link"
+            className="shrink-0 h-10 w-10 border-blue-100 bg-white hover:bg-blue-50 text-blue-700 hover:text-blue-800"
           >
             {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
           </Button>
           <Button
-            variant="ghost"
+            variant="default"
             size="icon"
             onClick={handleOpen}
             title="Abrir link em nova aba"
+            className="shrink-0 h-10 w-10 bg-blue-600 hover:bg-blue-700 shadow-sm"
           >
              <ExternalLink className="h-4 w-4" />
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Compartilhe este link com o aluno para que ele possa assinar o contrato digitalmente.
+        <p className="text-[11px] font-medium text-blue-700/60 mt-3 flex items-center gap-2">
+          {/* pt-BR: Compartilhe este link com o aluno; en-US: Share this link with the student */}
+          <Info className="h-3.5 w-3.5" /> Envie este link para o aluno realizar a assinatura digital.
         </p>
       </CardContent>
     </Card>

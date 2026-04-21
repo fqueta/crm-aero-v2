@@ -15,7 +15,7 @@ import ProposalLogsTab from './ProposalLogsTab';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle, Clock } from 'lucide-react';
+import { CheckCircle, Clock, User, Mail, Phone, BookOpen, Layers, Calendar, Hash, CircleDollarSign, Info, Loader2 } from 'lucide-react';
 
 interface ProposalViewContentProps {
   /**
@@ -24,6 +24,26 @@ interface ProposalViewContentProps {
    * en-US: Enrollment/Proposal ID to load data.
    */
   id: string;
+}
+/**
+ * StatCard
+ * pt-BR: Card de métrica para uso interno na visualização de proposta.
+ * en-US: Metric card for internal use in proposal view.
+ */
+function StatCard({ label, value, icon: Icon, colorClass = "text-primary", bgClass = "bg-primary/10" }: any) {
+  return (
+    <Card className="border-none shadow-sm bg-zinc-50/50 dark:bg-zinc-900/50 backdrop-blur-sm overflow-hidden transition-all hover:shadow-md hover:bg-white dark:hover:bg-zinc-900 border border-border/40">
+      <CardContent className="p-5 flex items-center gap-4">
+        <div className={`p-3 rounded-2xl ${bgClass} ${colorClass}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">{label}</span>
+          <span className="text-lg font-bold tracking-tight text-foreground">{value}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 /**
@@ -225,134 +245,179 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
         : (status === 'aprovado' ? 'A proposta foi aprovada e está aguardando assinatura digital.' : ''));
   
   const badgeLabel = isAssinado ? 'Assinada' : (isZapsignPending ? 'Assinatura em Andamento' : 'Aprovada');
-  const badgeColor = isAssinado ? 'bg-green-600 text-white' : (isZapsignPending ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white');
-
+  const badgeColor = isAssinado ? 'bg-green-600' : (isZapsignPending ? 'bg-amber-500' : 'bg-blue-600');
 
   return (
     <div className="space-y-6">
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[600px] print:hidden">
-           <TabsTrigger value="overview" asChild><a href="#overview">Visão Geral</a></TabsTrigger>
-           <TabsTrigger value="contracts" asChild><a href="#contracts">Contratos</a></TabsTrigger>
-           <TabsTrigger value="logs" asChild><a href="#logs">Logs</a></TabsTrigger>
-        </TabsList>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+           <TabsList className="grid grid-cols-3 w-full md:w-[400px] bg-muted/50 p-1 rounded-xl print:hidden">
+              <TabsTrigger value="overview" asChild className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"><a href="#overview">Geral</a></TabsTrigger>
+              <TabsTrigger value="contracts" asChild className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"><a href="#contracts">Contratos</a></TabsTrigger>
+              <TabsTrigger value="logs" asChild className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"><a href="#logs">Auditoria</a></TabsTrigger>
+           </TabsList>
+           
+           <div className="flex items-center gap-2 print:hidden">
+              <Badge className={`${badgeColor} text-white border-none py-1.5 px-4 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm`}>
+                <span className="inline-flex items-center gap-2">
+                  {isAssinado ? <CheckCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+                  {badgeLabel}
+                </span>
+              </Badge>
+           </div>
+        </div>
 
-        <TabsContent value="overview" className="space-y-6 mt-4 print:mt-0 print:space-y-0">
-            <Card className="print:border-0 print:shadow-none">
-                <CardHeader className="print:hidden">
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle>Visualizar Proposta</CardTitle>
-                  {status && (
-                    <Badge
-                      variant="default"
-                      className={`${badgeColor}`}
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        {isAssinado ? <CheckCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
-                        {badgeLabel}
-                      </span>
-                    </Badge>
-                  )}
-                </div>
-                </CardHeader>
-                <CardContent className="print:p-0">
-                <div className="space-y-4 print:space-y-0">
-                    {statusMessage && (
-                      <Alert className={`print:hidden ${isAssinado ? 'bg-green-50 border-green-200' : (isZapsignPending ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200')}`}>
-                        {isAssinado ? <CheckCircle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
-                        <AlertTitle>Status da Proposta</AlertTitle>
-                        <AlertDescription>{statusMessage}</AlertDescription>
-                      </Alert>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm hidden">
-                    <div>
-                        <div className="font-medium">Cliente</div>
-                        <div>{clientName || '—'}</div>
-                    </div>
-                    <div>
-                        <div className="font-medium">Curso</div>
-                        <div>{(course as any)?.titulo || (course as any)?.nome || '—'}</div>
-                    </div>
-                    <div>
-                        <div className="font-medium">Subtotal</div>
-                        <div>{subtotalMasked || '—'}</div>
-                    </div>
-                    <div>
-                        <div className="font-medium">Total</div>
-                        <div>{totalMasked || '—'}</div>
-                    </div>
-                    </div>
+        <TabsContent value="overview" className="space-y-8 mt-0 print:mt-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {/* KPI Section */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
+              <StatCard label="Total da Proposta" value={totalMasked || 'R$ 0,00'} icon={CircleDollarSign} colorClass="text-green-600" bgClass="bg-green-50" />
+              <StatCard label="ID da Matrícula" value={`#${id}`} icon={Hash} colorClass="text-zinc-600" bgClass="bg-zinc-100" />
+              <StatCard label="Validade" value={computeValidityDate(validadeDias) || 'Expirada'} icon={Calendar} colorClass="text-blue-600" bgClass="bg-blue-50" />
+              <StatCard label="Consultor" value={(enrollment as any)?.autor_name || 'Sistema'} icon={User} colorClass="text-purple-600" bgClass="bg-purple-50" />
+            </div>
 
-                    {/* Link para assinatura */}
-                    {linkAssinatura && (
-                    <div className="print:hidden">
-                    <SignatureLinkCard link={linkAssinatura} />
-                    </div>
-                    )}
-
-                    {/* Dados do Responsável Financeiro */}
-                    {infoResponsavel && (
-                      <div className="print:hidden">
-                        <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+               {/* Main Content (Left) */}
+               <div className="lg:col-span-8 space-y-8">
+                  {statusMessage && (
+                    <Alert className={`border-none shadow-sm print:hidden ${isAssinado ? 'bg-green-50/50 text-green-800' : (isZapsignPending ? 'bg-amber-50/50 text-amber-800' : 'bg-blue-50/50 text-blue-800')} rounded-2xl p-4 flex items-start gap-4`}>
+                      <div className={`p-2 rounded-xl scale-110 ${isAssinado ? 'bg-green-100' : (isZapsignPending ? 'bg-amber-100' : 'bg-blue-100')}`}>
+                        {isAssinado ? <CheckCircle className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
                       </div>
-                    )}
+                      <div className="flex flex-col gap-0.5">
+                        <AlertTitle className="text-xs font-bold uppercase tracking-widest opacity-70">Status Atual</AlertTitle>
+                        <AlertDescription className="text-sm font-medium">{statusMessage}</AlertDescription>
+                      </div>
+                    </Alert>
+                  )}
 
-                    <BudgetPreview
-                        title="Proposta Comercial"
-                        clientName={clientName}
-                        clientId={client?.id ? String(client.id) : undefined}
-                        clientPhone={clientPhone}
-                        clientEmail={clientEmail}
-                        course={course as any}
-                        courseName={(course as any)?.titulo || (course as any)?.nome || (enrollment as any)?.curso_name || (enrollment as any)?.curso_nome}
-                        turmaName={(enrollment as any)?.turma_name || (enrollment as any)?.turma_nome}
-                        module={modulo}
-                        modules={modulesList}
-                        discountLabel="Desconto"
-                        discountAmountMasked={descontoMasked}
-                        subtotalMasked={subtotalMasked}
-                        totalMasked={totalMasked}
-                        validityDate={computeValidityDate(validadeDias)}
-                        validityDays={validadeDias}
-                        etapa1Discount={etapa1Discount}
-                        fuelExternalText={fuelExternalText}
-                    />
+                  {/* Detalhes da Proposta Comercial */}
+                  <BudgetPreview
+                      title="Proposta Comercial"
+                      clientName={clientName}
+                      clientId={client?.id ? String(client.id) : undefined}
+                      clientPhone={clientPhone}
+                      clientEmail={clientEmail}
+                      course={course as any}
+                      courseName={(course as any)?.titulo || (course as any)?.nome || (enrollment as any)?.course_name || (enrollment as any)?.curso_nome}
+                      turmaName={(enrollment as any)?.turma_name || (enrollment as any)?.turma_nome}
+                      module={modulo}
+                      modules={modulesList}
+                      discountLabel="Desconto"
+                      discountAmountMasked={descontoMasked}
+                      subtotalMasked={subtotalMasked}
+                      totalMasked={totalMasked}
+                      validityDate={computeValidityDate(validadeDias)}
+                      validityDays={validadeDias}
+                      etapa1Discount={etapa1Discount}
+                      fuelExternalText={fuelExternalText}
+                  />
 
-                    {/* Card de Parcelamento abaixo do card de Proposta Comercial */}
-                    <InstallmentPreviewCard title="Parcelamento" parcelamento={parcelamento} />
-                </div>
-                </CardContent>
-            </Card>
+                  <InstallmentPreviewCard title="Gestão de Parcelamento" parcelamento={parcelamento} />
+               </div>
+
+               {/* Sidebar (Right) */}
+               <div className="lg:col-span-4 space-y-6 print:hidden">
+                  <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">
+                    <CardHeader className="pb-3 border-b border-border/40">
+                      <div className="flex items-center gap-2">
+                         <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                            <Info className="h-4 w-4" />
+                         </div>
+                         <CardTitle className="text-xs font-bold uppercase tracking-widest">Resumo Operacional</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-5 space-y-6">
+                       {/* Identificação */}
+                       <div className="space-y-4">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Identificação</span>
+                          <div className="space-y-3">
+                             <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
+                                <div className="p-2 rounded-lg bg-zinc-100 text-zinc-500"><User className="h-4 w-4" /></div>
+                                <div className="flex flex-col min-w-0">
+                                   <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">Cliente</span>
+                                   <span className="text-sm font-bold leading-tight truncate">{clientName || '—'}</span>
+                                </div>
+                             </div>
+                             <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
+                                <div className="p-2 rounded-lg bg-zinc-100 text-zinc-500"><Mail className="h-4 w-4" /></div>
+                                <div className="flex flex-col min-w-0">
+                                   <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">E-mail</span>
+                                   <span className="text-sm font-bold leading-tight truncate">{clientEmail || '—'}</span>
+                                </div>
+                             </div>
+                             <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
+                                <div className="p-2 rounded-lg bg-zinc-100 text-zinc-500"><Phone className="h-4 w-4" /></div>
+                                <div className="flex flex-col min-w-0">
+                                   <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">WhatsApp</span>
+                                   <span className="text-sm font-bold leading-tight truncate">{clientPhone || '—'}</span>
+                                </div>
+                             </div>
+                          </div>
+                       </div>
+
+                       {/* Acadêmico */}
+                       <div className="space-y-4">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Acadêmico</span>
+                          <div className="space-y-3">
+                             <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
+                                <div className="p-2 rounded-lg bg-primary/10 text-primary"><BookOpen className="h-4 w-4" /></div>
+                                <div className="flex flex-col min-w-0">
+                                   <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">Curso</span>
+                                   <span className="text-sm font-bold leading-tight truncate">{(course as any)?.titulo || (course as any)?.nome || '—'}</span>
+                                </div>
+                             </div>
+                             <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
+                                <div className="p-2 rounded-lg bg-primary/10 text-primary"><Layers className="h-4 w-4" /></div>
+                                <div className="flex flex-col min-w-0">
+                                   <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">Turma</span>
+                                   <span className="text-sm font-bold leading-tight truncate">{(enrollment as any)?.turma_name || (enrollment as any)?.turma_nome || '—'}</span>
+                                </div>
+                             </div>
+                          </div>
+                       </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Link para assinatura */}
+                  {linkAssinatura && <SignatureLinkCard link={linkAssinatura} />}
+
+                  {/* Dados do Responsável Financeiro */}
+                  {infoResponsavel && <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />}
+               </div>
+            </div>
         </TabsContent>
 
-        <TabsContent value="contracts" className="mt-4">
+        <TabsContent value="contracts" className="mt-0 pt-4 animate-in fade-in slide-in-from-right-2 duration-500 outline-none">
              {tab === 'contracts' && clientId && id ? (
                 <ProposalContractsTab 
                   clientId={clientId} 
                   enrollmentId={id} 
                   meta={meta} 
-                  courseName={(course as any)?.titulo || (course as any)?.nome || (enrollment as any)?.curso_name || (enrollment as any)?.curso_nome}
+                  courseName={(course as any)?.titulo || (course as any)?.nome || (enrollment as any)?.course_name || (enrollment as any)?.curso_nome}
                   signatureLink={linkAssinatura}
                   onGoToOverview={() => handleTabChange('overview')}
                   responsavel={infoResponsavel}
                 />
              ) : (
-                <div className="text-center py-4 text-muted-foreground">
-                    {tab === 'contracts' ? 'Carregando dados da matrícula...' : ''}
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin opacity-20" />
+                    <span className="text-sm font-medium">Carregando documentos...</span>
                 </div>
              )}
         </TabsContent>
-        <TabsContent value="logs" className="mt-4">
+        
+        <TabsContent value="logs" className="mt-0 pt-4 animate-in fade-in slide-in-from-right-2 duration-500 outline-none">
           {tab === 'logs' && id ? (
             <ProposalLogsTab enrollmentId={id} />
           ) : (
-            <div className="text-center py-4 text-muted-foreground">
-              {tab === 'logs' ? 'Carregando dados da matrícula...' : ''}
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+                <Loader2 className="h-8 w-8 animate-spin opacity-20" />
+                <span className="text-sm font-medium">Carregando histórico...</span>
             </div>
           )}
         </TabsContent>
       </Tabs>
-      
     </div>
   );
 }

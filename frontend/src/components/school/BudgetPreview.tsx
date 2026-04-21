@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { CourseRecord, CourseModule } from '@/types/courses';
 import { enrollmentsService } from '@/services/enrollmentsService';
@@ -272,48 +273,50 @@ export default function BudgetPreview({
       </CardHeader>
       <CardContent>
         {/* Cabeçalho com dados do cliente */}
-        <div className="space-y-1 text-sm mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 p-6 rounded-2xl bg-zinc-50/50 border border-zinc-100 print:bg-white print:border-0 print:p-0 print:grid-cols-2">
           {clientName && (
-            <div>
-              <span className="font-medium">Cliente:</span>{' '}
-              <span className='font-bold'>{clientName}</span>{' '}
-              {clientId && (
-                <span className="text-muted-foreground">ID: {String(clientId)}</span>
-              )}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Cliente</span>
+              <div className="flex items-center gap-2">
+                 <span className='font-bold text-sm'>{clientName}</span>
+                 {clientId && (
+                   <Badge variant="outline" className="text-[10px] h-4 px-1 font-normal opacity-70">#{String(clientId)}</Badge>
+                 )}
+              </div>
             </div>
           )}
           {clientPhone && (
-            <div>
-              <span className="font-medium">Telefone:</span>{' '}
-              <span className='font-bold'>{clientPhone}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">WhatsApp / Contato</span>
+              <span className='font-bold text-sm'>{clientPhone}</span>
             </div>
           )}
           {clientEmail && (
-            <div>
-              <span className="font-medium">Email:</span>{' '}
-              <span className='font-bold'>{clientEmail}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">E-mail</span>
+              <span className='font-bold text-sm'>{clientEmail}</span>
             </div>
           )}
           {courseName && (
-            <div>
-              <span className="font-medium">Curso:</span>{' '}
-              <span className='font-bold'>{courseName}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Plano / Curso</span>
+              <span className='font-bold text-sm'>{courseName}</span>
             </div>
           )}
           {turmaName && (
-            <div>
-              <span className="font-medium">Turma:</span>{' '}
-              <span className='font-bold'>{turmaName}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Turma</span>
+              <span className='font-bold text-sm'>{turmaName}</span>
             </div>
           )}
-          <div className="flex gap-4">
-            <div>
-              <span className="font-medium">Data:</span>{' '}
-              <span className='font-bold'>{new Date().toLocaleDateString('pt-BR')}</span>
+          <div className="flex gap-8">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Emissão</span>
+              <span className='font-bold text-sm'>{new Date().toLocaleDateString('pt-BR')}</span>
             </div>
-            <div>
-              <span className="font-medium">Validade:</span>{' '}
-              <span className='font-bold'>{validityDate || '—'}</span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Validade</span>
+              <span className='font-bold text-sm text-amber-600'>{validityDate || '—'}</span>
             </div>
           </div>
         </div>
