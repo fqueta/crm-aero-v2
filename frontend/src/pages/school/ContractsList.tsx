@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from '@/components/ui/table';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus, Copy } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus, Copy, Zap, CheckCircle2 } from 'lucide-react';
 import { contractsService } from '@/services/contractsService';
 import { coursesService } from '@/services/coursesService';
 import { toast } from 'sonner';
@@ -28,6 +28,7 @@ export default function ContractsList() {
   
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const status = (searchParams.get('status') || '') as ContractStatus | '';
+  const tipo = searchParams.get('tipo') || '';
   const page = Number(searchParams.get('page')) || 1;
   const perPage = 20;
 
@@ -36,6 +37,16 @@ export default function ContractsList() {
     setSearchParams(prev => {
       if (newStatus) prev.set('status', newStatus);
       else prev.delete('status');
+      prev.set('page', '1');
+      return prev;
+    }, { replace: true });
+  };
+
+  // Sync tipo to URL
+  const setTipo = (newTipo: string) => {
+    setSearchParams(prev => {
+      if (newTipo) prev.set('tipo', newTipo);
+      else prev.delete('tipo');
       prev.set('page', '1');
       return prev;
     }, { replace: true });
@@ -79,7 +90,13 @@ export default function ContractsList() {
    * pt-BR: Consulta paginada de contratos.
    * en-US: Paginated contracts query.
    */
-  const { data, isLoading } = useContractsList({ page, per_page: perPage, search: search || undefined, ativo: (status || undefined) as any }, {
+  const { data, isLoading } = useContractsList({ 
+    page, 
+    per_page: perPage, 
+    search: search || undefined, 
+    ativo: (status || undefined) as any,
+    tipo: tipo || undefined
+  }, {
     keepPreviousData: true,
   });
 
@@ -145,11 +162,6 @@ export default function ContractsList() {
 
   /**
    * handleCopy
-   * pt-BR: Copia o conteúdo do contrato para a área de transferência e informa o usuário.
-   * en-US: Copies the contract content to clipboard and notifies the user.
-   */
-  /**
-   * handleCopy
    * pt-BR: Abre a página de criação com os dados do contrato selecionado pré-preenchidos.
    * en-US: Opens the create page with the selected contract data prefilled.
    */
@@ -177,21 +189,16 @@ export default function ContractsList() {
       </div>
 
       <Card className="p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="space-y-1">
-            <Label>Busca</Label>
+            <Label className="flex items-center gap-2"><Search className="h-3.5 w-3.5 text-muted-foreground" /> Busca</Label>
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Pesquisar por nome, slug" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
+              <Input placeholder="Pesquisar por nome, slug" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 h-10 border-slate-200 focus:border-primary" />
             </div>
           </div>
           <div className="space-y-1">
-            <Label>Status</Label>
-            {/**
-             * Status filter Select
-             * pt-BR: Usa valor 'all' para representar todos, evitando string vazia.
-             * en-US: Uses 'all' to represent all items, avoiding empty string value.
-             */}
+            <Label className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" /> Status</Label>
             <Select
               value={status === '' ? 'all' : status}
               onValueChange={(v) => {
@@ -199,11 +206,28 @@ export default function ContractsList() {
                 setStatus(v as ContractStatus);
               }}
             >
-              <SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger>
+              <SelectTrigger className="h-10 border-slate-200"><SelectValue placeholder="Todos" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="all">Todos os status</SelectItem>
                 <SelectItem value="publish">Publicado</SelectItem>
                 <SelectItem value="draft">Rascunho</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="flex items-center gap-2"><Zap className="h-3.5 w-3.5 text-muted-foreground" /> Público-alvo / Tipo</Label>
+            <Select
+              value={tipo === '' ? 'all' : tipo}
+              onValueChange={(v) => {
+                if (v === 'all') return setTipo('');
+                setTipo(v);
+              }}
+            >
+              <SelectTrigger className="h-10 border-slate-200"><SelectValue placeholder="Todos os tipos" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                <SelectItem value="geral">Geral (Aluno)</SelectItem>
+                <SelectItem value="responsavel">Responsável Financeiro</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -212,9 +236,10 @@ export default function ContractsList() {
         <div className="border rounded-md overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead className="w-[30%]">Nome</TableHead>
                 <TableHead>Slug</TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Curso</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -223,20 +248,37 @@ export default function ContractsList() {
             <TableBody>
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={5}>Carregando...</TableCell>
+                  <TableCell colSpan={6} className="text-center py-10">Carregando...</TableCell>
                 </TableRow>
               )}
               {!isLoading && items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5}>Nenhum contrato encontrado.</TableCell>
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">Nenhum contrato encontrado.</TableCell>
                 </TableRow>
               )}
               {!isLoading && items.map((c) => (
                 <TableRow key={String(c.id)}>
-                  <TableCell>{c.nome}</TableCell>
-                  <TableCell>{c.slug || '-'}</TableCell>
-                  <TableCell>{c.ativo === 'publish' ? 'Publicado' : 'Rascunho'}</TableCell>
-                  <TableCell>{getCourseLabel(c.id_curso)}</TableCell>
+                  <TableCell className="font-medium text-slate-900">{c.nome}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{c.slug || '-'}</TableCell>
+                  <TableCell>
+                    {c.tipo === 'responsavel' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                        Responsável
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                        Geral
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                      c.ativo === 'publish' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                    }`}>
+                      {c.ativo === 'publish' ? 'Publicado' : 'Rascunho'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-sm">{getCourseLabel(c.id_curso)}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" onClick={() => handleCopy(c)} title="Copiar contrato">
@@ -250,7 +292,7 @@ export default function ContractsList() {
                           <DropdownMenuLabel>Ações</DropdownMenuLabel>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleCopy(c)}>
-                            Copiar contrato
+                            Duplicar contrato
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => navigate(`/admin/school/contracts/${c.id}/edit`)}>
                             Editar

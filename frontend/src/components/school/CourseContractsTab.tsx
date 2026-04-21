@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { contractsService } from '@/services/contractsService';
 import type { ContractRecord } from '@/types/contracts';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -132,14 +133,25 @@ export function CourseContractsTab({ courseId, courseType }: CourseContractsTabP
             <span>{index + 1}</span>
           </div>
         </TableCell>
-        <TableCell>{contract.nome}</TableCell>
+        <TableCell className="font-medium text-zinc-900 dark:text-zinc-100">{contract.nome}</TableCell>
         <TableCell>
-          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+          {contract.tipo === 'responsavel' ? (
+            <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800 font-bold text-[10px] uppercase">
+              Responsável
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 font-bold text-[10px] uppercase">
+              Geral (Aluno)
+            </Badge>
+          )}
+        </TableCell>
+        <TableCell>
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
             contract.ativo === 'publish'
-              ? 'bg-green-100 text-green-700'
-              : 'bg-yellow-100 text-yellow-700'
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
           }`}>
-            {contract.ativo === 'publish' ? 'Sim' : 'Não'}
+            {contract.ativo === 'publish' ? 'Ativo' : 'Rascunho'}
           </span>
         </TableCell>
         <TableCell className="text-right">
@@ -272,20 +284,21 @@ export function CourseContractsTab({ courseId, courseType }: CourseContractsTabP
                 <TableRow>
                   <TableHead className="w-[50px]">#</TableHead>
                   <TableHead>Nome</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Tipo / Público</TableHead>
+                  <TableHead>Sim / Não (Status)</TableHead>
                   <TableHead className="text-right">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4">Carregando...</TableCell>
+                    <TableCell colSpan={5} className="text-center py-4 text-muted-foreground animate-pulse">Carregando contratos...</TableCell>
                   </TableRow>
                 )}
                 {!isLoading && orderedItems.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
-                      Nenhum contrato vinculado.
+                    <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
+                      Nenhum contrato vinculado a este curso.
                     </TableCell>
                   </TableRow>
                 )}

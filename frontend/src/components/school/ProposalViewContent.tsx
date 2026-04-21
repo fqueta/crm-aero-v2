@@ -36,6 +36,18 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const infoResponsavel = (enrollment as any)?.responsavel;
+  const rawZapsignResp = (enrollment as any)?.meta?.processo_assinatura_responsavel;
+  const zapsignDataResp = useMemo(() => {
+    if (!rawZapsignResp) return null;
+    try {
+      return typeof rawZapsignResp === 'string' ? JSON.parse(rawZapsignResp) : rawZapsignResp;
+    } catch {
+      return null;
+    }
+  }, [rawZapsignResp]);
+  const signatureLinkResp = zapsignDataResp?.signers?.[0]?.sign_url || zapsignDataResp?.signers?.[0]?.signing_link || '';
+
   /**
    * getInitialTab
    * pt-BR: Obtém a aba inicial da URL: hash (#overview | #contracts) ou query (?tab=...).
@@ -215,17 +227,6 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const badgeLabel = isAssinado ? 'Assinada' : (isZapsignPending ? 'Assinatura em Andamento' : 'Aprovada');
   const badgeColor = isAssinado ? 'bg-green-600 text-white' : (isZapsignPending ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white');
 
-  const responsavelData = (enrollment as any)?.responsavel;
-  const rawZapsignResp = (enrollment as any)?.meta?.processo_assinatura_responsavel;
-  const zapsignDataResp = useMemo(() => {
-    if (!rawZapsignResp) return null;
-    try {
-      return typeof rawZapsignResp === 'string' ? JSON.parse(rawZapsignResp) : rawZapsignResp;
-    } catch {
-      return null;
-    }
-  }, [rawZapsignResp]);
-  const signatureLinkResp = zapsignDataResp?.signers?.[0]?.sign_url || zapsignDataResp?.signers?.[0]?.signing_link || '';
 
   return (
     <div className="space-y-6">
@@ -290,9 +291,9 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                     )}
 
                     {/* Dados do Responsável Financeiro */}
-                    {responsavelData && (
+                    {infoResponsavel && (
                       <div className="print:hidden">
-                        <ResponsibleInfoCard data={responsavelData} signatureLink={signatureLinkResp} />
+                        <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />
                       </div>
                     )}
 
@@ -333,6 +334,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                   courseName={(course as any)?.titulo || (course as any)?.nome || (enrollment as any)?.curso_name || (enrollment as any)?.curso_nome}
                   signatureLink={linkAssinatura}
                   onGoToOverview={() => handleTabChange('overview')}
+                  responsavel={infoResponsavel}
                 />
              ) : (
                 <div className="text-center py-4 text-muted-foreground">

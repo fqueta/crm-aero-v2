@@ -10,6 +10,8 @@ import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
 import { periodsService } from '@/services/periodsService';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { Copy } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -17,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Controller } from 'react-hook-form';
 import type { CreateContractInput, UpdateContractInput, ContractRecord } from '@/types/contracts';
 
 /**
@@ -40,6 +43,7 @@ export function ContractForm({
    */
   onSubmitRef?: React.MutableRefObject<(() => void) | null>;
 }) {
+  const { toast } = useToast();
   const form = useForm<CreateContractInput | UpdateContractInput>({
     defaultValues: {
       nome: '',
@@ -93,7 +97,7 @@ export function ContractForm({
       conteudo: d?.conteudo ?? d?.content ?? '',
       id_curso: d?.id_curso ?? undefined,
       periodo: d?.periodo ?? '',
-      tipo: d?.tipo ?? 'geral',
+      tipo: d?.tipo ?? d?.config?.tipo ?? 'geral',
       ativo: (d?.ativo as any) ?? 'draft',
     });
   }, [initialData]);
@@ -142,6 +146,20 @@ export function ContractForm({
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
+    }
+  }
+
+  /**
+   * insertTag
+   * pt-BR: Insere um shortcode na posição atual do cursor no editor.
+   * en-US: Inserts a shortcode at the current cursor position in the editor.
+   */
+  function insertTag(tag: string) {
+    const editor = document.querySelector('[contenteditable="true"]');
+    if (editor) {
+      // Tenta inserir diretamente. Se o editor estiver focado, document.execCommand 
+      // usará a posição correta do cursor.
+      document.execCommand('insertText', false, tag);
     }
   }
 
@@ -256,38 +274,109 @@ export function ContractForm({
 
         <div className="space-y-1">
           <Label>Tipo de Contrato</Label>
-          <Select
-            value={String(form.watch('tipo') || 'geral')}
-            onValueChange={(val) => form.setValue('tipo', val)}
+          <Controller
+            control={form.control}
+            name="tipo"
+            render={({ field }) => (
+              <Select
+                value={String(field.value || 'geral')}
+                onValueChange={field.onChange}
+              >
+                <SelectTrigger className="w-full h-10">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="geral">Geral (Aluno)</SelectItem>
+                  <SelectItem value="responsavel">Responsável Financeiro</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
+        </div>
+      </div>
+
+      {/* Seção de Variáveis (Helper) */}
+      <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-900/30 dark:bg-blue-950/20">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200">Dica</Badge>
+            <span className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wider">Variáveis Dinâmicas</span>
+          </div>
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="sm" 
+            className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+            onClick={() => {
+              const vars = [
+                '{aluno}', '{cpf_aluno}', '{identidade}', '{data_nascimento}', 
+                '{logradouro}', '{numero}', '{bairro}', '{cidade}', '{estado}',
+                '{curso}', '{valor_total}', '{dia}', '{mes}', '{ano}'
+              ];
+              navigator.clipboard.writeText(vars.join(', '));
+              toast.success('Variáveis sugeridas copiadas');
+            }}
           >
-            <SelectTrigger className="w-full h-10">
-              <SelectValue placeholder="Selecione o tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="geral">Geral (Aluno)</SelectItem>
-              <SelectItem value="responsavel">Responsável Financeiro</SelectItem>
-            </SelectContent>
-          </Select>
+            Copiar Lista Base
+          </Button>
+        </div>
+        <p className="text-[10px] text-blue-700/80 dark:text-blue-300/60 leading-relaxed mb-2">
+          Use as tags abaixo no conteúdo para preenchimento automático. <strong>Clique em uma tag para inseri-la no editor</strong> na posição do cursor.
+        </p>
+        <div className="flex flex-wrap gap-1.5 mt-1">
+          {[
+            { label: '{aluno}', desc: 'Nome do Aluno' },
+            { label: '{cpf_aluno}', desc: 'CPF do Aluno' },
+            { label: '{responsavel_nome}', desc: 'Nome do Fiador' },
+            { label: '{responsavel_cpf}', desc: 'CPF do Fiador' },
+            { label: '{responsavel_identidade}', desc: 'RG do Fiador' },
+            { label: '{responsavel_email}', desc: 'E-mail do Fiador' },
+            { label: '{responsavel_celular}', desc: 'Celular do Fiador' },
+            { label: '{responsavel_endereco}', desc: 'Endereço do Fiador' },
+            { label: '{responsavel_cidade}', desc: 'Cidade do Fiador' },
+            { label: '{responsavel_uf}', desc: 'UF do Fiador' },
+            { label: '{curso}', desc: 'Nome do Curso' },
+            { label: '{data_nascimento}', desc: 'Nasc. Aluno' },
+            { label: '{identidade}', desc: 'RG Aluno' },
+          ].map((v) => (
+            <div 
+              key={v.label} 
+              className="group relative cursor-pointer"
+              onMouseDown={(e) => {
+                e.preventDefault(); // Evita que o editor perca o foco
+                insertTag(v.label);
+              }}
+            >
+              <code className="text-[10px] bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-400 font-mono">
+                {v.label}
+              </code>
+              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-zinc-800 text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-10 shadow-lg">
+                {v.desc}
+              </span>
+            </div>
+          ))}
+          <span className="text-[10px] text-blue-400 font-medium ml-1 flex items-center">e mais...</span>
         </div>
       </div>
 
       <div className="space-y-1">
-        <Label>Conteúdo do termo/contrato</Label>
-        {/**
-         * RichTextEditor
-         * pt-BR: Substitui o Textarea por um editor HTML simples.
-         * en-US: Replaces Textarea with a simple HTML editor.
-         */}
+        <div className="flex items-center justify-between">
+          <Label className="flex items-center gap-2">
+            Conteúdo do termo/contrato
+            <span className="text-[9px] font-normal text-muted-foreground uppercase">(Suporta HTML editor)</span>
+          </Label>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={handleCopyContract}>
+              <Copy className="h-3 w-3 mr-1" /> Copiar HTML
+            </Button>
+          </div>
+        </div>
+        
         <RichTextEditor
           value={String(form.watch('conteudo') || '')}
           onChange={(html) => form.setValue('conteudo', html, { shouldDirty: true })}
-          placeholder="Edite o conteúdo do termo/contrato..."
+          placeholder="Comece a digitar o contrato aqui... Use as variáveis dinâmicas para personalização."
         />
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={handleCopyContract}>
-            Copiar contrato
-          </Button>
-        </div>
       </div>
 
     </form>

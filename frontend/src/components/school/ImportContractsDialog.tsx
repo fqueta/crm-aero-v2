@@ -109,7 +109,8 @@ export function ImportContractsDialog({
               conteudo: original.conteudo || (original as any).content,
               ativo: 'draft', // Importa como rascunho por segurança
               id_curso: currentCourseId,
-              periodo: original.periodo
+              periodo: original.periodo,
+              tipo: original.tipo
             });
             successCount++;
           }
@@ -208,9 +209,12 @@ export function ImportContractsDialog({
                           />
                           <Label 
                             htmlFor={`contract-${contract.id}`} 
-                            className="flex-1 cursor-pointer text-sm font-normal"
+                            className="flex-1 cursor-pointer text-sm font-normal flex items-center justify-between"
                           >
-                            {contract.nome}
+                            <span>{contract.nome}</span>
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded ml-2">
+                              {contract.tipo === 'responsavel' ? 'Resp.' : 'Geral'}
+                            </span>
                           </Label>
                         </div>
                       ))}

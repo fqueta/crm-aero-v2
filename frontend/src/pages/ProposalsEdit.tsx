@@ -31,6 +31,8 @@ import SelectGeraValor from '@/components/school/SelectGeraValor';
 import { currencyApplyMask, currencyRemoveMaskToNumber, currencyRemoveMaskToString } from '@/lib/masks/currency';
 import BudgetPreview from '@/components/school/BudgetPreview';
 import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
+import { cpfApplyMask } from '@/lib/masks/cpf-apply-mask';
+import { cepApplyMask } from '@/lib/masks/cep-apply-mask';
 import { responsaveisService } from '@/services/responsaveisService';
 import QuickResponsibleModal, { createEmptyQuickResponsibleData } from '@/components/proposals/QuickResponsibleModal';
 
@@ -120,6 +122,7 @@ export default function ProposalsEdit() {
   const [isQuickResponsibleOpen, setIsQuickResponsibleOpen] = useState(false);
   const [quickResponsibleData, setQuickResponsibleData] = useState(createEmptyQuickResponsibleData());
   const [quickResponsibleLoading, setQuickResponsibleLoading] = useState(false);
+  const [quickResponsibleEditId, setQuickResponsibleEditId] = useState<string | null>(null);
 
   const [isFuelTextOpen, setIsFuelTextOpen] = useState(false);
 
@@ -237,7 +240,101 @@ export default function ProposalsEdit() {
    */
   function handleCloseQuickResponsibleModal() {
     setIsQuickResponsibleOpen(false);
+    setQuickResponsibleEditId(null);
     setQuickResponsibleData(createEmptyQuickResponsibleData());
+  }
+
+  /**
+   * handleEditResponsible
+   * pt-BR: Abre o modal de responsavel preenchido com os dados do responsavel ja selecionado.
+   * en-US: Opens the responsible modal pre-filled with data from the already selected responsible.
+   */
+  async function handleEditResponsible(responsibleId: string) {
+    const idToEdit = String(responsibleId || '').trim();
+    if (!idToEdit) return;
+    setQuickResponsibleLoading(true);
+    try {
+      const resp = await responsaveisService.getById(idToEdit);
+      const config = typeof (resp as any)?.config === 'string'
+        ? (() => { try { return JSON.parse((resp as any).config); } catch { return {}; } })()
+        : ((resp as any)?.config || {});
+      const cpfRaw = String((resp as any)?.cpf || '').replace(/\D/g, '');
+      const phoneRaw = String(config?.celular || '').replace(/\D/g, '');
+      setQuickResponsibleData({
+        name: (resp as any)?.name || '',
+        email: (resp as any)?.email || '',
+        cpf: cpfRaw ? cpfApplyMask(cpfRaw) : '',
+        nationality: config?.nacionalidade || 'Brasileira',
+        profession: config?.profissao || '',
+        maritalStatus: config?.estado_civil || '',
+        identity: config?.identidade || config?.rg || '',
+        cep: config?.cep ? cepApplyMask(String(config.cep)) : '',
+        address: config?.endereco || '',
+        number: config?.numero || '',
+        complement: config?.complemento || '',
+        bairro: config?.bairro || '',
+        city: config?.cidade || '',
+        state: config?.uf || '',
+        phone: phoneRaw ? phoneApplyMask(phoneRaw) : '',
+      });
+      setQuickResponsibleEditId(idToEdit);
+      setIsQuickResponsibleOpen(true);
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Nao foi possivel carregar dados do responsavel.', variant: 'destructive' });
+    } finally {
+      setQuickResponsibleLoading(false);
+    }
+  }
+
+  /**
+   * handleQuickResponsibleUpdate
+   * pt-BR: Atualiza o responsavel existente via PATCH e fecha o modal.
+   * en-US: Updates the existing responsible via PATCH and closes the modal.
+   */
+  async function handleQuickResponsibleUpdate() {
+    if (!quickResponsibleEditId) return;
+    if (!quickResponsibleData.name.trim()) {
+      toast({ title: 'Erro', description: 'Nome e obrigatorio.', variant: 'destructive' });
+      return;
+    }
+    const phoneClean = phoneRemoveMask(quickResponsibleData.phone);
+    const cpfClean = String(quickResponsibleData.cpf || '').replace(/\D/g, '');
+    const cepClean = String(quickResponsibleData.cep || '').replace(/\D/g, '');
+    setQuickResponsibleLoading(true);
+    try {
+      const payload: any = {
+        name: quickResponsibleData.name,
+        email: quickResponsibleData.email || undefined,
+        cpf: cpfClean || undefined,
+        config: {
+          celular: phoneClean || undefined,
+          nacionalidade: quickResponsibleData.nationality || undefined,
+          profissao: quickResponsibleData.profession || undefined,
+          estado_civil: quickResponsibleData.maritalStatus || undefined,
+          identidade: quickResponsibleData.identity || undefined,
+          rg: quickResponsibleData.identity || undefined,
+          cep: cepClean || undefined,
+          endereco: quickResponsibleData.address || undefined,
+          numero: quickResponsibleData.number || undefined,
+          complemento: quickResponsibleData.complement || undefined,
+          bairro: quickResponsibleData.bairro || undefined,
+          cidade: quickResponsibleData.city || undefined,
+          uf: quickResponsibleData.state || undefined,
+        },
+      };
+      const updated = await responsaveisService.update(quickResponsibleEditId, payload);
+      await queryClient.invalidateQueries({ queryKey: ['responsaveis'] });
+      queryClient.setQueryData(['responsaveis', 'detail', quickResponsibleEditId], updated);
+      setIsQuickResponsibleOpen(false);
+      setQuickResponsibleEditId(null);
+      setQuickResponsibleData(createEmptyQuickResponsibleData());
+      toast({ title: 'Sucesso', description: 'Responsavel atualizado com sucesso.' });
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Erro ao atualizar responsavel.';
+      toast({ title: 'Erro', description: msg, variant: 'destructive' });
+    } finally {
+      setQuickResponsibleLoading(false);
+    }
   }
 
   /**
@@ -1720,32 +1817,46 @@ export default function ProposalsEdit() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Responsável</FormLabel>
-                        <Combobox
-                          options={responsibleOptionsWithSelected}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          placeholder="Selecione o responsável"
-                          searchPlaceholder="Pesquisar responsável pelo nome..."
-                          emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
-                          disabled={isLoadingResponsibles}
-                          loading={isLoadingResponsibles}
-                          onSearch={setResponsibleSearch}
-                          searchTerm={responsibleSearch}
-                          debounceMs={250}
-                          header={({ setOpen }) => (
-                            <Button
-                              variant="ghost"
-                              className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
-                              onClick={() => {
-                                setIsQuickResponsibleOpen(true);
-                                setOpen(false);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4 mr-2" />
-                              Cadastrar Novo Responsável
-                            </Button>
-                          )}
-                        />
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1">
+                            <Combobox
+                              options={responsibleOptionsWithSelected}
+                              value={field.value}
+                              onValueChange={field.onChange}
+                              placeholder="Selecione o responsável"
+                              searchPlaceholder="Pesquisar responsável pelo nome..."
+                              emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
+                              disabled={isLoadingResponsibles}
+                              loading={isLoadingResponsibles}
+                              onSearch={setResponsibleSearch}
+                              searchTerm={responsibleSearch}
+                              debounceMs={250}
+                              header={({ setOpen }) => (
+                                <Button
+                                  variant="ghost"
+                                  className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                                  onClick={() => {
+                                    setIsQuickResponsibleOpen(true);
+                                    setOpen(false);
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Cadastrar Novo Responsável
+                                </Button>
+                              )}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => handleEditResponsible(String(field.value || ''))}
+                            disabled={!field.value}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" /> Editar Responsável
+                          </Button>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -2177,7 +2288,8 @@ export default function ProposalsEdit() {
                 data={quickResponsibleData}
                 onChange={setQuickResponsibleData}
                 onClose={handleCloseQuickResponsibleModal}
-                onSubmit={handleQuickResponsibleSubmit}
+                mode={quickResponsibleEditId ? 'edit' : 'create'}
+                onSubmit={quickResponsibleEditId ? handleQuickResponsibleUpdate : handleQuickResponsibleSubmit}
               />
 
               {/* Espaço para o rodapé fixo não cobrir o conteúdo */}

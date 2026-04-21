@@ -1,18 +1,55 @@
-import React, { useEffect, useState, useMemo } from 'react';
+/**
+ * ProposalContractsTab.tsx
+ * Aba de Contratos na página de visualização de proposta.
+ *
+ * Responsabilidades desta camada:
+ * - Orquestrar os hooks de dados (`useContractsMeta`, `useResponsavelManager`)
+ * - Gerenciar ações de geração/envio de PDF e ZapSign
+ * - Renderizar o layout, delegando sub-seções a componentes focados
+ *
+ * Design Patterns aplicados:
+ * - Container/Presenter: lógica nos hooks, UI nos componentes filhos
+ * - Facade (hooks): interface simples ocultando complexidade de múltiplos serviços
+ * - Strategy (zapsign.ts): status mapeado sem if/else duplicados
+ * - Builder (responsavel-payload.ts): payload centralizado
+ */
+
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { proposalService } from '@/services/proposalService';
-import { Loader2, AlertCircle, FileText, ExternalLink, Pencil, Save, X, RotateCcw, Send, Copy, Check, Share2, CheckCircle2, MessageCircle, Eye, Clock, Zap, MapPin, MousePointerClick } from 'lucide-react';
+import {
+  Loader2, AlertCircle, FileText, ExternalLink, Pencil, Save, X,
+  RotateCcw, Send, Copy, Check, CheckCircle2, Zap, Info, User,
+} from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { enrollmentsService } from '@/services/enrollmentsService';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Info } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+
+// Hooks customizados
+import { useContractsMeta } from '@/hooks/useContractsMeta';
+import { useResponsavelManager } from '@/hooks/useResponsavelManager';
+
+// Componentes filhos
+import { SignerCard } from './SignerCard';
+import { ResponsibleManagerCard } from './ResponsibleManagerCard';
+
+// Utilitários
+import { getDocStatusLabel, getDocBadgeClass, isZapsignActive } from '@/lib/zapsign';
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tipos
+// ──────────────────────────────────────────────────────────────────────────────
 
 interface ProposalContractsTabProps {
   clientId: string;
@@ -21,6 +58,8 @@ interface ProposalContractsTabProps {
   courseName?: string;
   signatureLink?: string;
   onGoToOverview?: () => void;
+  /** Dados do responsável financeiro já vinculado à matrícula */
+  responsavel?: any;
 }
 
 interface PdfContractItem {
@@ -29,316 +68,149 @@ interface PdfContractItem {
   nome_contrato: string;
 }
 
-export default function ProposalContractsTab({ clientId, enrollmentId, meta, courseName, signatureLink, onGoToOverview }: ProposalContractsTabProps) {
-  const [contracts, setContracts] = useState<any[]>([]);
+// ──────────────────────────────────────────────────────────────────────────────
+// Componente
+// ──────────────────────────────────────────────────────────────────────────────
+
+export default function ProposalContractsTab({
+  clientId, enrollmentId, meta, courseName, signatureLink, onGoToOverview, responsavel,
+}: ProposalContractsTabProps) {
+
+  // ── Auth & Permissões ──────────────────────────────────────────────────────
+  const { user, token } = useAuth();
+  const { toast } = useToast();
+  const isAdmin = user && Number(user.permission_id) === 1;
+  const isStandard = user && Number(user.permission_id) > 1;
+
+  // ── Contratos HTML (legado) ────────────────────────────────────────────────
+  const [contracts, setContracts] = useState<{ aluno: any[], responsavel: any[] }>({ aluno: [], responsavel: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
-  
-  // Auth and Permissions
-  const { user, token } = useAuth();
 
-  // Editing State
+  useEffect(() => {
+    if (!clientId || !enrollmentId) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    proposalService.getContractsHtml(clientId, enrollmentId)
+      .then(data => {
+        if (!active) return;
+        if (data && (data.aluno || data.responsavel)) {
+          setContracts(data as any);
+        } else if (Array.isArray(data)) {
+          setContracts({ aluno: data, responsavel: [] });
+        } else if ((data as any).error) {
+          setError((data as any).error);
+        } else {
+          setContracts({ aluno: [], responsavel: [] });
+        }
+      })
+      .catch(() => { if (active) setError('Não foi possível carregar os contratos.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [clientId, enrollmentId]);
+
+  // ── Metadados processados (Custom Hook) ───────────────────────────────────
+  const {
+    pdfsToSend, sentDocs, rawParsedContracts, zapsignDoc,
+    localSignedUrl, localExtraDocs,
+    pdfsToSendResp, sentDocsResp, zapsignDocResp, localSignedUrlResp, hasZapsignResp,
+  } = useContractsMeta(meta);
+
+  const hasZapsign = isZapsignActive(zapsignDoc);
+  const canEdit = isAdmin || (isStandard && hasZapsign);
+
+  // ── Gestão do Responsável (Hook Facade) ───────────────────────────────────
+  const responsavelManager = useResponsavelManager(enrollmentId, responsavel);
+
+  // ── Edição de Links ───────────────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
   const [propostaPdfUrl, setPropostaPdfUrl] = useState('');
   const [editableContracts, setEditableContracts] = useState<PdfContractItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleStartEditing = () => {
+    setPropostaPdfUrl(meta?.proposta_pdf || '');
+    setEditableContracts(JSON.parse(JSON.stringify(rawParsedContracts || [])));
+    setIsEditing(true);
+  };
+  const handleCancelEditing = () => { setIsEditing(false); setPropostaPdfUrl(''); setEditableContracts([]); };
+
+  // ── Edição de Links Responsável ───────────────────────────────────────────
+  const [isEditingResp, setIsEditingResp] = useState(false);
+  const [editableContractsResp, setEditableContractsResp] = useState<any[]>([]);
+
+  const handleStartEditingResp = () => {
+    const raw = meta?.contrato_responsavel_pdf;
+    let parsed = [];
+    if (typeof raw === 'string') parsed = JSON.parse(raw);
+    else if (Array.isArray(raw)) parsed = raw;
+    setEditableContractsResp(JSON.parse(JSON.stringify(parsed || [])));
+    setIsEditingResp(true);
+  };
+  const handleCancelEditingResp = () => { setIsEditingResp(false); setEditableContractsResp([]); };
+  const handleContractChangeResp = (index: number, field: string, value: string) => {
+    const next = [...editableContractsResp];
+    if (next[index]) { next[index] = { ...next[index], [field]: value }; setEditableContractsResp(next); }
+  };
+
+  const handleSaveResp = async () => {
+    setIsSaving(true);
+    try {
+      await enrollmentsService.updateEnrollment(enrollmentId, {
+        meta: { ...(meta || {}), contrato_responsavel_pdf: JSON.stringify(editableContractsResp) },
+      } as any);
+      toast({ title: 'Sucesso', description: 'Links do responsável atualizados com sucesso.' });
+      setIsEditingResp(false);
+      window.location.reload();
+    } catch {
+      toast({ title: 'Erro', description: 'Falha ao salvar alterações do responsável.', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  const handleContractChange = (index: number, field: keyof PdfContractItem, value: string) => {
+    const next = [...editableContracts];
+    if (next[index]) { next[index] = { ...next[index], [field]: value }; setEditableContracts(next); }
+  };
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await enrollmentsService.updateEnrollment(enrollmentId, {
+        meta: { ...(meta || {}), proposta_pdf: propostaPdfUrl, contrato_pdf: JSON.stringify(editableContracts) },
+      } as any);
+      toast({ title: 'Sucesso', description: 'Links atualizados com sucesso.' });
+      setIsEditing(false);
+      window.location.reload();
+    } catch {
+      toast({ title: 'Erro', description: 'Falha ao salvar alterações.', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ── Ações de Geração / ZapSign ────────────────────────────────────────────
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [isSendingZapsign, setIsSendingZapsign] = useState(false);
   const [isRegeneratingResp, setIsRegeneratingResp] = useState(false);
   const [isSendingZapsignResp, setIsSendingZapsignResp] = useState(false);
-
-  const { toast } = useToast();
-
-  useEffect(() => {
-    async function loadContracts() {
-      if (!clientId || !enrollmentId) return;
-      
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await proposalService.getContractsHtml(clientId, enrollmentId);
-        if (Array.isArray(data)) {
-            setContracts(data);
-        } else {
-             // Se vier erro do backend
-             if ((data as any).error) {
-                 setError((data as any).error);
-             } else {
-                setContracts([]);
-             }
-        }
-      } catch (err) {
-        console.error(err);
-        setError('Não foi possível carregar os contratos.');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadContracts();
-  }, [clientId, enrollmentId]);
-
-  // Processamento dos metadados para Assinatura Digital
-  const { 
-    pdfsToSend, sentDocs, rawParsedContracts, zapsignDoc, localSignedUrl, localExtraDocs,
-    pdfsToSendResp, sentDocsResp, zapsignDocResp, localSignedUrlResp, hasZapsignResp
-  } = useMemo(() => {
-    const listToSend: { name: string; url: string; original?: any }[] = [];
-    const listSent: { name: string; url: string; signer?: any }[] = [];
-    let parsedContracts: PdfContractItem[] = [];
-
-    // 1. PDFs a serem enviados (Simulações/Contratos gerados localmente)
-    // pt-BR: Pega os PDFs gerados localmente na matrícula meta 'proposta_pdf' e 'contrato_pdf'.
-    const rawPropostas = meta?.proposta_pdf;
-    if (rawPropostas) {
-        if (typeof rawPropostas === 'string' && (rawPropostas.startsWith('http') || rawPropostas.startsWith('/storage'))) {
-            listToSend.push({
-                name: 'Proposta Comercial (PDF)',
-                url: rawPropostas,
-                original: { type: 'proposal' }
-            });
-        } else {
-            try {
-                const parsed = typeof rawPropostas === 'string' ? JSON.parse(rawPropostas) : rawPropostas;
-                const items = Array.isArray(parsed) ? parsed : [parsed];
-                items.forEach((item: any) => {
-                    if (item?.url) {
-                        listToSend.push({
-                            name: item.nome_contrato || item.nome_arquivo || 'Simulação/Orçamento',
-                            url: item.url,
-                            original: item
-                        });
-                    }
-                });
-            } catch (e) {}
-        }
-    }
-
-    const rawContratos = meta?.contrato_pdf;
-    if (rawContratos) {
-        try {
-            const parsed = typeof rawContratos === 'string' ? JSON.parse(rawContratos) : rawContratos;
-            const items = Array.isArray(parsed) ? parsed : (typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [parsed]);
-            parsedContracts = items;
-            items.forEach((item: any) => {
-                if (item && typeof item === 'object' && item.url) {
-                    listToSend.push({
-                        name: item.nome_contrato || item.nome_arquivo || 'Contrato',
-                        url: item.url,
-                        original: item
-                    });
-                }
-            });
-        } catch (e) {}
-    }
-
-    // 2. Status e Signatários (ZapSign)
-    // pt-BR: O webhook do ZapSign atualiza o meta 'processo_assinatura' diretamente com o payload.
-    //        Já o envio inicial salva em 'processo_assinatura.enviar.response'.
-    const rawZapsign = meta?.processo_assinatura;
-    const zapsignBase = typeof rawZapsign === 'string' ? (JSON.parse(rawZapsign) || {}) : (rawZapsign || {});
-    const zapsignData = zapsignBase?.enviar?.response || zapsignBase;
-    const signersList = zapsignData?.signers;
-
-    if (Array.isArray(signersList)) {
-        signersList.forEach((s: any) => {
-            const link = s.sign_url || s.signing_link;
-            if (link) {
-                listSent.push({
-                    name: `Link Assinatura: ${s.name}`,
-                    url: link,
-                    signer: s
-                });
-            }
-        });
-    }
-
-    // 3. Arquivos Assinados Localmente (Segurança e Permanência)
-    // pt-BR: Procuramos por arquivos já baixados para o servidor local em 'salvar_links_assinados'
-    // en-US: Looking for files already downloaded to the local server in 'salvar_links_assinados'
-    let localUrl = '';
-    let extraList: { nome: string; link: string }[] = [];
-    const localLinksRaw = meta?.salvar_links_assinados;
-    let localLinksObj: any = null;
-
-    if (localLinksRaw) {
-        localLinksObj = typeof localLinksRaw === 'string' ? JSON.parse(localLinksRaw) : localLinksRaw;
-    } else {
-        // Tenta encontrar metadados de períodos específicos (ex: salvar_links_assinados_TK123)
-        const periodKey = Object.keys(meta || {}).find(k => k.startsWith('salvar_links_assinados_'));
-        if (periodKey) {
-            const raw = meta[periodKey];
-            localLinksObj = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        }
-    }
-    
-    if (localLinksObj?.principal?.link) {
-        localUrl = localLinksObj.principal.link;
-    }
-
-    if (localLinksObj?.extra) {
-        // localLinksObj.extra pode ser um array ou objeto (chave -> {nome, link})
-        extraList = Object.values(localLinksObj.extra);
-    }
-
-    // --- RESPONSÁVEL FINANCEIRO ---
-    const listToSendResp: { name: string; url: string; original?: any }[] = [];
-    const listSentResp: { name: string; url: string; signer?: any }[] = [];
-    
-    // 1. PDFs Gerados para o Responsável
-    const rawContratosResp = meta?.contrato_responsavel_pdf;
-    if (rawContratosResp) {
-        try {
-            const parsed = typeof rawContratosResp === 'string' ? JSON.parse(rawContratosResp) : rawContratosResp;
-            const items = Array.isArray(parsed) ? parsed : (typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : [parsed]);
-            items.forEach((item: any) => {
-                if (item && typeof item === 'object' && item.url) {
-                    listToSendResp.push({
-                        name: item.nome_contrato || item.nome_arquivo || 'Contrato Responsável',
-                        url: item.url,
-                        original: item
-                    });
-                }
-            });
-        } catch (e) {}
-    }
-
-    // 2. ZapSign do Responsável
-    const rawZapsignResp = meta?.processo_assinatura_responsavel;
-    const zapsignDataResp = typeof rawZapsignResp === 'string' ? (JSON.parse(rawZapsignResp) || {}) : (rawZapsignResp || {});
-    const signersListResp = zapsignDataResp?.signers;
-
-    if (Array.isArray(signersListResp)) {
-        signersListResp.forEach((s: any) => {
-            const link = s.sign_url || s.signing_link;
-            if (link) {
-                listSentResp.push({
-                    name: `Link Responsável: ${s.name}`,
-                    url: link,
-                    signer: s
-                });
-            }
-        });
-    }
-
-    // 3. Arquivo assinado do Responsável (se houver)
-    let localUrlResp = zapsignDataResp?.signed_file || '';
-
-    return { 
-        pdfsToSend: listToSend, 
-        sentDocs: listSent, 
-        rawParsedContracts: parsedContracts,
-        zapsignSigners: Array.isArray(signersList) ? signersList : [],
-        zapsignDoc: zapsignData,
-        localSignedUrl: localUrl,
-        localExtraDocs: extraList,
-        // --- RESPONSÁVEL FINANCEIRO ---
-        pdfsToSendResp: listToSendResp,
-        sentDocsResp: listSentResp,
-        zapsignDocResp: zapsignDataResp,
-        localSignedUrlResp: localUrlResp,
-        hasZapsignResp: Object.keys(zapsignDataResp).length > 0
-    };
-  }, [meta]);
-
-  const isAdmin = user && Number(user.permission_id) === 1;
-  const isStandard = user && Number(user.permission_id) > 1;
-  const hasZapsign = zapsignDoc && typeof zapsignDoc === 'object' && Object.keys(zapsignDoc).length > 0 && (zapsignDoc.token || zapsignDoc.signers);
-  const canEdit = isAdmin || (isStandard && hasZapsign);
-
-  // Initialize edit state when entering edit mode
-  const handleStartEditing = () => {
-    setPropostaPdfUrl(meta?.proposta_pdf || '');
-    // Ensure we have a deep copy of contracts to edit
-    setEditableContracts(JSON.parse(JSON.stringify(rawParsedContracts || [])));
-    setIsEditing(true);
-  };
-
-  const handleCancelEditing = () => {
-    setIsEditing(false);
-    setPropostaPdfUrl('');
-    setEditableContracts([]);
-  };
-
-  const handleContractChange = (index: number, field: keyof PdfContractItem, value: string) => {
-    const newContracts = [...editableContracts];
-    if (newContracts[index]) {
-        newContracts[index] = { ...newContracts[index], [field]: value };
-        setEditableContracts(newContracts);
-    }
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-        const newMeta = {
-            ...(meta || {}),
-            proposta_pdf: propostaPdfUrl,
-            contrato_pdf: JSON.stringify(editableContracts) // Save as JSON string to be consistent
-        };
-
-        await enrollmentsService.updateEnrollment(enrollmentId, {
-             // @ts-ignore - sending meta inside config or as separate field depending on backend
-             // Based on types, EnrollmentRecord has [key: string]: any, so we might need to send it as part of payload
-             // Checking EnrollmentsService, it uses UpdateEnrollmentInput.
-             // Usually custom fields go into meta or config. Let's try sending meta directly.
-             meta: newMeta
-        } as any);
-
-        toast({
-            title: "Sucesso",
-            description: "Links atualizados com sucesso.",
-        });
-        
-        setIsEditing(false);
-        // Force reload would be better, but for now we rely on parent update or simple state update if we had setMeta prop
-        window.location.reload(); // Simple way to refresh data for now
-    } catch (error) {
-        console.error(error);
-        toast({
-            title: "Erro",
-            description: "Falha ao salvar alterações.",
-            variant: "destructive"
-        });
-    } finally {
-        setIsSaving(false);
-    }
-  };
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
 
   const handleRegenerate = async () => {
     if (!enrollmentId) return;
-    if (!confirm("Deseja realmente gerar novamente a proposta e os contratos? Isso pode sobrescrever os arquivos existentes.")) return;
-
+    if (!confirm('Deseja realmente gerar novamente a proposta e os contratos? Isso pode sobrescrever os arquivos existentes.')) return;
     setIsRegenerating(true);
     try {
       const base = getApiUrl();
-      // Using the same URL logic as ProposalsView but forcing background regeneration
       const url = `${base}/pdf/matriculas/${encodeURIComponent(String(enrollmentId))}?regenerate_all=1`;
       const headers: HeadersInit = { Accept: 'application/json' };
       const tk = token || localStorage.getItem('auth_token');
       if (tk) headers['Authorization'] = `Bearer ${tk}`;
-      
       const resp = await fetch(url, { method: 'GET', headers });
-      
-      if (!resp.ok) {
-        throw new Error(`Falha ao gerar PDF (HTTP ${resp.status})`);
-      }
-
-      const data = await resp.json().catch(() => ({}));
-      // The generation endpoint usually updates the backend state/files. 
-      // We might get a URL back, but the important part is that the backend regenerated the files.
-      
-      toast({ 
-          title: 'Sucesso', 
-          description: 'Documentos gerados novamente. A página será recarregada.' 
-      });
-
-      // Reload to fetch new URLs from updated meta
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      toast({ title: 'Sucesso', description: 'Documentos gerados novamente. A página será recarregada.' });
       setTimeout(() => window.location.reload(), 1500);
-
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast({ title: 'Erro', description: 'Não foi possível gerar os documentos.', variant: 'destructive' });
       setIsRegenerating(false);
     }
@@ -346,54 +218,32 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
 
   const handleSendZapsign = async () => {
     if (!enrollmentId) return;
-
-    // pt-BR: Validação de segurança - A proposta PRECISA estar aprovada antes de enviar ao ZapSign pela primeira vez.
-    if (meta?.status_assinatura !== 'aprovado' && !hasZapsign) {
-        setShowApprovalDialog(true);
-        return;
-    }
-
-    if (!confirm("Deseja enviar os documentos para o ZapSign?")) return;
-
+    if (meta?.status_assinatura !== 'aprovado' && !hasZapsign) { setShowApprovalDialog(true); return; }
+    if (!confirm('Deseja enviar os documentos para o ZapSign?')) return;
     setIsSendingZapsign(true);
     try {
-      // Se for um reenvio, primeiro forçamos a regeneração dos PDFs para garantir que estão atualizados
       if (hasZapsign) {
-          toast({ title: 'Atualizando arquivos', description: 'Regenerando PDFs antes de enviar...' });
-          await proposalService.generateContracts(clientId, enrollmentId);
+        toast({ title: 'Atualizando arquivos', description: 'Regenerando PDFs antes de enviar...' });
+        await proposalService.generateContracts(clientId, enrollmentId);
       }
-
       await proposalService.sendToZapsign(enrollmentId);
-      
-      toast({ 
-          title: 'Sucesso', 
-          description: hasZapsign ? 'Reenvio para ZapSign iniciado com arquivos atualizados.' : 'Envio para ZapSign iniciado.' 
-      });
-
-    } catch (error) {
-      console.error(error);
+      toast({ title: 'Sucesso', description: hasZapsign ? 'Reenvio para ZapSign iniciado.' : 'Envio para ZapSign iniciado.' });
+    } catch {
       toast({ title: 'Erro', description: 'Não foi possível processar o envio para o ZapSign.', variant: 'destructive' });
     } finally {
-        setIsSendingZapsign(false);
+      setIsSendingZapsign(false);
     }
   };
 
   const handleRegenerateResp = async () => {
     if (!enrollmentId) return;
-    if (!confirm("Deseja gerar os contratos utilizando os dados do Responsável Financeiro? Isso criará novos arquivos PDF específicos para ele.")) return;
-
+    if (!confirm('Deseja gerar os contratos para o Responsável Financeiro?')) return;
     setIsRegeneratingResp(true);
     try {
       await proposalService.generateResponsibleContracts(enrollmentId);
-      
-      toast({ 
-          title: 'Sucesso', 
-          description: 'Documentos do responsável gerados. A página será recarregada.' 
-      });
-
+      toast({ title: 'Sucesso', description: 'Documentos do responsável gerados. A página será recarregada.' });
       setTimeout(() => window.location.reload(), 1500);
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast({ title: 'Erro', description: 'Não foi possível gerar os documentos do responsável.', variant: 'destructive' });
     } finally {
       setIsRegeneratingResp(false);
@@ -402,26 +252,20 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
 
   const handleSendZapsignResp = async () => {
     if (!enrollmentId) return;
-    if (!confirm("Deseja enviar o contrato para o ZapSign do Responsável Financeiro?")) return;
-
+    if (!confirm('Deseja enviar o contrato para o ZapSign do Responsável Financeiro?')) return;
     setIsSendingZapsignResp(true);
     try {
       await proposalService.sendResponsibleToZapsign(enrollmentId);
-      
-      toast({ 
-          title: 'Sucesso', 
-          description: 'Contrato enviado para o ZapSign do Responsável.' 
-      });
-
+      toast({ title: 'Sucesso', description: 'Contrato enviado para o ZapSign do Responsável.' });
       setTimeout(() => window.location.reload(), 1500);
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast({ title: 'Erro', description: 'Não foi possível enviar para o ZapSign do responsável.', variant: 'destructive' });
     } finally {
-        setIsSendingZapsignResp(false);
+      setIsSendingZapsignResp(false);
     }
   };
 
+  // ── Guards de carregamento / erro ──────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -429,7 +273,6 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
       </div>
     );
   }
-
   if (error) {
     return (
       <Alert variant="destructive">
@@ -440,544 +283,486 @@ export default function ProposalContractsTab({ clientId, enrollmentId, meta, cou
     );
   }
 
+  // ── JSX ────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-        {/* Card Assinatura Digital */}
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                    <CardTitle>Assinatura digital</CardTitle>
-                    <CardDescription>Gerenciamento de documentos para assinatura</CardDescription>
-                </div>
-                {canEdit && !isEditing && (
-                    <div className="flex gap-2">
-                        {isAdmin && (
-                            <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isRegenerating}>
-                                {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-                                Gerar Novamente
-                            </Button>
-                        )}
-                        
-                        {/* Botão de Envio (Admin) ou Reenvio (Todos se já enviado) */}
-                        {(isAdmin || (isStandard && hasZapsign)) && (
-                            <Button 
-                                variant={hasZapsign ? "secondary" : "default"}
-                                size="sm" 
-                                onClick={handleSendZapsign} 
-                                disabled={isSendingZapsign}
-                                className={hasZapsign ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100" : ""}
-                            >
-                                {isSendingZapsign ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                                {hasZapsign ? 'Reenviar ZapSign (Aluno)' : 'Enviar ZapSign (Aluno)'}
-                            </Button>
-                        )}
+      {/* ── Assinatura Digital ─────────────────────────────────────────── */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Assinatura digital</CardTitle>
+            <CardDescription>Gerenciamento de documentos para assinatura</CardDescription>
+          </div>
 
-                        {isAdmin && (
-                            <Button variant="outline" size="sm" onClick={handleRegenerateResp} disabled={isRegeneratingResp} className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100">
-                                {isRegeneratingResp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-                                Gerar Contrato (Resp.)
-                            </Button>
-                        )}
+          {/* Barra de Ações (modo leitura) */}
+          {canEdit && !isEditing && (
+            <div className="flex gap-2 flex-wrap justify-end">
+              {isAdmin && (
+                <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isRegenerating}>
+                  {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                  Gerar Novamente
+                </Button>
+              )}
+              {(isAdmin || (isStandard && hasZapsign)) && (
+                <Button
+                  variant={hasZapsign ? 'secondary' : 'default'} size="sm"
+                  onClick={handleSendZapsign} disabled={isSendingZapsign}
+                  className={hasZapsign ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100' : ''}
+                >
+                  {isSendingZapsign ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                  {hasZapsign ? 'Reenviar ZapSign (Aluno)' : 'Enviar ZapSign (Aluno)'}
+                </Button>
+              )}
+              {isAdmin && (
+                <Button variant="outline" size="sm" onClick={handleStartEditing}>
+                  <Pencil className="h-4 w-4 mr-2" /> Editar Links
+                </Button>
+              )}
+            </div>
+          )}
 
-                        {isAdmin && (
-                            <Button 
-                                variant={hasZapsignResp ? "secondary" : "default"}
-                                size="sm" 
-                                onClick={handleSendZapsignResp} 
-                                disabled={isSendingZapsignResp}
-                                className={hasZapsignResp ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100" : "bg-indigo-600 hover:bg-indigo-700 text-white"}
-                            >
-                                {isSendingZapsignResp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                                {hasZapsignResp ? 'Reenviar ZapSign (Resp.)' : 'Enviar ZapSign (Resp.)'}
-                            </Button>
-                        )}
+          {/* Barra de Ações (modo edição) */}
+          {canEdit && isEditing && (
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={handleCancelEditing} disabled={isSaving}>
+                <X className="h-4 w-4 mr-2" /> Cancelar
+              </Button>
+              <Button variant="default" size="sm" onClick={handleSave} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar
+              </Button>
+            </div>
+          )}
+        </CardHeader>
 
-                        {isAdmin && (
-                            <Button variant="outline" size="sm" onClick={handleStartEditing}>
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Editar Links
-                            </Button>
-                        )}
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Documentos a enviar */}
+            <Card className="bg-slate-50 dark:bg-slate-900 border-dashed">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-amber-600" />
+                  Documentos Selecionados para Assinatura Digital
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!isEditing ? (
+                  pdfsToSend.length > 0 ? (
+                    <ul className="space-y-2">
+                      {pdfsToSend.map((doc, idx) => (
+                        <li key={idx} className="flex items-center justify-between text-sm p-2 bg-background rounded border">
+                          <span className="truncate mr-2" title={doc.name}>{doc.name}</span>
+                          <Button variant="ghost" size="sm" asChild className="h-6 w-6 p-0">
+                            <a href={doc.url} target="_blank" rel="noopener noreferrer" title="Abrir PDF">
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Nenhum documento PDF gerado.</p>
+                  )
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Proposta Comercial (PDF)</Label>
+                      <Input value={propostaPdfUrl} onChange={(e) => setPropostaPdfUrl(e.target.value)} placeholder="URL da Proposta" className="h-8 text-sm" />
                     </div>
-                )}
-                 {canEdit && isEditing && (
-                    <div className="flex gap-2">
-                         <Button variant="ghost" size="sm" onClick={handleCancelEditing} disabled={isSaving}>
-                            <X className="h-4 w-4 mr-2" />
-                            Cancelar
-                        </Button>
-                        <Button variant="default" size="sm" onClick={handleSave} disabled={isSaving}>
-                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                            Salvar
-                        </Button>
-                    </div>
-                )}
-            </CardHeader>
-            <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Subcard: Documentos que serão enviados */}
-                    <Card className="bg-slate-50 dark:bg-slate-900 border-dashed">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base font-medium flex items-center gap-2">
-                                <FileText className="h-4 w-4 text-amber-600" />
-                                Documentos Selecionados para Assinatura Digital
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {!isEditing ? (
-                                <>
-                                    {pdfsToSend.length > 0 ? (
-                                        <ul className="space-y-2">
-                                            {pdfsToSend.map((doc, idx) => (
-                                                <li key={idx} className="flex items-center justify-between text-sm p-2 bg-background rounded border">
-                                                    <span className="truncate mr-2" title={doc.name}>{doc.name}</span>
-                                                    <Button variant="ghost" size="sm" asChild className="h-6 w-6 p-0">
-                                                        <a href={doc.url} target="_blank" rel="noopener noreferrer" title="Abrir PDF">
-                                                            <ExternalLink className="h-3 w-3" />
-                                                        </a>
-                                                    </Button>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground italic">Nenhum documento PDF gerado.</p>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="space-y-4">
-                                    {/* Edit Mode */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-semibold">Proposta Comercial (PDF)</Label>
-                                        <Input 
-                                            value={propostaPdfUrl} 
-                                            onChange={(e) => setPropostaPdfUrl(e.target.value)} 
-                                            placeholder="URL da Proposta"
-                                            className="h-8 text-sm"
-                                        />
-                                    </div>
-                                    
-                                    <div className="space-y-2">
-                                        <Label className="text-xs font-semibold">Contratos (Lista)</Label>
-                                        {editableContracts.map((contract, idx) => (
-                                            <div key={idx} className="p-2 border rounded bg-background space-y-2">
-                                                <div className="flex justify-between items-center">
-                                                    <Label className="text-[10px] text-muted-foreground">Contrato {idx + 1}</Label>
-                                                </div>
-                                                <Input 
-                                                    value={contract.nome_contrato || contract.nome_arquivo}
-                                                    onChange={(e) => handleContractChange(idx, 'nome_contrato', e.target.value)}
-                                                    placeholder="Nome do Contrato"
-                                                    className="h-7 text-xs mb-1"
-                                                />
-                                                <Input 
-                                                    value={contract.url}
-                                                    onChange={(e) => handleContractChange(idx, 'url', e.target.value)}
-                                                    placeholder="URL do PDF"
-                                                    className="h-7 text-xs"
-                                                />
-                                            </div>
-                                        ))}
-                                        {editableContracts.length === 0 && (
-                                            <p className="text-xs text-muted-foreground italic">Nenhum contrato na lista.</p>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    {/* Subcard: Documentos enviados */}
-                    <Card className="bg-slate-50 dark:bg-slate-900 border-dashed">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-base font-medium flex items-center gap-2">
-                                <FileText className="h-4 w-4 text-green-600" />
-                                Monitoramento de Assinatura (ZapSign)
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                             {/* Document-level global info (Final PDF) */}
-                             {(localSignedUrl || zapsignDoc?.signed_file) && (
-                                <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="text-xs font-bold text-green-700 dark:text-green-400 flex items-center gap-2 uppercase tracking-wider">
-                                            <Zap className={`h-3 w-3 ${zapsignDoc?.status === 'pending' ? 'animate-pulse' : ''}`} />
-                                            Documento Final Assinado
-                                        </h4>
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                                            (zapsignDoc?.status === 'signed' || zapsignDoc?.status === 'completed') ? 'bg-green-600 text-white' :
-                                            zapsignDoc?.status === 'pending' ? 'bg-amber-500 text-white' :
-                                            zapsignDoc?.status === 'rejected' ? 'bg-red-600 text-white' :
-                                            'bg-slate-400 text-white'
-                                        }`}>
-                                            {zapsignDoc?.status === 'signed' || zapsignDoc?.status === 'completed' ? 'Concluído' :
-                                             zapsignDoc?.status === 'pending' ? 'Pendente' :
-                                             zapsignDoc?.status === 'rejected' ? 'Rejeitado' :
-                                             zapsignDoc?.status || 'Processando'}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Button variant="outline" size="sm" className="flex-1 h-8 text-xs font-medium border-green-300 dark:border-green-700 bg-white dark:bg-zinc-800" asChild>
-                                            <a href={localSignedUrl || zapsignDoc.signed_file} target="_blank" rel="noopener noreferrer">
-                                                <FileText className="h-3 w-3 mr-2" />
-                                                {localSignedUrl ? 'Ver Contrato Assinado (Local)' : 'Baixar PDF Final'}
-                                            </a>
-                                        </Button>
-                                        {zapsignDoc.signature_report && (
-                                            <Button variant="outline" size="sm" className="h-8 text-[10px] font-medium border-green-300 dark:border-green-700 bg-white dark:bg-zinc-800" asChild title="Relatório de Assinaturas">
-                                                <a href={zapsignDoc.signature_report} target="_blank" rel="noopener noreferrer">
-                                                    Manifesto
-                                                </a>
-                                            </Button>
-                                        )}
-                                    </div>
-
-                                    {/* Documentos Extra (Individuais) */}
-                                    {localExtraDocs && localExtraDocs.length > 0 && (
-                                        <div className="mt-4 pt-3 border-t border-green-200 dark:border-green-800">
-                                            <h5 className="text-[10px] font-bold text-green-700 dark:text-green-400 uppercase mb-2 tracking-wider">
-                                                Arquivos Individuais do Envelope
-                                            </h5>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                {localExtraDocs.map((ex: any, i: number) => (
-                                                    <Button key={i} variant="ghost" size="sm" className="h-7 text-[10px] justify-start px-2 hover:bg-green-100 dark:hover:bg-green-900/40 text-green-800 dark:text-green-300" asChild>
-                                                        <a href={ex.link} target="_blank" rel="noopener noreferrer">
-                                                            <FileText className="h-3 w-3 mr-1.5 opacity-70" />
-                                                            <span className="truncate">{ex.nome}</span>
-                                                        </a>
-                                                    </Button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                             )}
-
-                             {sentDocs.length > 0 ? (
-                                <div className="space-y-4">
-                                    {sentDocs.map((doc, idx) => (
-                                        <div key={idx} className="group relative bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-                                        <div className="absolute top-0 left-0 w-1 h-full bg-slate-200 dark:bg-zinc-800 group-hover:bg-primary transition-colors duration-300"></div>
-                                        
-                                        <div className="p-4">
-                                            {/* Header do Card: Avatar + Nome + Status */}
-                                            <div className="flex items-start justify-between mb-3">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm border-2 ${
-                                                        doc.signer?.status === 'signed' ? 'bg-green-50 border-green-200 text-green-700' :
-                                                        doc.signer?.status === 'opened' ? 'bg-blue-50 border-blue-200 text-blue-700' :
-                                                        'bg-slate-50 border-slate-200 text-slate-600'
-                                                    }`}>
-                                                        {getInitials(doc.signer?.name || doc.name)}
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
-                                                            {doc.signer?.name || doc.name}
-                                                        </h4>
-                                                        <p className="text-[10px] text-muted-foreground">
-                                                            {doc.signer?.email || 'E-mail não informado'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <span className={`text-[9px] px-2 py-0.5 rounded-full uppercase font-black tracking-widest ${
-                                                    (doc.signer?.status === 'signed' || doc.signer?.status === 'completed') ? 'bg-green-600 text-white shadow-sm shadow-green-200' :
-                                                    doc.signer?.status === 'new' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
-                                                    doc.signer?.status === 'opened' ? 'bg-blue-600 text-white shadow-sm shadow-blue-200' :
-                                                    doc.signer?.status === 'rejected' ? 'bg-red-600 text-white shadow-sm shadow-red-200' :
-                                                    'bg-slate-100 text-slate-600 border border-slate-200'
-                                                }`}>
-                                                    {(doc.signer?.status === 'signed' || doc.signer?.status === 'completed') ? 'Assinado' :
-                                                     doc.signer?.status === 'new' ? 'Pendente' :
-                                                     doc.signer?.status === 'opened' ? 'Visualizado' :
-                                                     doc.signer?.status === 'rejected' ? 'Rejeitado' :
-                                                     doc.signer?.status || 'Pendente'}
-                                                </span>
-                                            </div>
-
-                                            {/* Métricas de Engajamento */}
-                                            <div className="flex flex-wrap items-center gap-y-1 gap-x-4 mb-4">
-                                                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 bg-slate-50 dark:bg-zinc-800/50 px-2 py-1 rounded-md">
-                                                    <MousePointerClick className="h-3 w-3 opacity-70" />
-                                                    <span className="font-medium">{doc.signer?.times_viewed || 0}</span> acessos
-                                                </div>
-                                                
-                                                {doc.signer?.last_view_at && (
-                                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500" title="Data da última visualização">
-                                                        <Eye className="h-3 w-3 opacity-70" />
-                                                        Lido: <span className="font-medium">{formatDateTime(doc.signer.last_view_at)}</span>
-                                                    </div>
-                                                )}
-                                                
-                                                {doc.signer?.signed_at && (
-                                                    <div className="flex items-center gap-1.5 text-[10px] text-green-600 font-bold bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-md" title="Finalizado em">
-                                                        <CheckCircle2 className="h-3 w-3" />
-                                                        {formatDateTime(doc.signer.signed_at)}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Ações (Link + Botões) */}
-                                            <div className="flex flex-col gap-2">
-                                                <div className="relative group/link">
-                                                    <Input 
-                                                        value={doc.url} 
-                                                        readOnly 
-                                                        className="h-8 pr-16 bg-slate-50/50 dark:bg-zinc-800/30 border-slate-200 dark:border-zinc-800 text-[10px] focus-visible:ring-offset-0 focus-visible:ring-1"
-                                                    />
-                                                    <div className="absolute right-1 top-1 flex items-center gap-1">
-                                                        <CopyButton text={doc.url} />
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="flex items-center gap-2">
-                                                    <Button variant="outline" size="sm" className="flex-1 h-8 text-[10px] font-bold uppercase tracking-wider" asChild>
-                                                        <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                                                            <ExternalLink className="h-3 w-3 mr-2" />
-                                                            Abrir Link
-                                                        </a>
-                                                    </Button>
-                                                    <Button 
-                                                        variant="outline" 
-                                                        size="sm" 
-                                                        className="h-8 px-3 border-green-200 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400"
-                                                        onClick={() => {
-                                                            const message = `Olá ${doc.signer?.name || doc.name}, segue o link para assinatura do seu contrato no Aeroclube: ${doc.url}`;
-                                                            const whatsappUrl = `https://api.whatsapp.com/send?phone=55${doc.signer?.phone_number || ''}&text=${encodeURIComponent(message)}`;
-                                                            window.open(whatsappUrl, '_blank');
-                                                        }}
-                                                        title="Enviar lembrete pelo WhatsApp"
-                                                    >
-                                                        <MessageCircle className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                  ))}
-                                </div>
-                            ) : (
-                                <p className="text-xs text-muted-foreground italic">Nenhum documento enviado ou links de assinatura disponíveis.</p>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* --- SEÇÃO DO RESPONSÁVEL FINANCEIRO --- */}
-                {(pdfsToSendResp.length > 0 || sentDocsResp.length > 0) && (
-                    <div className="mt-8 pt-6 border-t border-dashed">
-                        <div className="flex items-center gap-2 mb-4">
-                            <CheckCircle2 className="h-5 w-5 text-indigo-600" />
-                            <h3 className="text-lg font-bold tracking-tight text-indigo-900 dark:text-indigo-400">Responsável Financeiro</h3>
-                            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Contrato Dedicado</span>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Contratos (Lista)</Label>
+                      {editableContracts.map((contract, idx) => (
+                        <div key={idx} className="p-2 border rounded bg-background space-y-2">
+                          <Label className="text-[10px] text-muted-foreground">Contrato {idx + 1}</Label>
+                          <Input value={contract.nome_contrato || contract.nome_arquivo} onChange={(e) => handleContractChange(idx, 'nome_contrato', e.target.value)} placeholder="Nome do Contrato" className="h-7 text-xs mb-1" />
+                          <Input value={contract.url} onChange={(e) => handleContractChange(idx, 'url', e.target.value)} placeholder="URL do PDF" className="h-7 text-xs" />
                         </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* PDFs do Responsável */}
-                            <Card className="bg-indigo-50/30 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-900/30">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wide opacity-80">
-                                        <FileText className="h-4 w-4 text-indigo-600" />
-                                        Documentos (Responsável)
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <ul className="space-y-2">
-                                        {pdfsToSendResp.map((doc, idx) => (
-                                            <li key={idx} className="flex items-center justify-between text-xs p-2 bg-white dark:bg-zinc-900 rounded border border-indigo-100 dark:border-indigo-900/30">
-                                                <span className="truncate mr-2 font-medium" title={doc.name}>{doc.name}</span>
-                                                <Button variant="ghost" size="sm" asChild className="h-6 w-6 p-0 hover:bg-indigo-50">
-                                                    <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                                                        <ExternalLink className="h-3 w-3 text-indigo-600" />
-                                                    </a>
-                                                </Button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </CardContent>
-                            </Card>
-
-                            {/* ZapSign do Responsável */}
-                            <Card className="bg-indigo-50/30 dark:bg-indigo-900/10 border-indigo-100 dark:border-indigo-900/30">
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wide opacity-80">
-                                        <Zap className="h-4 w-4 text-indigo-600" />
-                                        Status ZapSign (Responsável)
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    {sentDocsResp.length > 0 ? (
-                                        <div className="space-y-3">
-                                            {sentDocsResp.map((doc, idx) => (
-                                                <div key={idx} className="bg-white dark:bg-zinc-900 p-3 rounded-lg border border-indigo-100 dark:border-indigo-900/30 shadow-sm">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 truncate pr-2 max-w-[60%]">{doc.signer?.name || 'Assinante'}</span>
-                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${
-                                                            doc.signer?.status === 'signed' ? 'bg-green-600 text-white' : 
-                                                            'bg-amber-500 text-white animate-pulse'
-                                                        }`}>
-                                                            {doc.signer?.status === 'signed' ? 'ASSINADO' : 'PENDENTE'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <Button variant="outline" size="sm" className="flex-1 h-7 text-[10px] border-indigo-200" asChild>
-                                                            <a href={doc.url} target="_blank" rel="noopener noreferrer">Abrir Link</a>
-                                                        </Button>
-                                                        <CopyButton text={doc.url} />
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            
-                                            {localSignedUrlResp && (
-                                                <Button variant="default" size="sm" className="w-full h-8 text-xs bg-green-600 hover:bg-green-700" asChild>
-                                                    <a href={localSignedUrlResp} target="_blank" rel="noopener noreferrer">
-                                                        <FileText className="h-3 w-3 mr-2" />
-                                                        Baixar Contrato Resp. Assinado
-                                                    </a>
-                                                </Button>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground italic flex items-center gap-2">
-                                            <AlertCircle className="h-3 w-3" />
-                                            Aguardando envio para ZapSign
-                                        </p>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </div>
+                      ))}
+                      {editableContracts.length === 0 && <p className="text-xs text-muted-foreground italic">Nenhum contrato na lista.</p>}
                     </div>
+                  </div>
                 )}
-            </CardContent>
+              </CardContent>
+            </Card>
+
+            {/* Monitoramento ZapSign (Aluno) */}
+            <Card className="bg-slate-50 dark:bg-slate-900 border-dashed">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-green-600" />
+                  Monitoramento de Assinatura (ZapSign)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Documento final assinado */}
+                {(localSignedUrl || zapsignDoc?.signed_file) && (
+                  <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-bold text-green-700 dark:text-green-400 flex items-center gap-2 uppercase tracking-wider">
+                        <Zap className={`h-3 w-3 ${zapsignDoc?.status === 'pending' ? 'animate-pulse' : ''}`} />
+                        Documento Final Assinado
+                      </h4>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${getDocBadgeClass(zapsignDoc?.status)}`}>
+                        {getDocStatusLabel(zapsignDoc?.status)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" className="flex-1 h-8 text-xs font-medium border-green-300 dark:border-green-700 bg-white dark:bg-zinc-800" asChild>
+                        <a href={localSignedUrl || zapsignDoc.signed_file} target="_blank" rel="noopener noreferrer">
+                          <FileText className="h-3 w-3 mr-2" />
+                          {localSignedUrl ? 'Ver Contrato Assinado (Local)' : 'Baixar PDF Final'}
+                        </a>
+                      </Button>
+                      {zapsignDoc?.signature_report && (
+                        <Button variant="outline" size="sm" className="h-8 text-[10px] font-medium border-green-300 dark:border-green-700 bg-white dark:bg-zinc-800" asChild>
+                          <a href={zapsignDoc.signature_report} target="_blank" rel="noopener noreferrer">Manifesto</a>
+                        </Button>
+                      )}
+                    </div>
+                    {/* Documentos extras individuais */}
+                    {localExtraDocs.length > 0 && (
+                      <div className="mt-4 pt-3 border-t border-green-200 dark:border-green-800">
+                        <h5 className="text-[10px] font-bold text-green-700 dark:text-green-400 uppercase mb-2 tracking-wider">Arquivos Individuais do Envelope</h5>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {localExtraDocs.map((ex, i) => (
+                            <Button key={i} variant="ghost" size="sm" className="h-7 text-[10px] justify-start px-2 hover:bg-green-100 dark:hover:bg-green-900/40 text-green-800 dark:text-green-300" asChild>
+                              <a href={ex.link} target="_blank" rel="noopener noreferrer">
+                                <FileText className="h-3 w-3 mr-1.5 opacity-70" />
+                                <span className="truncate">{ex.nome}</span>
+                              </a>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Cards de signatários */}
+                {sentDocs.length > 0 ? (
+                  <div className="space-y-4">
+                    {sentDocs.map((doc, idx) => (
+                      <SignerCard key={idx} signer={doc.signer} url={doc.url} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Nenhum documento enviado ou links de assinatura disponíveis.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Gerenciamento do Responsável Financeiro (somente admin) ────── */}
+      {isAdmin && <ResponsibleManagerCard {...responsavelManager} />}
+
+      {/* ── Seção do Responsável Financeiro (Status e Ações) ────────────── */}
+      {isAdmin && (
+        <Card className="border-indigo-200 dark:border-indigo-900 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <CardHeader className="bg-indigo-50/50 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-600 p-2 rounded-lg shadow-sm">
+                <CheckCircle2 className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-lg font-bold text-indigo-900 dark:text-indigo-400">Responsável Financeiro</CardTitle>
+                <CardDescription className="text-indigo-700/70 dark:text-indigo-300/50">Contratos e assinaturas do fiador</CardDescription>
+              </div>
+            </div>
+
+            <div className="flex gap-2 w-full md:w-auto">
+              {!isEditingResp ? (
+                <>
+                  <Button 
+                    variant="outline" size="sm" 
+                    onClick={handleRegenerateResp} 
+                    disabled={isRegeneratingResp || !responsavelManager.localResponsavel}
+                    className="flex-1 md:flex-none border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 h-9 transition-colors shadow-sm font-medium disabled:opacity-50"
+                    title={!responsavelManager.localResponsavel ? "Vincule um responsável primeiro" : ""}
+                  >
+                    {isRegeneratingResp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                    Gerar Contrato (Resp.)
+                  </Button>
+                  <Button
+                    variant={hasZapsignResp ? 'secondary' : 'default'} size="sm"
+                    onClick={handleSendZapsignResp} 
+                    disabled={isSendingZapsignResp || !responsavelManager.localResponsavel}
+                    className={hasZapsignResp 
+                      ? 'flex-1 md:flex-none h-9 border-indigo-200 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 shadow-sm font-medium' 
+                      : 'flex-1 md:flex-none h-9 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md font-medium'}
+                    title={!responsavelManager.localResponsavel ? "Vincule um responsável primeiro" : ""}
+                  >
+                    {isSendingZapsignResp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                    {hasZapsignResp ? 'Reenviar ZapSign (Resp.)' : 'Enviar ZapSign (Resp.)'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleStartEditingResp} className="flex-1 md:flex-none border-indigo-100 h-9">
+                    <Pencil className="h-4 w-4 mr-2" /> Editar Links
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" onClick={handleCancelEditingResp} disabled={isSaving}>
+                    <X className="h-4 w-4 mr-2" /> Cancelar
+                  </Button>
+                  <Button variant="default" size="sm" onClick={handleSaveResp} disabled={isSaving} className="bg-indigo-600 hover:bg-indigo-700">
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Salvar Links
+                  </Button>
+                </>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {!responsavelManager.localResponsavel && (
+              <Alert className="mb-6 bg-amber-50 border-amber-200 text-amber-800 py-3">
+                <Info className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-xs font-medium">
+                  Nenhum responsável financeiro vinculado a esta matrícula. Vincule um fiador acima para habilitar a geração de contratos e o envio para assinatura.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* PDFs do Responsável */}
+              <Card className="bg-slate-50/50 dark:bg-slate-900/50 border-dashed border-indigo-100 dark:border-indigo-900/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wide opacity-80">
+                    <FileText className="h-4 w-4 text-indigo-600" />Documentos (Resp.)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!isEditingResp ? (
+                    pdfsToSendResp.length > 0 ? (
+                      <ul className="space-y-2">
+                        {pdfsToSendResp.map((doc, idx) => (
+                          <li key={idx} className="flex items-center justify-between text-xs p-2.5 bg-white dark:bg-zinc-900 rounded-md border border-indigo-100 dark:border-indigo-900/30 shadow-sm">
+                            <span className="truncate mr-2 font-medium text-slate-700 dark:text-slate-300" title={doc.name}>{doc.name}</span>
+                            <Button variant="ghost" size="sm" asChild className="h-8 w-8 p-0 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-600">
+                              <a href={doc.url} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-6 text-center">
+                        <AlertCircle className="h-8 w-8 text-indigo-200 mb-2" />
+                        <p className="text-[11px] text-muted-foreground italic">Nenhum documento gerado.</p>
+                      </div>
+                    )
+                  ) : (
+                    <div className="space-y-4">
+                      {editableContractsResp.map((contract, idx) => (
+                        <div key={idx} className="p-2.5 border border-indigo-100 rounded-md bg-white space-y-2 shadow-sm">
+                          <Label className="text-[10px] text-indigo-600 font-bold uppercase">Contrato do Responsável {idx + 1}</Label>
+                          <Input 
+                            value={contract.nome_contrato || contract.name || ''} 
+                            onChange={(e) => handleContractChangeResp(idx, 'nome_contrato', e.target.value)} 
+                            placeholder="Nome do Contrato" className="h-8 text-xs border-indigo-50" 
+                          />
+                          <Input 
+                            value={contract.url_pdf || contract.url || ''} 
+                            onChange={(e) => handleContractChangeResp(idx, 'url_pdf', e.target.value)} 
+                            placeholder="URL do PDF" className="h-8 text-xs border-indigo-50 font-mono" 
+                          />
+                        </div>
+                      ))}
+                      {editableContractsResp.length === 0 && <p className="text-xs text-muted-foreground italic">Nenhum contrato para editar.</p>}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* ZapSign do Responsável */}
+              <Card className="bg-slate-50/50 dark:bg-slate-900/50 border-dashed border-indigo-100 dark:border-indigo-900/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wide opacity-80">
+                    <Zap className="h-4 w-4 text-indigo-600" />Monitoramento (Resp.)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {sentDocsResp.length > 0 ? (
+                    <div className="space-y-3">
+                      {sentDocsResp.map((doc, idx) => (
+                        <SignerCard key={idx} signer={doc.signer} url={doc.url} variant="indigo" />
+                      ))}
+                      {localSignedUrlResp && (
+                        <Button variant="default" size="sm" className="w-full h-9 text-xs bg-green-600 hover:bg-green-700 shadow-sm" asChild>
+                          <a href={localSignedUrlResp} target="_blank" rel="noopener noreferrer">
+                            <FileText className="h-3.5 w-3.5 mr-2" /> Baixar Contrato Assinado
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                      <Zap className="h-8 w-8 text-indigo-100 mb-2" />
+                      <p className="text-[11px] text-muted-foreground italic">Aguardando envio para ZapSign.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
         </Card>
+      )}
 
-        {/* Card Contratos HTML (Legado/Visualização) */}
-        {contracts.length > 0 ? (
-            <Card>
-            <CardHeader>
-                <CardTitle>Contratos da Proposta</CardTitle>
-                <CardDescription>
-                Listagem de documentos do curso: <span className="font-bold text-slate-900 dark:text-white uppercase px-1">{courseName || '—'}</span>
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Accordion type="single" collapsible className="w-full">
-                {contracts.map((contract, index) => {
-                    const contractId = contract.id || `contract-${index}`;
-                    const title = contract.nome || `Contrato ${index + 1}`;
-                    
+      {/* ── Contratos HTML (Legado/Visualização) ──────────────────────────── */}
+      {(contracts.aluno.length > 0 || contracts.responsavel.length > 0) ? (
+        <Card className="shadow-sm">
+          <CardHeader className="border-b bg-slate-50/50 dark:bg-zinc-900/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-bold flex items-center gap-2">
+                   <FileText className="h-5 w-5 text-blue-600" />
+                   Conteúdo dos Contratos
+                </CardTitle>
+                <CardDescription>Visualização prévia do conteúdo processado</CardDescription>
+              </div>
+              <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-tighter">
+                {courseName || '—'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-8">
+            
+            {/* Sessão: Aluno */}
+            {contracts.aluno.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b">
+                  <User className="h-4 w-4 text-blue-600" />
+                  <h4 className="text-sm font-bold uppercase tracking-tight text-slate-700 dark:text-slate-300">Contratos do Aluno</h4>
+                </div>
+                <Accordion type="single" collapsible className="w-full space-y-2 border-none">
+                  {contracts.aluno.map((contract: any, index: number) => {
+                    const contractId = contract.id || `aluno-${index}`;
                     return (
-                    <AccordionItem key={contractId} value={String(contractId)}>
-                        <AccordionTrigger className="hover:no-underline">
-                            <div className="flex items-center gap-2 text-left">
-                                <FileText className="h-4 w-4 text-blue-600" />
-                                <span>{title}</span>
-                            </div>
+                      <AccordionItem key={contractId} value={String(contractId)} className="border rounded-md px-4 bg-white dark:bg-zinc-950">
+                        <AccordionTrigger className="hover:no-underline py-3">
+                          <div className="flex items-center gap-3 text-left">
+                            <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">
+                              {index + 1}
+                            </span>
+                            <span className="font-medium text-sm text-slate-700 dark:text-slate-300">{contract.nome || `Contrato ${index + 1}`}</span>
+                          </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                        <div 
-                            className="prose prose-sm max-w-none p-4 bg-slate-50 rounded-md border text-slate-800 dark:bg-slate-900 dark:text-slate-200 overflow-x-auto"
+                          <div
+                            className="prose prose-sm max-w-none p-4 mt-2 bg-slate-50 rounded-md border text-slate-800 dark:bg-zinc-900 dark:text-slate-200 overflow-x-auto selection:bg-blue-100"
                             dangerouslySetInnerHTML={{ __html: contract.conteudo }}
-                        />
+                          />
                         </AccordionContent>
-                    </AccordionItem>
+                      </AccordionItem>
                     );
-                })}
+                  })}
                 </Accordion>
-            </CardContent>
-            </Card>
-        ) : (
-             <div className="text-center py-8 text-muted-foreground">
-                Nenhum contrato HTML disponível.
-            </div>
-        )}
+              </div>
+            )}
 
-        {/* Modal de Alerta: Necessário Aprovação */}
-        <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-amber-600">
-                        <Info className="h-5 w-5" />
-                        Aprovação da Proposta Necessária
-                    </DialogTitle>
-                    <DialogDescription className="py-2">
-                        Esta proposta ainda não foi aprovada pelo cliente. Para prosseguir com o envio dos contratos para o ZapSign, é obrigatório que a proposta comercial seja assinada/aprovada primeiro.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md border border-slate-200 dark:border-slate-800 space-y-3">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Link para Aprovação do Cliente:</p>
-                    {signatureLink ? (
-                        <div className="flex items-start gap-2">
-                             <div className="bg-white dark:bg-black p-2 rounded border flex-1 text-[11px] font-mono break-all text-slate-600 dark:text-slate-400 overflow-hidden leading-relaxed shadow-sm">
-                                {signatureLink}
-                            </div>
-                            <div className="pt-1">
-                                <CopyButton text={signatureLink} />
-                            </div>
-                        </div>
-                    ) : (
-                        <p className="text-sm text-amber-600 italic">Link de assinatura não disponível. Gere a proposta novamente.</p>
-                    )}
+            {/* Sessão: Responsável Financeiro */}
+            {contracts.responsavel.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-indigo-100">
+                  <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+                  <h4 className="text-sm font-bold uppercase tracking-tight text-indigo-900 dark:text-indigo-400">Contratos do Responsável Financeiro</h4>
                 </div>
+                <Accordion type="single" collapsible className="w-full space-y-2 border-none">
+                  {contracts.responsavel.map((contract: any, index: number) => {
+                    const contractId = contract.id || `resp-${index}`;
+                    return (
+                      <AccordionItem key={contractId} value={String(contractId)} className="border border-indigo-100 rounded-md px-4 bg-white dark:bg-zinc-950 shadow-sm">
+                        <AccordionTrigger className="hover:no-underline py-3">
+                          <div className="flex items-center gap-3 text-left">
+                            <span className="flex items-center justify-center h-5 w-5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold">
+                              {index + 1}
+                            </span>
+                            <span className="font-medium text-sm text-indigo-900 dark:text-indigo-400">{contract.nome || `Contrato Responsável ${index + 1}`}</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div
+                            className="prose prose-sm max-w-none p-4 mt-2 bg-indigo-50/30 rounded-md border border-indigo-100 text-slate-800 dark:bg-zinc-900 dark:text-slate-200 overflow-x-auto selection:bg-indigo-100"
+                            dangerouslySetInnerHTML={{ __html: contract.conteudo }}
+                          />
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+              </div>
+            )}
 
-                <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                    <Button variant="outline" className="w-full flex-1" onClick={() => setShowApprovalDialog(false)}>
-                        Fechar e Manter aqui
-                    </Button>
-                    <Button variant="default" className="w-full flex-1" onClick={() => {
-                        setShowApprovalDialog(false);
-                        onGoToOverview?.();
-                    }}>
-                        Ir para Visão Geral
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="text-center py-12 bg-slate-50 dark:bg-zinc-900/50 rounded-lg border border-dashed flex flex-col items-center justify-center gap-3">
+          <FileText className="h-10 w-10 text-slate-300" />
+          <p className="text-sm text-muted-foreground italic">Nenhum contrato disponível para visualização.</p>
+        </div>
+      )}
+
+      {/* ── Dialog: Aprovação necessária ──────────────────────────────────── */}
+      <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <Info className="h-5 w-5" /> Aprovação da Proposta Necessária
+            </DialogTitle>
+            <DialogDescription className="py-2">
+              Esta proposta ainda não foi aprovada pelo cliente. Para prosseguir com o envio dos contratos para o ZapSign, é obrigatório que a proposta comercial seja assinada/aprovada primeiro.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-md border border-slate-200 dark:border-slate-800 space-y-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Link para Aprovação do Cliente:</p>
+            {signatureLink ? (
+              <div className="flex items-start gap-2">
+                <div className="bg-white dark:bg-black p-2 rounded border flex-1 text-[11px] font-mono break-all text-slate-600 dark:text-slate-400 overflow-hidden leading-relaxed shadow-sm">
+                  {signatureLink}
+                </div>
+                <div className="pt-1">
+                  <CopyButton text={signatureLink} />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-amber-600 italic">Link de assinatura não disponível. Gere a proposta novamente.</p>
+            )}
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" className="w-full flex-1" onClick={() => setShowApprovalDialog(false)}>
+              Fechar e Manter aqui
+            </Button>
+            <Button variant="default" className="w-full flex-1" onClick={() => { setShowApprovalDialog(false); onGoToOverview?.(); }}>
+              Ir para Visão Geral
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
 
-function formatDateTime(isoString?: string) {
-    if (!isoString) return '';
-    try {
-        const date = new Date(isoString);
-        return date.toLocaleString('pt-BR', { 
-            day: '2-digit', 
-            month: '2-digit', 
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    } catch (e) {
-        return isoString;
-    }
-}
-
-function getInitials(name: string) {
-    if (!name) return '?';
-    const parts = name.trim().split(' ');
-    if (parts.length === 0) return '?';
-    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
+// ──────────────────────────────────────────────────────────────────────────────
+// Componente interno: CopyButton
+// ──────────────────────────────────────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
-    const { toast } = useToast();
-    const [copied, setCopied] = useState(false);
-
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(true);
-            toast({ title: "Copiado", description: "Link copiado para a área de transferência." });
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            toast({ title: "Erro", description: "Falha ao copiar link.", variant: "destructive" });
-        }
-    };
-
-    return (
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleCopy} title="Copiar link">
-            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-        </Button>
-    );
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast({ title: 'Copiado', description: 'Link copiado para a área de transferência.' });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: 'Erro', description: 'Falha ao copiar link.', variant: 'destructive' });
+    }
+  };
+  return (
+    <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleCopy} title="Copiar link">
+      {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+    </Button>
+  );
 }

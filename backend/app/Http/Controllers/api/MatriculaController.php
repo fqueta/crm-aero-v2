@@ -1215,10 +1215,16 @@ class MatriculaController extends Controller
                     } catch (\Exception $e) {
                        continue;
                     }
+
+                    // Se o contrato for do tipo 'responsavel', não deve aparecer para o aluno
+                    if (isset($cont->tipo) && $cont->tipo === 'responsavel') {
+                        continue;
+                    }
+
                     //Aplicar shortcodes
                     $cont->conteudo = Qlib::apply_shortcodes($cont->conteudo,$dm);
                     $conteudo = $cont->conteudo??'';
-                    $contratos[] = ['id'=>$id,'conteudo'=>$conteudo,'nome'=>$cont->nome,'slug'=>$cont->slug];
+                    $contratos[] = ['id'=>$id,'conteudo'=>$conteudo,'nome'=>$cont->nome,'slug'=>$cont->slug,'tipo'=>$cont->tipo??'geral'];
                 }
             }
             return $contratos;
@@ -1388,31 +1394,53 @@ class MatriculaController extends Controller
             if ($ids && count($ids)) {
                 $cc = new ContratoController();
 
-                // Mapeia os dados do responsável para os tokens comuns usados no contrato
-                // pt-BR: Substitui os dados do aluno pelos do responsável financeiro para gerar o contrato em seu nome.
-                $dm['aluno'] = $dm['responsavel']['name'] ?? '';
-                $dm['cpf_aluno'] = $dm['responsavel']['cpf'] ?? '';
-                $dm['estado_civil'] = $dm['responsavel']['estado_civil'] ?? '';
-                $dm['nacionalidade'] = $dm['responsavel']['nacionalidade'] ?? '';
-                $dm['data_nascimento'] = $dm['responsavel']['config']['nascimento'] ?? '';
+                // 1. Mapeia os dados do ALUNO (igual ao método contratos_periodos)
+                $dm['aluno'] = $dm['cliente_nome'] ?? '';
+                $dm['cpf_aluno'] = $dm['cliente']['cpf'] ?? '';
+                $dm['estado_civil'] = $dm['cliente']['estado_civil'] ?? '';
+                $dm['nacionalidade'] = $dm['cliente']['nacionalidade'] ?? '';
+                $dm['data_nascimento'] = $dm['cliente']['config']['nascimento'] ?? '';
                 if ($dm['data_nascimento']) {
                     $dm['data_nascimento'] = date('d/m/Y', strtotime($dm['data_nascimento']));
                 }
-                $dm['celular'] = $dm['responsavel']['config']['celular'] ?? '';
-                $dm['telefone'] = $dm['responsavel']['config']['telefone'] ?? '';
+                $dm['celular'] = $dm['cliente']['config']['celular'] ?? '';
+                $dm['telefone'] = $dm['cliente']['config']['telefone'] ?? '';
                 if ($dm['celular']) {
                     $dm['celular'] = Qlib::mask($dm['celular'], '(99) 99999-9999');
                 }
                 if ($dm['telefone']) {
                     $dm['telefone'] = Qlib::mask($dm['telefone'], '(99) 9999-9999');
                 }
+                $dm['identidade'] = $dm['cliente']['config']['rg'] ?? '';
+
+                // 2. Mapeia os dados do RESPONSÁVEL FINANCEIRO (com prefixo específico)
+                $dm['responsavel_nome'] = $dm['responsavel']['name'] ?? '';
+                $dm['responsavel_cpf'] = $dm['responsavel']['cpf'] ?? '';
+                $dm['responsavel_identidade'] = $dm['responsavel']['config']['rg'] ?? $dm['responsavel']['config']['identidade'] ?? '';
+                $dm['responsavel_estado_civil'] = $dm['responsavel']['estado_civil'] ?? '';
+                $dm['responsavel_nacionalidade'] = $dm['responsavel']['nacionalidade'] ?? '';
+                
+                $dnResp = $dm['responsavel']['config']['nascimento'] ?? '';
+                $dm['responsavel_data_nascimento'] = $dnResp ? date('d/m/Y', strtotime($dnResp)) : '';
+                
+                $dm['responsavel_celular'] = $dm['responsavel']['config']['celular'] ?? '';
+                if ($dm['responsavel_celular']) {
+                    $dm['responsavel_celular'] = Qlib::mask($dm['responsavel_celular'], '(99) 99999-9999');
+                }
+                
+                $dm['responsavel_email'] = $dm['responsavel']['email'] ?? '';
+                $dm['responsavel_profissao'] = $dm['responsavel']['config']['profissao'] ?? '';
+                $dm['responsavel_endereco'] = $dm['responsavel']['config']['endereco'] ?? '';
+                $dm['responsavel_numero'] = $dm['responsavel']['config']['numero'] ?? '';
+                $dm['responsavel_bairro'] = $dm['responsavel']['config']['bairro'] ?? '';
+                $dm['responsavel_cidade'] = $dm['responsavel']['config']['cidade'] ?? '';
+                $dm['responsavel_uf'] = $dm['responsavel']['config']['uf'] ?? '';
+                $dm['responsavel_cep'] = $dm['responsavel']['config']['cep'] ?? '';
 
                 $dm['curso'] = $dm['curso_nome'] ?? '';
                 $dm['nome_curso'] = $dm['curso'];
-                $dm['identidade'] = $dm['responsavel']['config']['rg'] ?? '';
 
-                // Adiciona tokens específicos do responsável caso o modelo os utilize
-                $dm['responsavel_nome'] = $dm['responsavel']['name'] ?? '';
+                // 3. Tokens legados e gerais
                 $dm['responsavel_cpf'] = $dm['responsavel']['cpf'] ?? '';
 
                 $testemunhas = $this->testemunhas();
@@ -1433,9 +1461,24 @@ class MatriculaController extends Controller
                     } catch (\Exception $e) {
                         continue;
                     }
+
+                    // Se estamos buscando contratos para o responsável, garantimos que sejam do tipo correspondente
+                    // Ou se for um fallback e o contrato for explicitamente do aluno, ignoramos
+                    if (isset($cont->tipo) && $cont->tipo === 'geral' && !empty($specificResponsibleIds)) {
+                        continue;
+                    }
+
+                    // Se for o fallback, mas houver outros contratos de responsável, filtramos os de aluno
+                    // para manter a lista limpa e focada no fiador
+                    if (isset($cont->tipo) && $cont->tipo === 'geral') {
+                         // opcional: decidir se o fallback de aluno deve aparecer. 
+                         // O usuário pediu para "respeitar o tipo", então se for 'geral', ignora se estivermos num contexto de responsável.
+                         continue;
+                    }
+
                     $cont->conteudo = Qlib::apply_shortcodes($cont->conteudo, $dm);
                     $conteudo = $cont->conteudo ?? '';
-                    $contratos[] = ['id' => $id_contrato, 'conteudo' => $conteudo, 'nome' => $cont->nome, 'slug' => $cont->slug];
+                    $contratos[] = ['id' => $id_contrato, 'conteudo' => $conteudo, 'nome' => $cont->nome, 'slug' => $cont->slug, 'tipo' => $cont->tipo ?? 'responsavel'];
                 }
             }
             return $contratos;
@@ -1635,14 +1678,23 @@ class MatriculaController extends Controller
             Matricula::where('id', $matricula_id)
                 ->where('id_cliente', $client_id)
                 ->firstOrFail();
-            $contratos = $this->contratos_periodos($matricula_id);
 
-            // Verifica erro vindo do metodo contratos_periodos
-            if (isset($contratos['error']) || $contratos instanceof \Illuminate\Http\JsonResponse) {
-                return $contratos;
+            $dm = $this->dm($matricula_id);
+            $aluno = $this->contratos_periodos($matricula_id, $dm);
+            $responsavel = [];
+
+            // Se houver responsável financeiro, busca os contratos dele também
+            if (isset($dm['id_responsavel']) && $dm['id_responsavel']) {
+                $resResp = $this->contratos_responsavel($matricula_id, $dm);
+                if (is_array($resResp) && !isset($resResp['error'])) {
+                    $responsavel = $resResp;
+                }
             }
 
-            return response()->json($contratos);
+            return response()->json([
+                'aluno' => is_array($aluno) ? $aluno : [],
+                'responsavel' => $responsavel
+            ]);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['error' => 'Matrícula não encontrada ou acesso negado'], 404);

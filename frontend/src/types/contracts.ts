@@ -56,4 +56,5 @@ export interface ContractsListParams {
   periodo?: string;
   ativo?: ContractStatus;
   search?: string;
+  tipo?: string;
 }

@@ -52,6 +52,10 @@ class ContratoController extends Controller
             $query->where('config->periodo', $request->input('periodo'));
         }
 
+        if ($request->filled('tipo')) {
+            $query->where('config->tipo', $request->input('tipo'));
+        }
+
         $query->orderBy('menu_order')->orderByDesc('ID');
 
         $paginator = $query->paginate($perPage);
@@ -84,6 +88,7 @@ class ContratoController extends Controller
             'conteudo' => 'nullable|string',
             'id_curso' => 'nullable|integer',
             'periodo' => 'nullable|string|max:150',
+            'tipo' => 'nullable|string|max:50',
             'ativo' => 'nullable|in:publish,draft'
         ]);
 
@@ -120,6 +125,7 @@ class ContratoController extends Controller
             'conteudo' => $post->post_content,
             'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
             'periodo' => $post->config['periodo'] ?? null,
+            'tipo' => $post->config['tipo'] ?? 'geral',
             'ativo' => $post->post_status,
         ], 201);
     }
@@ -217,6 +223,7 @@ class ContratoController extends Controller
             'conteudo' => 'nullable|string',
             'id_curso' => 'nullable|integer',
             'periodo' => 'nullable|string|max:150',
+            'tipo' => 'nullable|string|max:50',
             'ativo' => 'nullable|in:publish,draft'
         ]);
 

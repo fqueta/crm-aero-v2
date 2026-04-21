@@ -31,6 +31,7 @@ interface QuickResponsibleModalProps {
   onChange: (next: QuickResponsibleFormData) => void;
   onClose: () => void;
   onSubmit: () => void;
+  mode?: 'create' | 'edit';
 }
 
 const UF_OPTIONS = [
@@ -93,6 +94,7 @@ export default function QuickResponsibleModal({
   onChange,
   onClose,
   onSubmit,
+  mode = 'create',
 }: QuickResponsibleModalProps) {
   const { fetchCep, loading: cepLoading } = useCep();
 
@@ -136,7 +138,9 @@ export default function QuickResponsibleModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div className="w-full max-w-6xl bg-background rounded-lg shadow-lg border max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b">
-          <div className="font-medium text-2xl">Cadastro do Fiador</div>
+          <div className="font-medium text-2xl">
+            {mode === 'edit' ? 'Editar Responsável Financeiro' : 'Cadastro do Fiador'}
+          </div>
         </div>
 
         <div className="p-6 space-y-6">
@@ -314,7 +318,7 @@ export default function QuickResponsibleModal({
             Fechar
           </Button>
           <Button onClick={onSubmit} disabled={loading}>
-            {loading ? 'Salvando...' : 'Salvar'}
+            {loading ? 'Salvando...' : (mode === 'edit' ? 'Atualizar' : 'Salvar')}
           </Button>
         </div>
       </div>
