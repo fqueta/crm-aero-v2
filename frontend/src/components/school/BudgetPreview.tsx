@@ -32,6 +32,7 @@ export default function BudgetPreview({
   fuelExternalText,
   courseName,
   turmaName,
+  parcelamento,
 }: {
   title?: string;
   clientName: string;
@@ -52,6 +53,10 @@ export default function BudgetPreview({
   inscricaoMasked?: string;
   validityDays?: string | number;
   fuelExternalText?: string;
+  parcelamento?: {
+    linhas?: Array<{ parcela: string; valor: string; desconto: string }>;
+    texto_desconto?: string;
+  } | null;
 }) {
   // Helpers
   const moduleTitle = module?.titulo || (course?.titulo || course?.nome || '');

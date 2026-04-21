@@ -21,7 +21,7 @@ import { turmasService } from '@/services/turmasService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Save, CheckCircle, Pencil, Plus, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Pencil, Plus, Trash2, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import EditFooterBar from '@/components/ui/edit-footer-bar';
@@ -470,6 +470,14 @@ export default function ProposalsEdit() {
    * en-US: Stores the last installment_id used to hydrate rows/text, enabling rehydration on each change.
    */
   const [lastHydratedInstallmentId, setLastHydratedInstallmentId] = useState<string | null>(null);
+  
+  /**
+   * isCustomInstallmentModalOpen
+   * pt-BR: Controla visibilidade do modal de edição da estrutura de parcelas.
+   * en-US: Controls visibility of the installment structure editing modal.
+   */
+  const [isCustomInstallmentModalOpen, setIsCustomInstallmentModalOpen] = useState(false);
+  const [tempDiscountRows, setTempDiscountRows] = useState<Array<{ parcela: string; valor: string; desconto: string }>>([]);
 
   /**
    * clampActiveRowIndexOnRowsChange
@@ -2131,22 +2139,39 @@ export default function ProposalsEdit() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Tabela de Parcelamento</FormLabel>
-                          <Combobox
-                            options={installmentOptions}
-                            value={field.value}
-                            onValueChange={field.onChange}
-                            placeholder="Selecione a tabela de parcelamento"
-                            searchPlaceholder="Pesquisar tabela pelo nome..."
-                            emptyText={
-                              !selectedCourseId
-                                ? 'Selecione um curso primeiro'
-                                : installmentOptions.length === 0
-                                  ? 'Nenhuma tabela encontrada'
-                                  : 'Digite para filtrar'
-                            }
-                            disabled={!selectedCourseId || isLoadingInstallments}
-                            loading={isLoadingInstallments}
-                          />
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1">
+                              <Combobox
+                                options={installmentOptions}
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                placeholder="Selecione a tabela de parcelamento"
+                                searchPlaceholder="Pesquisar tabela pelo nome..."
+                                emptyText={
+                                  !selectedCourseId
+                                    ? 'Selecione um curso primeiro'
+                                    : installmentOptions.length === 0
+                                      ? 'Nenhuma tabela encontrada'
+                                      : 'Digite para filtrar'
+                                }
+                                disabled={!selectedCourseId || isLoadingInstallments}
+                                loading={isLoadingInstallments}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-10 w-10 rounded-xl shrink-0 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              onClick={() => {
+                                setTempDiscountRows([...discountRows]);
+                                setIsCustomInstallmentModalOpen(true);
+                              }}
+                              title="Editar/Personalizar Estrutura de Parcelas"
+                            >
+                              <Settings className="h-4 w-4 text-zinc-500" />
+                            </Button>
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -2459,6 +2484,151 @@ export default function ProposalsEdit() {
         onFinish={handleSaveFinish}
         disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
       />
+      {/* Modal de Personalização de Parcelamento */}
+      <Dialog open={isCustomInstallmentModalOpen} onOpenChange={setIsCustomInstallmentModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+              <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <TableIcon className="w-5 h-5 text-blue-600" />
+              </div>
+              Personalizar Estrutura de Parcelamento
+            </DialogTitle>
+            <DialogDescription>
+              Adicione ou remova opções de parcelas e ajuste os valores e descontos. Estes ajustes serão aplicados apenas nesta proposta.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 my-4">
+            <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <table className="w-full text-sm">
+                <thead className="bg-zinc-50 dark:bg-zinc-900 border-b">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-bold text-[10px] uppercase tracking-wider text-zinc-500">Parcelas</th>
+                    <th className="px-4 py-2.5 text-left font-bold text-[10px] uppercase tracking-wider text-zinc-500">Valor da Parcela</th>
+                    <th className="px-4 py-2.5 text-left font-bold text-[10px] uppercase tracking-wider text-zinc-500">Desconto</th>
+                    <th className="px-4 py-2.5 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {tempDiscountRows.map((row, idx) => (
+                    <tr key={`edit-parc-${idx}`} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                      <td className="p-2">
+                        <Input
+                          value={row.parcela}
+                          className="h-9 font-medium"
+                          placeholder="Ex: 12"
+                          onChange={(e) => {
+                            const next = [...tempDiscountRows];
+                            next[idx] = { ...next[idx], parcela: e.target.value };
+                            setTempDiscountRows(next);
+                          }}
+                        />
+                      </td>
+                      <td className="p-2">
+                        <div className="relative">
+                          <Input
+                            value={row.valor}
+                            className="h-9 pl-7 font-mono text-xs"
+                            placeholder="0,00"
+                            onChange={(e) => {
+                              const next = [...tempDiscountRows];
+                              next[idx] = { ...next[idx], valor: currencyApplyMask(e.target.value, 'pt-BR', 'BRL') };
+                              setTempDiscountRows(next);
+                            }}
+                          />
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-400">R$</span>
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <div className="relative">
+                          <Input
+                            value={row.desconto}
+                            className="h-9 pl-7 font-mono text-xs"
+                            placeholder="0,00"
+                            onChange={(e) => {
+                              const next = [...tempDiscountRows];
+                              next[idx] = { ...next[idx], desconto: currencyApplyMask(e.target.value, 'pt-BR', 'BRL') };
+                              setTempDiscountRows(next);
+                            }}
+                          />
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-400">R$</span>
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                          onClick={() => setTempDiscountRows((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {tempDiscountRows.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-zinc-400 text-xs italic">
+                        Nenhuma linha definida. Clique em "Adicionar Linha" para começar.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-lg h-9 border-zinc-200 dark:border-zinc-800"
+                onClick={() => setTempDiscountRows([...tempDiscountRows, { parcela: '', valor: '', desconto: '' }])}
+              >
+                <Plus className="w-4 h-4 mr-2" /> Adicionar Linha
+              </Button>
+              
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="rounded-lg h-9 text-zinc-500"
+                onClick={() => {
+                  const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+                  if (totalNum <= 0) return;
+                  
+                  const recalculated = tempDiscountRows.map(row => {
+                    const pNum = Number(row.parcela) || 0;
+                    if (pNum > 0) {
+                      return { ...row, valor: formatCurrencyBRL(totalNum / pNum) };
+                    }
+                    return row;
+                  });
+                  setTempDiscountRows(recalculated);
+                }}
+              >
+                <Layers className="w-4 h-4 mr-2" /> Recalcular pelo Total
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setIsCustomInstallmentModalOpen(false)}>Cancelar</Button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6"
+              onClick={() => {
+                setDiscountRows(tempDiscountRows);
+                setIsCustomInstallmentModalOpen(false);
+                toast({ title: 'Tabela personalizada', description: 'As novas opções de parcelamento foram aplicadas apenas a esta proposta.' });
+              }}
+            >
+              Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
