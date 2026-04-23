@@ -1694,6 +1694,10 @@ export default function ProposalsCreate() {
                 etapa1Discount={form.watch('etapa1_desconto') || 0}
                 inscricaoMasked={form.watch('inscricao') || ''}
                 fuelExternalText={form.watch('meta_texto_combustivel')}
+                parcelamento={{
+                  linhas: discountRows,
+                  texto_desconto: form.watch('meta_texto_desconto')
+                }}
               />
 
               <Dialog open={isFuelTextOpen} onOpenChange={setIsFuelTextOpen}>

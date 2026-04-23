@@ -2413,6 +2413,10 @@ export default function ProposalsEdit() {
                         etapa1Discount={form.watch('etapa1_desconto') || 0}
                         inscricaoMasked={form.watch('inscricao') || ''}
                         fuelExternalText={form.watch('meta_texto_combustivel')}
+                        parcelamento={{
+                          linhas: discountRows,
+                          texto_desconto: form.watch('meta_texto_desconto')
+                        }}
                       />
                     </CardContent>
                   )}
@@ -2507,69 +2511,81 @@ export default function ProposalsEdit() {
                     <th className="px-4 py-2.5 text-left font-bold text-[10px] uppercase tracking-wider text-zinc-500">Parcelas</th>
                     <th className="px-4 py-2.5 text-left font-bold text-[10px] uppercase tracking-wider text-zinc-500">Valor da Parcela</th>
                     <th className="px-4 py-2.5 text-left font-bold text-[10px] uppercase tracking-wider text-zinc-500">Desconto</th>
+                    <th className="px-4 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider text-zinc-500">Parcela com Desconto</th>
                     <th className="px-4 py-2.5 w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {tempDiscountRows.map((row, idx) => (
-                    <tr key={`edit-parc-${idx}`} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
-                      <td className="p-2">
-                        <Input
-                          value={row.parcela}
-                          className="h-9 font-medium"
-                          placeholder="Ex: 12"
-                          onChange={(e) => {
-                            const next = [...tempDiscountRows];
-                            next[idx] = { ...next[idx], parcela: e.target.value };
-                            setTempDiscountRows(next);
-                          }}
-                        />
-                      </td>
-                      <td className="p-2">
-                        <div className="relative">
+                  {tempDiscountRows.map((row, idx) => {
+                    const vNum = currencyRemoveMaskToNumber(String(row.valor || '0')) || 0;
+                    const dNum = currencyRemoveMaskToNumber(String(row.desconto || '0')) || 0;
+                    const net = Math.max(vNum - dNum, 0);
+
+                    return (
+                      <tr key={`edit-parc-${idx}`} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                        <td className="p-2">
                           <Input
-                            value={row.valor}
-                            className="h-9 pl-7 font-mono text-xs"
-                            placeholder="0,00"
+                            value={row.parcela}
+                            className="h-9 font-medium"
+                            placeholder="Ex: 12"
                             onChange={(e) => {
                               const next = [...tempDiscountRows];
-                              next[idx] = { ...next[idx], valor: currencyApplyMask(e.target.value, 'pt-BR', 'BRL') };
+                              next[idx] = { ...next[idx], parcela: e.target.value };
                               setTempDiscountRows(next);
                             }}
                           />
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-400">R$</span>
-                        </div>
-                      </td>
-                      <td className="p-2">
-                        <div className="relative">
-                          <Input
-                            value={row.desconto}
-                            className="h-9 pl-7 font-mono text-xs"
-                            placeholder="0,00"
-                            onChange={(e) => {
-                              const next = [...tempDiscountRows];
-                              next[idx] = { ...next[idx], desconto: currencyApplyMask(e.target.value, 'pt-BR', 'BRL') };
-                              setTempDiscountRows(next);
-                            }}
-                          />
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-400">R$</span>
-                        </div>
-                      </td>
-                      <td className="p-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                          onClick={() => setTempDiscountRows((prev) => prev.filter((_, i) => i !== idx))}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="p-2">
+                          <div className="relative">
+                            <Input
+                              value={row.valor}
+                              className="h-9 pl-7 font-mono text-xs"
+                              placeholder="0,00"
+                              onChange={(e) => {
+                                const next = [...tempDiscountRows];
+                                next[idx] = { ...next[idx], valor: currencyApplyMask(e.target.value, 'pt-BR', 'BRL') };
+                                setTempDiscountRows(next);
+                              }}
+                            />
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-400">R$</span>
+                          </div>
+                        </td>
+                        <td className="p-2">
+                          <div className="relative">
+                            <Input
+                              value={row.desconto}
+                              className="h-9 pl-7 font-mono text-xs"
+                              placeholder="0,00"
+                              onChange={(e) => {
+                                const next = [...tempDiscountRows];
+                                next[idx] = { ...next[idx], desconto: currencyApplyMask(e.target.value, 'pt-BR', 'BRL') };
+                                setTempDiscountRows(next);
+                              }}
+                            />
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-400">R$</span>
+                          </div>
+                        </td>
+                        <td className="p-2 text-right">
+                           <div className="font-mono text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded border border-green-100 dark:border-green-800/50">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(net)}
+                           </div>
+                        </td>
+                        <td className="p-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                            onClick={() => setTempDiscountRows((prev) => prev.filter((_, i) => i !== idx))}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {tempDiscountRows.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="p-8 text-center text-zinc-400 text-xs italic">
+                      <td colSpan={5} className="p-8 text-center text-zinc-400 text-xs italic">
                         Nenhuma linha definida. Clique em "Adicionar Linha" para começar.
                       </td>
                     </tr>

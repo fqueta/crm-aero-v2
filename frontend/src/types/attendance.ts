@@ -89,3 +89,37 @@ export interface CreateClientAttendanceInput {
    */
   stage_id?: string;
 }
+
+/**
+ * ClientAttendanceRecord
+ * pt-BR: Registro de atendimento persistido pela API do cliente.
+ * en-US: Attendance record persisted by the client API.
+ */
+export interface ClientAttendanceRecord {
+  id: string | number;
+  client_id: string;
+  attended_by?: string | number | null;
+  channel?: string | null;
+  observation?: string | null;
+  metadata?: {
+    duration?: number;
+    tags?: string[];
+    [key: string]: any;
+  } | null;
+  attendant?: {
+    id?: string | number;
+    name?: string | null;
+  } | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * ClientAttendancesListParams
+ * pt-BR: Filtros aceitos para listagem de atendimentos de um cliente.
+ * en-US: Accepted filters for listing a client's attendances.
+ */
+export interface ClientAttendancesListParams {
+  per_page?: number;
+  channel?: string;
+}

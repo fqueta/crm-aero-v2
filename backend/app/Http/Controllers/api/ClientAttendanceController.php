@@ -42,7 +42,8 @@ class ClientAttendanceController extends Controller
         $client = Client::findOrFail($clientId);
 
         $perPage = (int) $request->input('per_page', 10);
-        $query = ClientAttendance::where('client_id', $client->id)
+        $query = ClientAttendance::with(['attendant:id,name'])
+            ->where('client_id', $client->id)
             ->orderBy('created_at', 'desc');
 
         if ($request->filled('channel')) {
@@ -105,6 +106,7 @@ class ClientAttendanceController extends Controller
             'observation' => $validated['observation'] ?? null,
             'metadata' => $validated['metadata'] ?? null,
         ]);
+        $attendance->load(['attendant:id,name']);
 
         // Atualiza estágio do cliente se solicitado na requisição
         $stageUpdate = false;

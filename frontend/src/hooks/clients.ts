@@ -1,8 +1,9 @@
 import { ClientRecord, CreateClientInput, UpdateClientInput, ClientsListParams } from '@/types/clients';
 import { clientsService } from '@/services/clientsService';
 import { useGenericApi } from './useGenericApi';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { ClientAttendancesListParams, ClientAttendanceRecord, CreateClientAttendanceInput } from '@/types/attendance';
 
 /**
  * Função para obter os hooks de clientes
@@ -51,6 +52,42 @@ export function useDeleteClient(mutationOptions?: any) {
 
 // Exporta função para uso avançado
 export const useClientsApi = getClientsApi;
+
+/**
+ * useClientAttendances
+ * pt-BR: Lista os atendimentos registrados para um cliente específico.
+ * en-US: Lists attendance records registered for a specific client.
+ */
+export function useClientAttendances(clientId: string, params?: ClientAttendancesListParams, queryOptions?: any) {
+  return useQuery({
+    queryKey: ['clients', 'attendances', clientId, params],
+    queryFn: () => clientsService.listAttendances(clientId, params),
+    enabled: !!clientId,
+    ...queryOptions,
+  });
+}
+
+/**
+ * useRegisterClientAttendance
+ * pt-BR: Registra um novo atendimento para o cliente e invalida a listagem relacionada.
+ * en-US: Registers a new client attendance and invalidates the related list.
+ */
+export function useRegisterClientAttendance(mutationOptions?: any) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ clientId, data }: { clientId: string; data: CreateClientAttendanceInput }) =>
+      clientsService.registerAttendance(clientId, data),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['clients', 'attendances', variables.clientId] });
+      queryClient.invalidateQueries({ queryKey: ['clients', 'detail', variables.clientId] });
+      mutationOptions?.onSuccess?.(data, variables, undefined);
+    },
+    onError: (error: Error, variables: { clientId: string; data: CreateClientAttendanceInput }) => {
+      mutationOptions?.onError?.(error, variables, undefined);
+    },
+  });
+}
 
 /**
  * Hook para restaurar cliente (soft delete)

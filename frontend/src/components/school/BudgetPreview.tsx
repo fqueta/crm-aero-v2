@@ -439,6 +439,65 @@ export default function BudgetPreview({
                         O custo estimado de combustível para esta proposta é variável. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento.
                     </p>
                </div>
+ 
+               {/* Condições de Parcelamento (Se disponível) */}
+               {parcelamento && Array.isArray(parcelamento.linhas) && parcelamento.linhas.length > 0 && (
+                 <div className="mt-8 space-y-4">
+                   <div className="flex items-center gap-2 mb-4">
+                     <div className="h-6 w-1 bg-[#003366] rounded-full" />
+                     <h3 className="text-sm font-bold uppercase tracking-wider text-[#003366]">Opções de Parcelamento</h3>
+                   </div>
+                   
+                   <Table className="border rounded-md bg-white shadow-sm overflow-hidden">
+                     <TableHeader>
+                       <TableRow className="bg-muted/50">
+                         <TableHead className="font-bold text-black text-center pr-0 uppercase text-[10px]">Parcelamento</TableHead>
+                         <TableHead className="font-bold text-black text-center uppercase text-[10px]">Valor da Parcela</TableHead>
+                         <TableHead className="font-bold text-black text-center uppercase text-[10px]">Desconto Pontualidade</TableHead>
+                         <TableHead className="font-bold text-black text-right uppercase text-[10px]">Parcela Líquida</TableHead>
+                       </TableRow>
+                     </TableHeader>
+                     <TableBody>
+                       {parcelamento.linhas.map((row, idx) => {
+                         const valorNum = parseToNumber(row.valor);
+                         const descontoNum = parseToNumber(row.desconto);
+                         const liquido = Math.max(valorNum - descontoNum, 0);
+                         
+                         return (
+                           <TableRow key={`budget-parc-${idx}`} className="hover:bg-zinc-50/50">
+                             <TableCell className="text-center font-medium text-blue-700 bg-blue-50/30 whitespace-nowrap">{row.parcela}x</TableCell>
+                             <TableCell className="text-center font-mono text-xs">{row.valor}</TableCell>
+                             <TableCell className="text-center font-mono text-xs text-red-600">{row.desconto}</TableCell>
+                             <TableCell className="text-right font-bold text-green-700">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(liquido)}</TableCell>
+                           </TableRow>
+                         );
+                       })}
+                     </TableBody>
+                   </Table>
+                   
+                   {parcelamento.texto_desconto && (
+                     <div className="p-4 rounded-xl border border-dashed border-blue-200 bg-blue-50/30">
+                       <div 
+                         className="text-xs text-blue-800 leading-relaxed space-y-1"
+                         dangerouslySetInnerHTML={{ __html: (() => {
+                            const firstRow = parcelamento.linhas?.[0];
+                            if (!firstRow) return parcelamento.texto_desconto;
+                            const vNum = parseToNumber(firstRow.valor);
+                            const dNum = parseToNumber(firstRow.desconto);
+                            const liqNum = Math.max(vNum - dNum, 0);
+                            const liqStr = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(liqNum);
+                            return String(parcelamento.texto_desconto)
+                              .replace(/\{total_parcelas\}/gi, String(firstRow.parcela || ''))
+                              .replace(/\{valor_parcela\}/gi, formatValue(vNum))
+                              .replace(/\{desconto_pontualidade\}/gi, formatValue(dNum))
+                              .replace(/\{parcela_com_desconto\}/gi, liqStr);
+                          })()
+ }} 
+                       />
+                     </div>
+                   )}
+                 </div>
+               )}
              </div>
           </>
         ) : (

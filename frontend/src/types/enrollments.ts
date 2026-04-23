@@ -33,7 +33,7 @@ export interface EnrollmentRecord {
    * pt-BR: Status textual da matrícula.
    * en-US: Textual enrollment status.
    */
-  status?: string;
+  status?: 'a' | 'g' | 'p' | string;
   /**
    * Amount in BRL
    * pt-BR: Valor em BRL (se disponível).
@@ -76,6 +76,7 @@ export interface CreateEnrollmentInput {
   student_id?: string;
   course_id?: string;
   amount_brl?: number;
+  status?: 'a' | 'g' | 'p';
   config?: { funnelId?: string | number | null; stage_id?: string | number | null; [key: string]: any };
 }
 

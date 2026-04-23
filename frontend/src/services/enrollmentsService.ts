@@ -75,6 +75,23 @@ class EnrollmentsService extends BaseApiService {
   }
 
   /**
+   * updateEnrollmentStatus
+   * pt-BR: Atualiza rapidamente o status da matrícula.
+   * en-US: Quickly updates the enrollment status.
+   */
+  async updateEnrollmentStatus(
+    id: string,
+    payload: {
+      status: 'a' | 'g' | 'p';
+      loss_date?: string;
+      loss_reason?: string;
+      loss_observation?: string;
+    }
+  ): Promise<EnrollmentRecord> {
+    return this.patch<EnrollmentRecord>(`/matriculas/${id}/status`, payload);
+  }
+
+  /**
    * simulateFuel
    * pt-BR: Simula o custo de combustível baseado nos módulos.
    * en-US: Simulates fuel cost based on modules.

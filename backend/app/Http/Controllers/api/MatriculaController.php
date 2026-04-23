@@ -1419,15 +1419,15 @@ class MatriculaController extends Controller
                 $dm['responsavel_identidade'] = $dm['responsavel']['config']['rg'] ?? $dm['responsavel']['config']['identidade'] ?? '';
                 $dm['responsavel_estado_civil'] = $dm['responsavel']['estado_civil'] ?? '';
                 $dm['responsavel_nacionalidade'] = $dm['responsavel']['nacionalidade'] ?? '';
-                
+
                 $dnResp = $dm['responsavel']['config']['nascimento'] ?? '';
                 $dm['responsavel_data_nascimento'] = $dnResp ? date('d/m/Y', strtotime($dnResp)) : '';
-                
+
                 $dm['responsavel_celular'] = $dm['responsavel']['config']['celular'] ?? '';
                 if ($dm['responsavel_celular']) {
                     $dm['responsavel_celular'] = Qlib::mask($dm['responsavel_celular'], '(99) 99999-9999');
                 }
-                
+
                 $dm['responsavel_email'] = $dm['responsavel']['email'] ?? '';
                 $dm['responsavel_profissao'] = $dm['responsavel']['config']['profissao'] ?? '';
                 $dm['responsavel_endereco'] = $dm['responsavel']['config']['endereco'] ?? '';
@@ -1471,7 +1471,7 @@ class MatriculaController extends Controller
                     // Se for o fallback, mas houver outros contratos de responsável, filtramos os de aluno
                     // para manter a lista limpa e focada no fiador
                     if (isset($cont->tipo) && $cont->tipo === 'geral') {
-                         // opcional: decidir se o fallback de aluno deve aparecer. 
+                         // opcional: decidir se o fallback de aluno deve aparecer.
                          // O usuário pediu para "respeitar o tipo", então se for 'geral', ignora se estivermos num contexto de responsável.
                          continue;
                     }
@@ -1862,6 +1862,116 @@ class MatriculaController extends Controller
         $out = $this->mapOutputFields($matricula->toArray());
         return response()->json($out);
     }
+
+    /**
+     * Atualiza rapidamente o status da matrícula.
+     * EN: Quickly updates the enrollment status.
+     */
+    public function updateStatusRapid(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+        if (!$this->permissionService->isHasPermission('edit')) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+
+        $matricula = Matricula::find($id);
+        if (!$matricula) {
+            return response()->json(['error' => 'Matrícula não encontrada'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'status' => ['required', 'string', Rule::in(['a', 'g', 'p'])],
+            'loss_date' => ['nullable', 'date'],
+            'loss_reason' => ['nullable', 'string', 'max:255'],
+            'loss_observation' => ['nullable', 'string'],
+        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+        $oldStatus = (string) ($matricula->status ?? 'a');
+        $newStatus = (string) $validated['status'];
+        $lossDate = isset($validated['loss_date']) ? (string) $validated['loss_date'] : null;
+        $lossReason = isset($validated['loss_reason']) ? trim((string) $validated['loss_reason']) : null;
+        $lossObservation = isset($validated['loss_observation']) ? trim((string) $validated['loss_observation']) : null;
+
+        if ($newStatus === 'p') {
+            $lossValidator = Validator::make($request->all(), [
+                'loss_date' => ['required', 'date'],
+                'loss_reason' => ['required', 'string', 'max:255'],
+                'loss_observation' => ['nullable', 'string'],
+            ]);
+
+            if ($lossValidator->fails()) {
+                return response()->json([
+                    'message' => 'Erro de validação',
+                    'errors' => $lossValidator->errors(),
+                ], 422);
+            }
+        }
+
+        if ($oldStatus !== $newStatus) {
+            $matricula->status = $newStatus;
+            $matricula->save();
+
+            try {
+                $payload = [
+                    'from_status' => $oldStatus,
+                    'from_status_label' => $this->getMatriculaStatusLabel($oldStatus),
+                    'to_status' => $newStatus,
+                    'to_status_label' => $this->getMatriculaStatusLabel($newStatus),
+                ];
+
+                if ($newStatus === 'p') {
+                    $payload['loss_date'] = $lossDate;
+                    $payload['loss_reason'] = $lossReason;
+                    $payload['loss_observation'] = $lossObservation;
+                }
+
+                EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => (string) $matricula->id,
+                    'action' => 'status_changed',
+                    'description' => 'Status da matrícula alterado',
+                    'payload' => $payload,
+                    'actor_id' => (string) $user->id,
+                    'ip_address' => $request->ip(),
+                ]);
+            } catch (\Throwable $e) {}
+        }
+
+        if ($newStatus === 'p') {
+            $this->persistMatriculaMeta($matricula->id, [
+                'data_perda' => $lossDate,
+                'motivo_perda' => $lossReason,
+                'observacao_perda' => $lossObservation,
+            ]);
+        }
+
+        $out = $this->mapOutputFields($matricula->toArray());
+        $out['meta'] = $this->getAllMatriculaMeta($matricula->id);
+        return response()->json($out);
+    }
+
+    /**
+     * Retorna o rótulo legível do status da matrícula.
+     * EN: Returns the readable label for an enrollment status.
+     */
+    private function getMatriculaStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'g' => 'Ganho',
+            'p' => 'Perda',
+            default => 'Atendimento',
+        };
+    }
     /**
      * Metodo para enviar o termo para zapsing
      * @params $tm $token da matricula
@@ -2120,7 +2230,7 @@ class MatriculaController extends Controller
             //conseguir o token do contrato principal
             $campo_envelope = $tk_periodo ? 'enviar_envelope_'.$tk_periodo : 'enviar_envelope';
             $denv_p = Qlib::get_matriculameta($id, $campo_envelope);
-            
+
             $ret['exec'] = false;
             $arr = [];
             if($denv_p){
@@ -2305,7 +2415,7 @@ class MatriculaController extends Controller
     public function baixar_arquivo($id_matricula,$url,$nome_arquivo=false,$slug=false,$pasta=false){
         $raw_id = $id_matricula;
         $id_matricula = trim((string)$id_matricula);
-        
+
         // Log de depuração para entender o que está chegando
         \App\Models\EventLog::create([
             'entity_type' => 'matricula',
@@ -2319,7 +2429,7 @@ class MatriculaController extends Controller
         $nome_arquivo = $nome_arquivo?$nome_arquivo:'assinado';
         $nome_arquivo = Qlib::createSlug($nome_arquivo);
         $disk = 'public';
-        
+
         // Caminho físico (sempre o mesmo no storage)
         $caminhoRelativo = 'pdfs/termos/' . ($id_matricula ?: '0');
         if($pasta){

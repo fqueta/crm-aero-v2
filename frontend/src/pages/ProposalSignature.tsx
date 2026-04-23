@@ -411,6 +411,7 @@ export default function ProposalSignature() {
                   fuelExternalText={(proposal as any).meta?.texto_combustivel}
                   validityDays={(proposal as any).validade}
                   etapa1Discount={(proposal as any).desconto}
+                  parcelamento={(proposal as any).orc?.parcelamento}
                 />
               </CardContent>
             </Card>

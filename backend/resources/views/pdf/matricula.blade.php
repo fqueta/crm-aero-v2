@@ -540,49 +540,94 @@
                                 @endphp
                                 {!! $textoPreview !!}
                             </div>
-                            <div class="footer">Gerado em {{ $generatedAt->format('d/m/Y H:i') }}
-                            </div>
+                            <div class="footer">Gerado em {{ $generatedAt->format('d/m/Y H:i') }}</div>
                     </div>
                 @elseif($idx === 2)
                     <!-- PT/EN: Remaining pages from controller -->
-                    <div style="margin-top: 15mm;">
+                    <div style="margin-top: 15mm; page-break-inside: avoid; break-inside: avoid;">
                         @if(!empty($obsProposta))
-                                    {!! $obsProposta !!}
+                            <div class="content-html" style="margin-bottom: 20px;">
+                                {!! $obsProposta !!}
+                            </div>
                         @else
                             @php
                                 // Tenta pegar a validade do meta da matrícula, senão 7 dias padrão
                                 $diasValidade = isset($meta['validade']) && is_numeric($meta['validade']) ? (int)$meta['validade'] : 7;
                             @endphp
                              <p style="font-weight: 700; margin: 0 0 4px;">Observações Importantes</p>
-                             <p style="margin: 0 0 4px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::convert_number_to_words($diasValidade) }}) dias. O valor apresentado poderá ser pago:</p>
-                             <ul style="margin: 0 0 4px; padding-left: 16px;">
-                                 <li>À vista, <strong>com desconto</strong> (já aplicado se houver);</li>
-                                 {{-- <li>Parcelado em até 12x no cartão de crédito.</li> --}}
-                             </ul>
-                         @endif
-                         {{-- <div class="section-title" style="page-break-inside: avoid; break-inside: avoid; margin-top: 30px;">Parcelamento</div> --}}
-                        <div class="chips" style="page-break-inside: avoid; break-inside: avoid;">
-                            @php
-                                $orcArr = is_array($orc) ? $orc : (is_string($orc) ? (json_decode($orc, true) ?: []) : []);
-                                $linhas = [];
-                                if (isset($orcArr['parcelamento']) && is_array($orcArr['parcelamento'])) {
-                                    $linhasRaw = $orcArr['parcelamento']['linhas'] ?? [];
-                                    $linhas = is_array($linhasRaw) ? $linhasRaw : [];
+                             <p style="margin: 0 0 10px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::convert_number_to_words($diasValidade) }}) dias. O valor apresentado poderá ser pago:</p>
+                        @endif
+
+                        @php
+                            $orcArr = is_array($orc) ? $orc : (is_string($orc) ? (json_decode($orc, true) ?: []) : []);
+                            $linhas = [];
+                            if (isset($orcArr['parcelamento']) && is_array($orcArr['parcelamento'])) {
+                                $linhasRaw = $orcArr['parcelamento']['linhas'] ?? [];
+                                $linhas = is_array($linhasRaw) ? $linhasRaw : [];
+                            }
+                        @endphp
+
+                        @if(!empty($linhas))
+                            <div class="section-title" style="color: #0f2a5b; border-left: 4px solid #0f2a5b; padding-left: 10px; margin-bottom: 15px;">OPÇÕES DE PARCELAMENTO</div>
+                            
+                            <table class="styled-table" style="margin-bottom: 20px;">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: center;">PARCELAMENTO</th>
+                                        <th style="text-align: right;">VALOR DA PARCELA</th>
+                                        <th style="text-align: right;">DESCONTO PONTUALIDADE</th>
+                                        <th style="text-align: right;">PARCELA LÍQUIDA</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($linhas as $linha)
+                                        @php
+                                            $vParc = (float)($linha['valor'] ?? 0);
+                                            $dParc = (float)($linha['desconto'] ?? 0);
+                                            $vLiq = max($vParc - $dParc, 0);
+                                        @endphp
+                                        <tr>
+                                            <td style="text-align: center; font-weight: bold; color: #4472c4;">{{ $linha['parcelas'] ?? '-' }}</td>
+                                            <td style="text-align: right;">{{ fmt_valor($vParc) }}</td>
+                                            <td style="text-align: right; color: #ef4444;">{{ $dParc > 0 ? fmt_valor($dParc) : '-' }}</td>
+                                            <td style="text-align: right; font-weight: bold; color: #00b050;">{{ fmt_valor($vLiq) }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        @endif
+
+                        @php
+                            $textoPreview = '';
+                            if (!empty($orcArr) && isset($orcArr['parcelamento']) && is_array($orcArr['parcelamento'])) {
+                                $textoRaw = $orcArr['parcelamento']['texto_desconto'] ?? ($orcArr['parcelamento']['texto_preview_html'] ?? '');
+                                
+                                $firstRow = $linhas[0] ?? null;
+                                if ($firstRow) {
+                                    $vStr = isset($firstRow['valor']) ? fmt_valor($firstRow['valor']) : 'R$ 0,00';
+                                    $dStr = isset($firstRow['desconto']) ? fmt_valor($firstRow['desconto']) : 'R$ 0,00';
+                                    $vNum = (float)($firstRow['valor'] ?? 0);
+                                    $dNum = (float)($firstRow['desconto'] ?? 0);
+                                    $liqStr = fmt_valor(max($vNum - $dNum, 0));
+                                    $totalParc = $firstRow['parcelas'] ?? ($firstRow['parcela'] ?? '');
+
+                                    $textoPreview = str_replace(
+                                        ['{total_parcelas}', '{valor_parcela}', '{desconto_pontualidade}', '{parcela_com_desconto}'],
+                                        [$totalParc, $vStr, $dStr, $liqStr],
+                                        $textoRaw
+                                    );
+                                } else {
+                                    $textoPreview = $textoRaw;
                                 }
-                            @endphp
-                            @if(!empty($linhas))
-                                @foreach($linhas as $linha)
-                                    <span class="chip">Total de Parcelas: {{ $linha['parcelas'] ?? '-' }}</span>
-                                    <span class="chip">Valor da Parcela: R$ {{ isset($linha['valor']) ? number_format((float)$linha['valor'], 2, ',', '.') : '-' }}</span>
-                                    @if(isset($linha['desconto']))
-                                        <span class="chip">Desconto: R$ {{ number_format((float)$linha['desconto'], 2, ',', '.') }}</span>
-                                        <span class="chip">Parcela c/ Desconto: R$ {{ number_format(((float)$linha['valor']) - ((float)$linha['desconto']), 2, ',', '.') }}</span>
-                                    @endif
-                                @endforeach
-                            @else
-                                <span class="chip">Sem dados de parcelamento</span>
-                            @endif
-                        </div>
+                            }
+                        @endphp
+                        @if(!empty($textoPreview))
+                            <div class="content-html" style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-top: 20px;">
+                                {!! $textoPreview !!}
+                            </div>
+                        @endif
+
+                        <div class="footer" style="margin-top: 30px;">Gerado em {{ $generatedAt->format('d/m/Y H:i') }}</div>
                     </div>
                 @else
                     <!-- PT/EN: Remaining pages from controller -->

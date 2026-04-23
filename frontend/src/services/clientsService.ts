@@ -6,7 +6,7 @@ import {
 } from '@/types/clients';
 import { PaginatedResponse, ApiDeleteResponse, ApiResponse } from '@/types/index';
 import { BaseApiService } from './BaseApiService';
-import { CreateClientAttendanceInput } from '@/types/attendance';
+import { CreateClientAttendanceInput, ClientAttendanceRecord, ClientAttendancesListParams } from '@/types/attendance';
 
 /**
  * Serviço para gerenciamento de clientes
@@ -111,6 +111,16 @@ class ClientsService extends BaseApiService {
    */
   async registerAttendance(clientId: string, payload: CreateClientAttendanceInput): Promise<any> {
     return this.post<any>(`/clients/${clientId}/attendances`, payload);
+  }
+
+  /**
+   * listAttendances
+   * pt-BR: Lista atendimentos do cliente com resposta paginada normalizada.
+   * en-US: Lists client attendances with a normalized paginated response.
+   */
+  async listAttendances(clientId: string, params?: ClientAttendancesListParams): Promise<PaginatedResponse<ClientAttendanceRecord>> {
+    const response = await this.get<any>(`/clients/${clientId}/attendances`, params);
+    return this.normalizePaginatedResponse<ClientAttendanceRecord>(response);
   }
 }
 

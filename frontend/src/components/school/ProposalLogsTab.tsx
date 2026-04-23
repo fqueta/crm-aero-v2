@@ -41,6 +41,8 @@ interface ProposalLogsTabProps {
 
 const getActionConfig = (action: string) => {
   switch (action) {
+    case 'status_changed':
+      return { label: 'Mudança de Status', icon: GitCommitHorizontal, color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-200' };
     case 'stage_changed':
       return { label: 'Mudança de Etapa', icon: GitCommitHorizontal, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-200' };
     case 'updated':
@@ -68,6 +70,74 @@ const getActionConfig = (action: string) => {
       return { label: action, icon: FileText, color: 'text-gray-500', bg: 'bg-gray-500/10', border: 'border-gray-200' };
   }
 };
+
+/**
+ * formatLossDate
+ * pt-BR: Formata a data da perda para exibição simples em pt-BR.
+ * en-US: Formats the loss date for simple pt-BR display.
+ */
+function formatLossDate(value?: string | null): string {
+  if (!value) return '—';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  try {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return String(value);
+    return date.toLocaleDateString('pt-BR');
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * renderPayloadSummary
+ * pt-BR: Renderiza um resumo amigável do payload quando o evento possui dados importantes.
+ * en-US: Renders a friendly payload summary when the event contains important data.
+ */
+function renderPayloadSummary(log: any) {
+  const payload = log?.payload;
+  if (!payload || typeof payload !== 'object') return null;
+
+  if (log.action === 'status_changed') {
+    const fromLabel = payload?.from_status_label || payload?.from_status;
+    const toLabel = payload?.to_status_label || payload?.to_status;
+    const lossDate = payload?.loss_date;
+    const lossReason = payload?.loss_reason;
+    const lossObservation = payload?.loss_observation;
+
+    return (
+      <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+        <div>
+          <span className="font-semibold text-foreground">Status:</span>{' '}
+          {fromLabel || '—'} {'->'} {toLabel || '—'}
+        </div>
+        {lossDate && (
+          <div>
+            <span className="font-semibold text-foreground">Data da perda:</span>{' '}
+            {formatLossDate(String(lossDate))}
+          </div>
+        )}
+        {lossReason && (
+          <div>
+            <span className="font-semibold text-foreground">Motivo da perda:</span>{' '}
+            {String(lossReason)}
+          </div>
+        )}
+        {lossObservation && (
+          <div>
+            <span className="font-semibold text-foreground">Observações:</span>{' '}
+            {String(lossObservation)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
 
 /**
  * ProposalLogsTab
@@ -182,6 +252,8 @@ export default function ProposalLogsTab({ enrollmentId }: ProposalLogsTabProps) 
                             <p className="font-medium text-sm text-foreground">
                               {log.description || 'Sem descrição'}
                             </p>
+
+                            {renderPayloadSummary(log)}
                             
                             {log.actor_id && (
                               <div className="mt-3 flex items-center gap-2 pt-2 border-t text-xs text-muted-foreground">
@@ -232,4 +304,3 @@ export default function ProposalLogsTab({ enrollmentId }: ProposalLogsTabProps) 
     </Card>
   );
 }
-

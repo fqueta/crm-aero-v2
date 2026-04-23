@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layers, Plus, NotebookPen, MoreHorizontal, Eye, MessageSquare, FileText, BookOpen, User2, Calendar, Clock, Hash } from 'lucide-react';
+import { Layers, Plus, NotebookPen, MoreHorizontal, Eye, MessageSquare, FileText, BookOpen, User2, Clock, Hash, CheckCircle2, CircleDot, XCircle } from 'lucide-react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import { useUsersList } from '@/hooks/users';
 import { useAuth } from '@/contexts/AuthContext';
 import { FunnelRecord, StageRecord } from '@/types/pipelines';
 import { useClientsList, useUpdateClient } from '@/hooks/clients';
-import { useEnrollmentsList, useUpdateEnrollment } from '@/hooks/enrollments';
+import { useEnrollmentsList, useUpdateEnrollment, useUpdateEnrollmentStatus } from '@/hooks/enrollments';
 import { ClientRecord } from '@/types/clients';
 import { EnrollmentRecord } from '@/types/enrollments';
 import { getMockClientsForStages } from '@/mocks/clients';
@@ -136,6 +136,30 @@ const getEnrollmentAmountBRL = (enroll: EnrollmentRecord): number => {
     .map((v) => normalizeToNumber(v))
     .find((v) => typeof v === 'number' && !Number.isNaN(v));
   return (hit as number) || 0;
+};
+
+/**
+ * getEnrollmentStatusLabel
+ * pt-BR: Traduz o código de status da matrícula para um rótulo amigável.
+ * en-US: Translates the enrollment status code into a friendly label.
+ */
+const getEnrollmentStatusLabel = (status?: string): string => {
+  const normalized = String(status || 'a').toLowerCase();
+  if (normalized === 'g') return 'Ganho';
+  if (normalized === 'p') return 'Perda';
+  return 'Atendimento';
+};
+
+/**
+ * getEnrollmentStatusBadgeClass
+ * pt-BR: Retorna classes visuais para o badge de status da matrícula.
+ * en-US: Returns visual classes for the enrollment status badge.
+ */
+const getEnrollmentStatusBadgeClass = (status?: string): string => {
+  const normalized = String(status || 'a').toLowerCase();
+  if (normalized === 'g') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (normalized === 'p') return 'bg-rose-50 text-rose-700 border-rose-200';
+  return 'bg-amber-50 text-amber-700 border-amber-200';
 };
 
 /**
@@ -367,10 +391,12 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
    */
   const { data: enrollmentsData } = useEnrollmentsList(enrollmentListParams, { enabled: place === 'vendas' && !!selectedFunnelId });
   const updateEnrollmentMutation = useUpdateEnrollment();
+  const updateEnrollmentStatusMutation = useUpdateEnrollmentStatus();
   const allEnrollments = useMemo<EnrollmentRecord[]>(() => (
     Array.isArray(enrollmentsData?.data) ? (enrollmentsData!.data as EnrollmentRecord[]) : []
   ), [enrollmentsData?.data]);
   const [localEnrollments, setLocalEnrollments] = useState<EnrollmentRecord[]>([]);
+  const [salesStatusFilter, setSalesStatusFilter] = useState<'all' | 'a' | 'g' | 'p'>('a');
   useEffect(() => {
     if (place === 'vendas') setLocalEnrollments(allEnrollments);
   }, [place, allEnrollments]);
@@ -572,6 +598,8 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
     const allowedStageIds = new Set(stages.map((s) => String(s.id)));
     const map = new Map<string, EnrollmentRecord[]>();
     for (const enroll of localEnrollments) {
+      const status = String((enroll as any)?.status || 'a').toLowerCase();
+      if (salesStatusFilter !== 'all' && status !== salesStatusFilter) continue;
       const fid = String(extractEnrollmentFunnelId(enroll) || '');
       if (selectedFunnelId) {
         if (!fid || fid !== String(selectedFunnelId)) continue;
@@ -583,7 +611,7 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
       map.get(sid)!.push(enroll);
     }
     return map;
-  }, [localEnrollments, stages, selectedFunnelId]);
+  }, [localEnrollments, stages, selectedFunnelId, salesStatusFilter]);
 
   /**
    * summary
@@ -884,6 +912,43 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
   };
 
   /**
+   * updateEnrollmentStatusQuickly
+   * pt-BR: Atualiza o status da matrícula com otimização local e rollback em erro.
+   * en-US: Updates enrollment status with local optimistic UI and rollback on error.
+   */
+  const updateEnrollmentStatusQuickly = (enrollmentId: string, status: 'a' | 'g' | 'p') => {
+    const idx = localEnrollments.findIndex((e) => String(e.id) === String(enrollmentId));
+    if (idx < 0) return;
+    const base = localEnrollments[idx];
+    const currentStatus = String((base as any)?.status || 'a').toLowerCase();
+    if (currentStatus === status) return;
+
+    const next: EnrollmentRecord = {
+      ...base,
+      status,
+    };
+
+    setLocalEnrollments((prev) => {
+      const copy = [...prev];
+      copy[idx] = next;
+      return copy;
+    });
+
+    updateEnrollmentStatusMutation.mutate(
+      { id: String(base.id), status },
+      {
+        onError: () => {
+          setLocalEnrollments((prev) => {
+            const copy = [...prev];
+            copy[idx] = base;
+            return copy;
+          });
+        },
+      },
+    );
+  };
+
+  /**
    * onDropOnStage
    * pt-BR: Solta o card em uma coluna de etapa, move otimisticamente e persiste se não for mock.
    * en-US: Drops the card on a stage column, moves optimistically and persists if not mock.
@@ -1075,6 +1140,25 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
               </Select>
             </div>
 
+            {place === 'vendas' && (
+              <div className="w-full max-w-[240px]">
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block uppercase tracking-wider">
+                  Status da proposta
+                </label>
+                <Select value={salesStatusFilter} onValueChange={(value) => setSalesStatusFilter(value as 'all' | 'a' | 'g' | 'p')}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Filtrar status..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="a">Atendimento</SelectItem>
+                    <SelectItem value="g">Ganhos</SelectItem>
+                    <SelectItem value="p">Perdas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Toggle de densidade */}
             <div className="flex items-center gap-3 bg-muted/50 p-2 rounded-lg border">
               <Switch id="kanban-density" checked={dense} onCheckedChange={setDense} />
@@ -1201,6 +1285,7 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
                         onDragEnd={onEnrollmentDragEnd}
                         onDropEnrollmentOnStage={onDropEnrollmentOnStage}
                         recentlyMovedEnrollmentId={recentlyMovedEnrollmentId}
+                        onUpdateEnrollmentStatus={updateEnrollmentStatusQuickly}
                       />
                     ) : (
                       <StageColumn
@@ -1820,7 +1905,23 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
  * pt-BR: Card de matrícula com ações de visualizar/editar e contexto de funil.
  * en-US: Enrollment card with view/edit actions and funnel context.
  */
-function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDragEnd, isRecentlyMoved }: { enrollment: EnrollmentRecord; dense?: boolean; funnelId?: string; onDragStart?: () => void; onDragEnd?: () => void; isRecentlyMoved?: boolean }) {
+function EnrollmentKanbanCard({
+  enrollment,
+  dense,
+  funnelId,
+  onDragStart,
+  onDragEnd,
+  isRecentlyMoved,
+  onUpdateStatus,
+}: {
+  enrollment: EnrollmentRecord;
+  dense?: boolean;
+  funnelId?: string;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  isRecentlyMoved?: boolean;
+  onUpdateStatus?: (enrollmentId: string, status: 'a' | 'g' | 'p') => void;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = `${location.pathname}${location.search}`;
@@ -1828,7 +1929,7 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
   const title = (enrollment as any)?.cliente_nome || (enrollment as any)?.student_name || (enrollment as any)?.name || `Matrícula ${enrollment.id}`;
   const course = (enrollment as any)?.curso_nome || (enrollment as any)?.course_name || (enrollment as any)?.curso || '';
   const turma = (enrollment as any)?.turma_nome || '';
-  const status = (enrollment as any)?.status || '—';
+  const status = String((enrollment as any)?.status || 'a').toLowerCase();
   const consultant = (enrollment as any)?.autor_name || '';
   const amountBRL = formatBRL(getEnrollmentAmountBRL(enrollment));
 
@@ -1850,6 +1951,8 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
     const q = funnelId ? `?funnel=${encodeURIComponent(String(funnelId))}` : '';
     navigate(`/admin/sales/proposals/edit/${encodeURIComponent(String(enrollment.id))}${q}`, { state: { returnTo } });
   };
+  const statusLabel = getEnrollmentStatusLabel(status);
+  const statusBadgeClass = getEnrollmentStatusBadgeClass(status);
 
   return (
     <div
@@ -1871,8 +1974,8 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap">
-            {status}
+          <Badge variant="outline" className={`text-[10px] h-5 px-2 font-semibold uppercase tracking-wider whitespace-nowrap ${statusBadgeClass}`}>
+            {statusLabel}
           </Badge>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1886,6 +1989,15 @@ function EnrollmentKanbanCard({ enrollment, dense, funnelId, onDragStart, onDrag
               </DropdownMenuItem>
               <DropdownMenuItem onClick={goToEdit} className="cursor-pointer">
                 <FileText className="mr-2 h-4 w-4 opacity-70" /> Editar
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onUpdateStatus?.(String(enrollment.id), 'a')} className="cursor-pointer">
+                <CircleDot className="mr-2 h-4 w-4 opacity-70" /> Marcar atendimento
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onUpdateStatus?.(String(enrollment.id), 'g')} className="cursor-pointer">
+                <CheckCircle2 className="mr-2 h-4 w-4 opacity-70" /> Marcar ganho
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onUpdateStatus?.(String(enrollment.id), 'p')} className="cursor-pointer">
+                <XCircle className="mr-2 h-4 w-4 opacity-70" /> Marcar perda
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1949,6 +2061,7 @@ function StageColumnSales({
   onDragEnd,
   onDropEnrollmentOnStage,
   recentlyMovedEnrollmentId,
+  onUpdateEnrollmentStatus,
 }: {
   stage: StageRecord;
   funnelId: string;
@@ -1961,6 +2074,7 @@ function StageColumnSales({
   onDragEnd: () => void;
   onDropEnrollmentOnStage: (toStageId: string) => void;
   recentlyMovedEnrollmentId?: string | null;
+  onUpdateEnrollmentStatus: (enrollmentId: string, status: 'a' | 'g' | 'p') => void;
 }) {
   // useNavigate/useLocation para permitir abrir criação de propostas e retornar ao funil
   // pt-BR: Navega para a página de criação de propostas, carregando o estado atual para voltar.
@@ -2095,6 +2209,7 @@ function StageColumnSales({
               onDragStart={() => onDragStart(e)}
               onDragEnd={onDragEnd}
               isRecentlyMoved={recentlyMovedEnrollmentId === String(e.id)}
+              onUpdateStatus={onUpdateEnrollmentStatus}
             />
           ))
         )}

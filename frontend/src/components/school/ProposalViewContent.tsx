@@ -10,6 +10,7 @@ import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
 import ResponsibleInfoCard from '@/components/school/ResponsibleInfoCard';
+import ProposalAttendanceCard from '@/components/school/ProposalAttendanceCard';
 import ProposalContractsTab from './ProposalContractsTab';
 import ProposalLogsTab from './ProposalLogsTab';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -192,6 +193,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const clientName = client?.name || (client as any)?.nome || '';
   const clientPhone = client?.config?.celular || client?.config?.telefone_residencial || '';
   const clientEmail = client?.email || '';
+  const proposalStatus = String((enrollment as any)?.status || 'a').toLowerCase();
   const curso_tipo = String((enrollment as any)?.curso_tipo || '');
   const modulo = computeModulo(enrollment as any, curso_tipo);
   const modulesList = useMemo(() => {
@@ -311,13 +313,21 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                       validityDays={validadeDias}
                       etapa1Discount={etapa1Discount}
                       fuelExternalText={fuelExternalText}
+                      parcelamento={parcelamento}
                   />
 
-                  <InstallmentPreviewCard title="Gestão de Parcelamento" parcelamento={parcelamento} />
                </div>
 
                {/* Sidebar (Right) */}
                <div className="lg:col-span-4 space-y-6 print:hidden">
+                  <ProposalAttendanceCard
+                    enrollmentId={String(id)}
+                    clientId={clientId || undefined}
+                    clientName={clientName || undefined}
+                    status={proposalStatus}
+                    meta={meta}
+                  />
+
                   <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">
                     <CardHeader className="pb-3 border-b border-border/40">
                       <div className="flex items-center gap-2">
