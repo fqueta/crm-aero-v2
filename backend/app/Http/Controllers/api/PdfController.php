@@ -16,7 +16,6 @@ use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Models\User;
 use App\Services\Qlib;
-use Barryvdh\Snappy\Facades\SnappyPdf;
 use Spatie\Browsershot\Browsershot;
 use App\Jobs\GeraPdfPropostasPnlJob;
 use App\Jobs\GeraPdfcontratosPnlJob;
@@ -763,7 +762,9 @@ class PdfController extends Controller
         $footerHtml = $htmlData['footer'];
         $bodyHtml = $htmlData['body'];
 
-        $pdf = SnappyPdf::loadHTML($bodyHtml)
+        /** @var \Barryvdh\Snappy\PdfWrapper $pdf */
+        $pdf = app('snappy.pdf.wrapper');
+        $pdf->loadHTML($bodyHtml)
             ->setOption('encoding', 'utf-8')
             ->setOption('enable-local-file-access', true)
             ->setOption('load-error-handling', 'ignore')
@@ -789,9 +790,7 @@ class PdfController extends Controller
             ->setTimeout(300);
 
         if ($config['no_store']) {
-            return response($pdf->output(), 200)
-                ->header('Content-Type', 'application/pdf')
-                ->header('Content-Disposition', 'inline; filename="' . $fileInfo['filename'] . '"');
+            return $pdf->inline($fileInfo['filename']);
         } else {
             $knp = app('snappy.pdf');
             $knp->setTimeout(300);
@@ -1065,7 +1064,9 @@ class PdfController extends Controller
         }
 
         if ($engine === 'wkhtmltopdf') {
-            $pdf = SnappyPdf::loadHTML($html)
+            /** @var \Barryvdh\Snappy\PdfWrapper $pdf */
+            $pdf = app('snappy.pdf.wrapper');
+            $pdf->loadHTML($html)
                 ->setPaper('a4')
                 ->setOption('header-html', $headerHtml)
                 ->setOption('margin-top', 25)
