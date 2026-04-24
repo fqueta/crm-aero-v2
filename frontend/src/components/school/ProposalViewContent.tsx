@@ -53,6 +53,45 @@ function StatCard({ label, value, icon: Icon, colorClass = "text-primary", bgCla
  * en-US: Read-only proposal view component, with tabs for Overview and Contracts.
  */
 export default function ProposalViewContent({ id }: ProposalViewContentProps) {
+  /**
+   * normalizeSignatureStatus
+   * pt-BR: Normaliza o status de assinatura vindo do backend para comparações consistentes.
+   * en-US: Normalizes the signature status from backend for consistent comparisons.
+   */
+  function normalizeSignatureStatus(rawStatus: unknown): string {
+    return String(rawStatus ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+  }
+
+  /**
+   * formatSignatureStatusLabel
+   * pt-BR: Converte o valor técnico do backend em um rótulo amigável para o badge.
+   * en-US: Converts backend status into a user-friendly badge label.
+   */
+  function formatSignatureStatusLabel(normalizedStatus: string): string {
+    const labelsByStatus: Record<string, string> = {
+      aprovado: 'Aprovada',
+      assinado: 'Assinada',
+      em_andamento: 'Em Andamento',
+      aguardando_assinatura: 'Aguardando Assinatura',
+      pendente: 'Pendente',
+      recusado: 'Recusada',
+      reprovado: 'Reprovada',
+      cancelado: 'Cancelada',
+      expirado: 'Expirada',
+    };
+
+    if (labelsByStatus[normalizedStatus]) return labelsByStatus[normalizedStatus];
+
+    return normalizedStatus
+      .split('_')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
   const { data: enrollment } = useEnrollment(String(id || ''));
   const location = useLocation();
   const navigate = useNavigate();
@@ -134,10 +173,10 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
    * pt-BR: Soma N dias à data atual e formata dd/MM/yyyy.
    * en-US: Adds N days to today and formats dd/MM/yyyy.
    */
-  function computeValidityDate(daysStr?: string): string {
+  function computeValidityDate(daysStr?: string, baseDate?: string): string {
     const days = parseInt(String(daysStr ?? ''), 10);
     if (!Number.isFinite(days) || days <= 0) return '';
-    const d = new Date();
+    const d = baseDate ? new Date(baseDate) : new Date();
     d.setDate(d.getDate() + days);
     const dd = String(d.getDate()).padStart(2, '0');
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -192,10 +231,11 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const totalMasked = useMemo(() => maskMonetaryDisplay((enrollment as any)?.total), [enrollment]);
   const descontoMasked = useMemo(() => maskMonetaryDisplay((enrollment as any)?.desconto), [enrollment]);
   const inscricaoMasked = useMemo(() => maskMonetaryDisplay((enrollment as any)?.inscricao), [enrollment]);
-  const validadeDias = useMemo(() => String((enrollment as any)?.validade || '14'), [enrollment]);
-  const clientName = client?.name || (client as any)?.nome || '';
-  const clientPhone = client?.config?.celular || client?.config?.telefone_residencial || '';
-  const clientEmail = client?.email || '';
+  const validadeDias = useMemo(() => String((enrollment as any)?.meta?.validade || (enrollment as any)?.validade || '14'), [enrollment]);
+  const emissionDate = useMemo(() => (enrollment as any)?.data || (enrollment as any)?.created_at, [enrollment]);
+  const clientName = client?.name || (client as any)?.nome || (enrollment as any)?.cliente_nome || (enrollment as any)?.cliente?.name || '';
+  const clientPhone = client?.config?.celular || client?.config?.telefone_residencial || (enrollment as any)?.cliente?.celular || (enrollment as any)?.cliente?.config?.celular || '';
+  const clientEmail = client?.email || (enrollment as any)?.cliente?.email || '';
   const proposalStatus = String((enrollment as any)?.status || 'a').toLowerCase();
   const curso_tipo = String((enrollment as any)?.curso_tipo || '');
   const modulo = computeModulo(enrollment as any, curso_tipo);
@@ -222,7 +262,10 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   }, [enrollment]);
 
   const meta = (enrollment as any)?.meta || {};
-  const statusAssinatura = meta?.status_assinatura;
+  const statusAssinatura = useMemo(
+    () => normalizeSignatureStatus(meta?.status_assinatura),
+    [meta?.status_assinatura]
+  );
 
   // ZapSign Status Check
   const rawZapsign = meta?.processo_assinatura;
@@ -241,16 +284,35 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   
   const isZapsignPending = hasZapsign && !isZapsignSigned;
 
-  const status = isAssinado ? 'assinado' : (isZapsignPending ? 'em_andamento' : (statusAssinatura === 'aprovado' ? 'aprovado' : ''));
+  const status = isAssinado
+    ? 'assinado'
+    : (isZapsignPending ? 'em_andamento' : (statusAssinatura || 'em_andamento'));
   
-  const statusMessage = isAssinado
-    ? 'Está proposta ja está aprovada e assinada.'
-    : (isZapsignPending 
-        ? 'Assinatura digital em andamento (ZapSign).' 
-        : (status === 'aprovado' ? 'A proposta foi aprovada e está aguardando assinatura digital.' : ''));
+  const statusMessage = (() => {
+    if (isAssinado) return 'Está proposta ja está aprovada e assinada.';
+    if (isZapsignPending) return 'Assinatura digital em andamento (ZapSign).';
+    if (status === 'aprovado') return 'A proposta foi aprovada e está aguardando assinatura digital.';
+    if (status === 'recusado' || status === 'reprovado') return 'A proposta foi recusada e requer revisão antes de seguir.';
+    if (status === 'cancelado') return 'A proposta foi cancelada.';
+    if (status === 'expirado') return 'A proposta expirou e precisa ser revalidada.';
+    return '';
+  })();
   
-  const badgeLabel = isAssinado ? 'Assinada' : (isZapsignPending ? 'Assinatura em Andamento' : 'Aprovada');
-  const badgeColor = isAssinado ? 'bg-green-600' : (isZapsignPending ? 'bg-amber-500' : 'bg-blue-600');
+  const badgeLabel = isAssinado
+    ? 'Assinada'
+    : (isZapsignPending ? 'Aprovação em Andamento' : formatSignatureStatusLabel(status));
+
+  const badgeColor = isAssinado
+    ? 'bg-green-600'
+    : (isZapsignPending
+        ? 'bg-amber-500'
+        : ((status === 'aprovado' && 'bg-blue-600')
+            || ((status === 'recusado' || status === 'reprovado') && 'bg-red-600')
+            || (status === 'cancelado' && 'bg-zinc-600')
+            || (status === 'expirado' && 'bg-orange-600')
+            || (status === 'pendente' && 'bg-amber-500')
+            || (status === 'aguardando_assinatura' && 'bg-indigo-600')
+            || 'bg-slate-600'));
 
   return (
     <div className="space-y-6">
@@ -277,17 +339,17 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
               <StatCard label="Total da Proposta" value={totalMasked || 'R$ 0,00'} icon={CircleDollarSign} colorClass="text-green-600" bgClass="bg-green-50" />
               <StatCard label="ID da Matrícula" value={`#${id}`} icon={Hash} colorClass="text-zinc-600" bgClass="bg-zinc-100" />
-              <StatCard label="Validade" value={computeValidityDate(validadeDias) || 'Expirada'} icon={Calendar} colorClass="text-blue-600" bgClass="bg-blue-50" />
-              <StatCard label="Consultor" value={(enrollment as any)?.autor_name || 'Sistema'} icon={User} colorClass="text-purple-600" bgClass="bg-purple-50" />
+              <StatCard label="Validade" value={computeValidityDate(validadeDias, emissionDate) || 'Expirada'} icon={Calendar} colorClass="text-blue-600" bgClass="bg-blue-50" />
+              <StatCard label="Consultor" value={(enrollment as any)?.consultor?.name || (enrollment as any)?.autor_name || 'Sistema'} icon={User} colorClass="text-purple-600" bgClass="bg-purple-50" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                {/* Main Content (Left) */}
                <div className="lg:col-span-8 space-y-8">
                   {statusMessage && (
-                    <Alert className={`border-none shadow-sm print:hidden ${isAssinado ? 'bg-green-50/50 text-green-800' : (isZapsignPending ? 'bg-amber-50/50 text-amber-800' : 'bg-blue-50/50 text-blue-800')} rounded-2xl p-4 flex items-start gap-4`}>
-                      <div className={`p-2 rounded-xl scale-110 ${isAssinado ? 'bg-green-100' : (isZapsignPending ? 'bg-amber-100' : 'bg-blue-100')}`}>
-                        {isAssinado ? <CheckCircle className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+                      <Alert className={`border-none shadow-sm print:hidden ${isAssinado ? 'bg-green-50/50 text-green-800' : (isZapsignPending ? 'bg-amber-50/50 text-amber-800' : ((status === 'aprovado' && 'bg-blue-50/50 text-blue-800') || ((status === 'recusado' || status === 'reprovado') && 'bg-red-50/50 text-red-800') || (status === 'cancelado' && 'bg-zinc-50/50 text-zinc-800') || (status === 'expirado' && 'bg-orange-50/50 text-orange-800') || 'bg-slate-50/50 text-slate-800'))} rounded-2xl p-4 flex items-start gap-4`}>
+                      <div className={`p-2 rounded-xl scale-110 ${isAssinado ? 'bg-green-100' : (isZapsignPending ? 'bg-amber-100' : ((status === 'aprovado' && 'bg-blue-100') || ((status === 'recusado' || status === 'reprovado') && 'bg-red-100') || (status === 'cancelado' && 'bg-zinc-100') || (status === 'expirado' && 'bg-orange-100') || 'bg-slate-100'))}`}>
+                        {(isAssinado || status === 'aprovado') ? <CheckCircle className="h-5 w-5" /> : ((status === 'recusado' || status === 'reprovado' || status === 'cancelado' || status === 'expirado') ? <Info className="h-5 w-5" /> : <Clock className="h-5 w-5" />)}
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <AlertTitle className="text-xs font-bold uppercase tracking-widest opacity-70">Status Atual</AlertTitle>
@@ -312,12 +374,13 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                       discountAmountMasked={descontoMasked}
                       subtotalMasked={subtotalMasked}
                       totalMasked={totalMasked}
-                      validityDate={computeValidityDate(validadeDias)}
+                      validityDate={computeValidityDate(validadeDias, emissionDate)}
                       validityDays={validadeDias}
                       inscricaoMasked={inscricaoMasked}
                       etapa1Discount={etapa1Discount}
                       fuelExternalText={fuelExternalText}
                       parcelamento={parcelamento}
+                      emissionDate={emissionDate}
                   />
 
                </div>

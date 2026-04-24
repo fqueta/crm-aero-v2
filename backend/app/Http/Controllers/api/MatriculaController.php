@@ -77,7 +77,7 @@ class MatriculaController extends Controller
         };
 
         $query = Matricula::join('cursos', 'matriculas.id_curso', '=', 'cursos.id')
-            ->join('turmas', 'matriculas.id_turma', '=', 'turmas.id')
+            ->leftJoin('turmas', 'matriculas.id_turma', '=', 'turmas.id')
             ->leftJoin('users', 'matriculas.id_cliente', '=', 'users.id')
             ->leftJoin('posts', 'matriculas.situacao_id', '=', 'posts.id')
            ->select('matriculas.*', 'cursos.nome as curso_nome','cursos.tipo as curso_tipo', 'turmas.nome as turma_nome', 'users.name as cliente_nome', 'posts.post_title as situacao')
@@ -307,7 +307,7 @@ class MatriculaController extends Controller
             'id_curso' => [$update ? 'sometimes' : 'required', 'integer', 'exists:cursos,id'],
             'id_responsavel' => ['nullable', 'uuid'],
             'id_consultor' => ['nullable', 'uuid'],
-            'id_turma' => [$update ? 'sometimes' : 'required', 'integer', 'exists:turmas,id'],
+            'id_turma' => ['nullable', 'integer', 'exists:turmas,id'],
             // Situação da matrícula: referência para posts (situacao_matricula)
             'situacao_id' => ['nullable', 'integer', Rule::exists('posts','ID')->where(function($q){ $q->where('post_type','situacao_matricula'); })],
             'descricao' => ['nullable', 'string'],
@@ -401,6 +401,14 @@ class MatriculaController extends Controller
             $vr = trim((string)$data['id_responsavel']);
             if ($vr === '' || $vr === '0') {
                 $data['id_responsavel'] = null;
+            }
+        }
+        
+        // Normalizar id_turma: '0' ou vazio -> null
+        if (array_key_exists('id_turma', $data)) {
+            $vt = trim((string)$data['id_turma']);
+            if ($vt === '' || $vt === '0') {
+                $data['id_turma'] = null;
             }
         }
         

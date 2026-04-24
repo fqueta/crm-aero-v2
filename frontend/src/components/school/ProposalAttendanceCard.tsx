@@ -322,7 +322,10 @@ export default function ProposalAttendanceCard({
             <Button
               variant={statusMeta.code === 'g' ? 'default' : 'outline'}
               onClick={() => handleChangeStatus('g')}
-              disabled={updateEnrollmentStatusMutation.isPending}
+              disabled={
+                updateEnrollmentStatusMutation.isPending || 
+                !['aprovado', 'assinado'].includes(String(meta?.status_assinatura || '').toLowerCase())
+              }
               className={cn(statusMeta.code === 'g' && 'bg-emerald-600 hover:bg-emerald-700')}
             >
               <CheckCircle2 className="h-4 w-4" />

@@ -358,7 +358,7 @@ class PdfController extends Controller
         // Default para 'fundo_proposta_plano' se não for tipo 2
         $shortcode = ($matricula['curso_tipo'] ?? null) == 2
             ? 'fundo-proposta-pratico'
-            : 'fundo-proposta-plano';
+            : 'fundo-proposta-teorico';
 
         $galerias = Qlib::get_post_by_shortcode($shortcode, $matricula['id_curso']);
         $listaPaginas = [];
@@ -504,8 +504,7 @@ class PdfController extends Controller
     private function getMatriculaPdfConfig(Request $request): array
     {
         $engine = strtolower((string)($request->input('engine', env('PDF_ENGINE', 'wkhtmltopdf'))));
-        // Permitimos o engine 'snap' passar mesmo no Windows para podermos identificá-lo no prepareHtml
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && env('APP_ENV') === 'local' && $engine !== 'snap') {
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && env('APP_ENV') === 'local' && !in_array($engine, ['snap', 'browsershot'], true)) {
             $engine = 'wkhtmltopdf';
         }
 
@@ -723,7 +722,7 @@ class PdfController extends Controller
             $injectedHtml = "<!DOCTYPE html><html lang=\"pt-BR\"><head><meta charset=\"UTF-8\">";
             $injectedHtml .= "<style>
                 @media print {
-                    .page-bg { position: absolute !important; top: -35mm !important; left: 0 !important; width: 210mm !important; height: 297mm !important; z-index: -1 !important; }
+                    .page-bg { position: absolute !important; top: 0 !important; left: 0 !important; width: 210mm !important; height: 297mm !important; z-index: -1 !important; }
                     .pdf-content { position: relative; z-index: 1; }
                     body { margin: 0; padding: 0; }
                 }
@@ -733,7 +732,7 @@ class PdfController extends Controller
         }
         $shot = Browsershot::html($injectedHtml)
             ->format('A4')
-            ->margins($htmlData['hasBackground'] ? 35 : 0, 0, $htmlData['hasBackground'] ? 15 : 0, 0)
+            ->margins(0, 0, 0, 0)
             ->emulateMedia('print')
             ->timeout(120000)
             ->noSandbox()

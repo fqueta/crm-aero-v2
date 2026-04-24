@@ -33,6 +33,7 @@ export default function BudgetPreview({
   courseName,
   turmaName,
   parcelamento,
+  emissionDate,
 }: {
   title?: string;
   clientName: string;
@@ -40,6 +41,7 @@ export default function BudgetPreview({
   clientPhone?: string;
   clientEmail?: string;
   validityDate?: string;
+  emissionDate?: string;
   course?: CourseRecord | any;
   courseName?: string;
   turmaName?: string;
@@ -331,7 +333,9 @@ export default function BudgetPreview({
           <div className="flex gap-8">
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Emissão</span>
-              <span className='font-bold text-sm'>{new Date().toLocaleDateString('pt-BR')}</span>
+              <span className='font-bold text-sm'>
+                {emissionDate ? new Date(emissionDate).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}
+              </span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Validade</span>

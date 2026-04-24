@@ -1813,8 +1813,8 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
             {String(client.id).length > 8 ? `${String(client.id).substring(0, 8)}...` : client.id}
           </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap">
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+          <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap shrink-0">
             {statusLabel}
           </Badge>
           <DropdownMenu>
@@ -1973,8 +1973,8 @@ function EnrollmentKanbanCard({
             {String(enrollment.id).length > 8 ? `${String(enrollment.id).substring(0, 8)}...` : enrollment.id}
           </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className={`text-[10px] h-5 px-2 font-semibold uppercase tracking-wider whitespace-nowrap ${statusBadgeClass}`}>
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+          <Badge variant="outline" className={`text-[10px] h-5 px-2 font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 ${statusBadgeClass}`}>
             {statusLabel}
           </Badge>
           <DropdownMenu>
@@ -1993,7 +1993,11 @@ function EnrollmentKanbanCard({
               <DropdownMenuItem onClick={() => onUpdateStatus?.(String(enrollment.id), 'a')} className="cursor-pointer">
                 <CircleDot className="mr-2 h-4 w-4 opacity-70" /> Marcar atendimento
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onUpdateStatus?.(String(enrollment.id), 'g')} className="cursor-pointer">
+              <DropdownMenuItem 
+                onClick={() => onUpdateStatus?.(String(enrollment.id), 'g')} 
+                className="cursor-pointer"
+                disabled={!['aprovado', 'assinado'].includes(String((enrollment as any)?.meta?.status_assinatura || '').toLowerCase())}
+              >
                 <CheckCircle2 className="mr-2 h-4 w-4 opacity-70" /> Marcar ganho
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onUpdateStatus?.(String(enrollment.id), 'p')} className="cursor-pointer">

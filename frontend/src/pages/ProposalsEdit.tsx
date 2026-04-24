@@ -707,24 +707,67 @@ export default function ProposalsEdit() {
     return list.find((c: any) => String(c.id) === id);
   }, [coursesList, selectedCourseId]);
 
-  // Efeito para preencher inscrição automaticamente ao selecionar curso/turma
+  // Efeito para preencher inscrição, subtotal e desconto automaticamente ao selecionar curso/turma
   useEffect(() => {
     if (selectedCourse) {
       const currentInscricao = form.getValues('inscricao');
+      const currentSubtotal = form.getValues('subtotal');
+      const currentDesconto = form.getValues('desconto');
       const courseInscricao = selectedCourse.inscricao || selectedCourse.valor_inscricao || 0;
+      const courseValor = selectedCourse.valor || 0;
+      const isTipo1 = String(selectedCourse?.tipo) === '1';
       
-      // Se estiver vazio ou for R$ 0,00, preenche com o valor do curso
-      if (!currentInscricao || currentInscricao === 'R$ 0,00' || currentInscricao === '0,00') {
+      // pt-BR: Determina se devemos forçar o recarregamento dos valores do payload (tipo 1 e troca de turma)
+      // en-US: Determines if we should force reload values from payload (type 1 and class change)
+      const turmaChanged = enrollment && String(form.watch('id_turma')) !== String(enrollment.id_turma);
+      const shouldForceReload = isTipo1 && turmaChanged;
+
+      // Preenchimento de Inscrição
+      if (!currentInscricao || currentInscricao === 'R$ 0,00' || currentInscricao === '0,00' || shouldForceReload) {
           const valNum = typeof courseInscricao === 'number' 
             ? courseInscricao 
             : currencyRemoveMaskToNumber(String(courseInscricao));
           
-          if (valNum > 0) {
+          if (valNum >= 0) {
             form.setValue('inscricao', formatCurrencyBRL(valNum));
           }
       }
+
+      // Preenchimento de Subtotal e Desconto para Tipo 1
+      if (isTipo1) {
+          const valNum = typeof courseValor === 'number' 
+            ? courseValor 
+            : currencyRemoveMaskToNumber(String(courseValor));
+          
+          if (valNum >= 0 && (shouldForceReload || !currentSubtotal || currentSubtotal === 'R$ 0,00' || currentSubtotal === '0,00')) {
+            form.setValue('subtotal', formatCurrencyBRL(valNum));
+          }
+
+          if (shouldForceReload || !currentDesconto || currentDesconto === 'R$ 0,00') {
+            form.setValue('desconto', 'R$ 0,00');
+          }
+
+          // Para tipo 1, gera um orc_json básico se não existir, para o preview funcionar
+          const currentOrc = form.getValues('orc_json');
+          if (shouldForceReload || !currentOrc || currentOrc === '' || currentOrc === '{}' || currentOrc === '{"modulos":[]}') {
+            const orc = {
+              token: Math.random().toString(16).slice(2),
+              id_curso: String(selectedCourse.id),
+              id_cliente: form.getValues('id_cliente'),
+              campo_id: 'id',
+              modulos: [
+                {
+                  titulo: selectedCourse.titulo || selectedCourse.nome || 'Curso',
+                  valor: valNum,
+                  limite: selectedCourse.duracao || 0,
+                }
+              ],
+            };
+            form.setValue('orc_json', JSON.stringify(orc));
+          }
+      }
     }
-  }, [selectedCourseId, form.watch('id_turma'), selectedCourse]);
+  }, [selectedCourseId, form.watch('id_turma'), selectedCourse, enrollment]);
 
   /**
    * getAircraftHourlyRate
@@ -1964,7 +2007,7 @@ export default function ProposalsEdit() {
               </div>
 
               {/* Seção 4: Configuração Técnica (Módulos/Gera Valor) */}
-              {form.watch('id_turma') && (
+              {form.watch('id_turma') && String(selectedCourse?.tipo) !== '1' && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 px-1">
                     <div className="h-4 w-1 bg-purple-600 rounded-full"></div>

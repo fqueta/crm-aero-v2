@@ -611,20 +611,58 @@ export default function ProposalsCreate() {
     }
   }
 
-  // Efeito para preencher inscrição automaticamente ao selecionar curso/turma
+  // Efeito para preencher inscrição, subtotal e desconto automaticamente ao selecionar curso/turma
   useEffect(() => {
     if (selectedCourse) {
       const currentInscricao = form.getValues('inscricao');
+      const currentSubtotal = form.getValues('subtotal');
+      const currentDesconto = form.getValues('desconto');
       const courseInscricao = selectedCourse.inscricao || selectedCourse.valor_inscricao || 0;
+      const courseValor = selectedCourse.valor || 0;
+      const isTipo1 = String(selectedCourse?.tipo) === '1';
       
-      // Se estiver vazio ou for R$ 0,00, preenche com o valor do curso
-      if (!currentInscricao || currentInscricao === 'R$ 0,00' || currentInscricao === '0,00') {
+      // Preenchimento de Inscrição
+      if (!currentInscricao || currentInscricao === 'R$ 0,00' || currentInscricao === '0,00' || isTipo1) {
           const valNum = typeof courseInscricao === 'number' 
             ? courseInscricao 
             : currencyRemoveMaskToNumber(String(courseInscricao));
           
-          if (valNum > 0) {
+          if (valNum >= 0) {
             form.setValue('inscricao', formatCurrencyBRL(valNum));
+          }
+      }
+
+      // Preenchimento de Subtotal e Desconto para Tipo 1
+      if (isTipo1) {
+          const valNum = typeof courseValor === 'number' 
+            ? courseValor 
+            : currencyRemoveMaskToNumber(String(courseValor));
+          
+          if (valNum >= 0 && (!currentSubtotal || currentSubtotal === 'R$ 0,00' || currentSubtotal === '0,00')) {
+            form.setValue('subtotal', formatCurrencyBRL(valNum));
+          }
+
+          if (!currentDesconto || currentDesconto === 'R$ 0,00') {
+            form.setValue('desconto', 'R$ 0,00');
+          }
+
+          // Para tipo 1, gera um orc_json básico se não existir, para o preview funcionar
+          const currentOrc = form.getValues('orc_json');
+          if (!currentOrc || currentOrc === '' || currentOrc === '{}') {
+            const orc = {
+              token: Math.random().toString(16).slice(2),
+              id_curso: String(selectedCourse.id),
+              id_cliente: form.getValues('id_cliente'),
+              campo_id: 'id',
+              modulos: [
+                {
+                  titulo: selectedCourse.titulo || selectedCourse.nome || 'Curso',
+                  valor: valNum,
+                  limite: selectedCourse.duracao || 0,
+                }
+              ],
+            };
+            form.setValue('orc_json', JSON.stringify(orc));
           }
       }
     }
@@ -1527,7 +1565,7 @@ export default function ProposalsCreate() {
               </div>
 
               {/* SelectGeraValor — renderiza quando turma selecionada */}
-              {form.watch('id_turma') && (
+              {form.watch('id_turma') && String(selectedCourse?.tipo) !== '1' && (
                 <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                   {String(selectedCourse?.tipo) === '2' ? (
                     <div className="space-y-2">
