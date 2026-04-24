@@ -20,7 +20,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { proposalService } from '@/services/proposalService';
 import {
   Loader2, AlertCircle, FileText, ExternalLink, Pencil, Save, X,
-  RotateCcw, Send, Copy, Check, CheckCircle2, Zap, Info, User,
+  RotateCcw, Send, Copy, Check, CheckCircle2, Zap, Info, User, Eye, Code,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -191,10 +191,100 @@ export default function ProposalContractsTab({
 
   // ── Ações de Geração / ZapSign ────────────────────────────────────────────
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isPreviewingPdf, setIsPreviewingPdf] = useState(false);
+  const [isPreviewingHtml, setIsPreviewingHtml] = useState(false);
   const [isSendingZapsign, setIsSendingZapsign] = useState(false);
   const [isRegeneratingResp, setIsRegeneratingResp] = useState(false);
   const [isSendingZapsignResp, setIsSendingZapsignResp] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+
+  /**
+   * handlePreviewPdf
+   * pt-BR: Gera um preview autenticado do PDF sem persistir o arquivo final em `proposta_pdf`.
+   * en-US: Generates an authenticated PDF preview without persisting the final file in `proposta_pdf`.
+   */
+  const handlePreviewPdf = async () => {
+    if (!enrollmentId) return;
+    setIsPreviewingPdf(true);
+    try {
+      const base = getApiUrl();
+      const url = `${base}/pdf/matriculas/${encodeURIComponent(String(enrollmentId))}?force=1&no_store=1`;
+      const headers: HeadersInit = { Accept: 'application/pdf' };
+      const tk = token || localStorage.getItem('auth_token');
+      if (tk) headers['Authorization'] = `Bearer ${tk}`;
+
+      const resp = await fetch(url, { method: 'GET', headers });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+
+      const contentType = resp.headers.get('content-type') || '';
+      if (!contentType.includes('application/pdf')) {
+        const text = await resp.text();
+        throw new Error(text || 'O backend nao retornou um PDF para o preview.');
+      }
+
+      const blob = await resp.blob();
+      const previewUrl = URL.createObjectURL(blob);
+      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
+
+      toast({
+        title: 'Preview aberto',
+        description: 'O PDF foi aberto em uma nova aba para conferência/homologação.',
+      });
+    } catch {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível abrir o preview do PDF.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPreviewingPdf(false);
+    }
+  };
+
+  /**
+   * handlePreviewHtml
+   * pt-BR: Abre em nova aba o HTML renderizado da view `pdf.matricula` para conferência visual rápida.
+   * en-US: Opens the rendered `pdf.matricula` HTML in a new tab for quick visual inspection.
+   */
+  const handlePreviewHtml = async () => {
+    if (!enrollmentId) return;
+    setIsPreviewingHtml(true);
+    try {
+      const base = getApiUrl();
+      const url = `${base}/pdf/matriculas/${encodeURIComponent(String(enrollmentId))}?force=1&no_store=1&debug_html=1`;
+      const headers: HeadersInit = { Accept: 'text/html' };
+      const tk = token || localStorage.getItem('auth_token');
+      if (tk) headers['Authorization'] = `Bearer ${tk}`;
+
+      const resp = await fetch(url, { method: 'GET', headers });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+
+      const html = await resp.text();
+      const previewUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+      window.open(previewUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
+
+      toast({
+        title: 'Preview HTML aberto',
+        description: 'A renderização da Blade foi aberta em uma nova aba.',
+      });
+    } catch {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível abrir o preview HTML.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPreviewingHtml(false);
+    }
+  };
 
   const handleRegenerate = async () => {
     if (!enrollmentId) return;
@@ -297,6 +387,14 @@ export default function ProposalContractsTab({
           {/* Barra de Ações (modo leitura) */}
           {canEdit && !isEditing && (
             <div className="flex gap-2 flex-wrap justify-end">
+              <Button variant="outline" size="sm" onClick={handlePreviewPdf} disabled={isPreviewingPdf}>
+                {isPreviewingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+                Preview PDF
+              </Button>
+              <Button variant="outline" size="sm" onClick={handlePreviewHtml} disabled={isPreviewingHtml}>
+                {isPreviewingHtml ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Code className="h-4 w-4 mr-2" />}
+                Preview HTML
+              </Button>
               {isAdmin && (
                 <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isRegenerating}>
                   {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RotateCcw className="h-4 w-4 mr-2" />}

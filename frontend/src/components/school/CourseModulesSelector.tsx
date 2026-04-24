@@ -142,18 +142,20 @@ export default function CourseModulesSelector({
         const next: Record<number, ModuleSelection> = {};
         modules.forEach((mod: any, idx: number) => {
             // pt-BR: Se houver providedInitialSelections para este índice, essa é a prioridade na hidratação
+            // en-US: If there's providedInitialSelections for this index, it's the hydration priority
             if (providedInitialSelections && providedInitialSelections[idx]) {
                 next[idx] = { ...providedInitialSelections[idx], course_id_ref: currentCourseId };
                 return;
             }
 
+            // Fallback: Se não tem seleção inicial para este módulo, inicializa com valor padrão do curso
             let defaultPrice = 0;
             if (mod.valor) {
                 defaultPrice = typeof mod.valor === 'number' 
                     ? mod.valor 
                     : currencyRemoveMaskToNumber(String(mod.valor));
             }
-            
+
             next[idx] = {
                 selected: false,
                 credits: Number(mod.limite || 0),
@@ -248,7 +250,12 @@ export default function CourseModulesSelector({
       const next = { ...current, [field]: value };
       
       // Recalcula preço se mudar créditos ou aeronave (apenas se tiver aeronave selecionada)
-      if (field === 'credits' || field === 'aircraftId' || (field as any) === 'currency_change') {
+      // pt-BR: Pula recálculo se for Etapa 1 (Teórica/Manual)
+      const module = course?.modulos?.[idx];
+      const etapaStr = String(module?.etapa || '').toLowerCase();
+      const isTeoria = etapaStr.includes('etapa 1') || etapaStr.includes('etapa1') || etapaStr.includes('teoria');
+
+      if (!isTeoria && (field === 'credits' || field === 'aircraftId' || (field as any) === 'currency_change')) {
         const aircraft = aircrafts.find(a => String(a.id) === String(next.aircraftId));
         if (aircraft) {
             next.price = next.credits * getAppliedRate(aircraft);
@@ -259,8 +266,9 @@ export default function CourseModulesSelector({
       if (field === 'aircraftId' && value && !current.selected) {
         next.selected = true;
       }
-      // Se editou preço manual e for maior que zero, marca selecionado
-      if (field === 'price' && Number(value) > 0 && !current.selected) {
+      // Se editou preço manual e for maior ou igual a zero (se selecionado), marca selecionado
+      // Nota: Permitimos 0 como valor válido selecionado
+      if (field === 'price' && !current.selected) {
         next.selected = true;
       }
 
@@ -299,6 +307,13 @@ export default function CourseModulesSelector({
       Object.keys(next).forEach(key => {
         const idx = Number(key);
         const sel = next[idx];
+        
+        // pt-BR: Não recalcula preço de módulos teóricos (Etapa 1) com base em aeronave
+        const module = course?.modulos?.[idx];
+        const etapaStr = String(module?.etapa || '').toLowerCase();
+        const isTeoria = etapaStr.includes('etapa 1') || etapaStr.includes('etapa1') || etapaStr.includes('teoria');
+        if (isTeoria) return;
+
         if (sel.aircraftId) {
           const aircraft = aircrafts.find(a => String(a.id) === String(sel.aircraftId));
           if (aircraft) {

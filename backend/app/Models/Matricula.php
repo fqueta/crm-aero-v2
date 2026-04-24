@@ -34,6 +34,66 @@ class Matricula extends Model
     ];
 
     /**
+     * Atributos virtuais incluídos na serialização.
+     * Virtual attributes included in serialization.
+     */
+    protected $appends = ['inscricao', 'consultor', 'token', 'tags'];
+
+    /**
+     * Get the inscricao from the config array.
+     */
+    public function getInscricaoAttribute()
+    {
+        return $this->config['inscricao'] ?? null;
+    }
+
+    /**
+     * Set the inscricao in the config array.
+     */
+    public function setInscricaoAttribute($value)
+    {
+        $config = $this->config ?? [];
+        $config['inscricao'] = $value;
+        $this->config = $config;
+    }
+
+    public function getConsultorAttribute()
+    {
+        return $this->config['consultor'] ?? null;
+    }
+
+    public function setConsultorAttribute($value)
+    {
+        $config = $this->config ?? [];
+        $config['consultor'] = $value;
+        $this->config = $config;
+    }
+
+    public function getTokenAttribute()
+    {
+        return $this->config['token'] ?? null;
+    }
+
+    public function setTokenAttribute($value)
+    {
+        $config = $this->config ?? [];
+        $config['token'] = $value;
+        $this->config = $config;
+    }
+
+    public function getTagsAttribute()
+    {
+        return $this->config['tags'] ?? [];
+    }
+
+    public function setTagsAttribute($value)
+    {
+        $config = $this->config ?? [];
+        $config['tags'] = $value;
+        $this->config = $config;
+    }
+
+    /**
      * Campos permitidos para atribuição em massa.
      * Mass assignable fields.
      */
@@ -55,6 +115,10 @@ class Matricula extends Model
         'subtotal',
         'total',
         'orc',
+        'inscricao',
+        'consultor',
+        'token',
+        'tags',
         // Lixeira personalizada
         'excluido',
         'deletado',

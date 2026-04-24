@@ -47,8 +47,8 @@ class PdfController extends Controller
 
             // Lista estendida de domínios de desenvolvimento
             $localDomains = [
-                'localhost', '127.0.0.1', '::1', 
-                'api-crm.localhost', 'crm.localhost', 
+                'localhost', '127.0.0.1', '::1',
+                'api-crm.localhost', 'crm.localhost',
                 $appHost, $appFullHost, $host, $fullHost
             ];
 
@@ -70,7 +70,7 @@ class PdfController extends Controller
                 if ($path) {
                     // Tenta caminho direto na pasta public
                     $filePath = public_path(ltrim($path, '/'));
-                    
+
                     // Se não existir, tenta resolver links simbólicos de storage
                     if (!file_exists($filePath) && str_starts_with($path, '/storage/')) {
                         $relative = substr($path, 9);
@@ -118,7 +118,7 @@ class PdfController extends Controller
                 }
             }
 
-            // CRÍTICO: Se a URL for do servidor local e não resolveu para arquivo acima, 
+            // CRÍTICO: Se a URL for do servidor local e não resolveu para arquivo acima,
             // NUNCA tente fazer Http::get() se estivermos em desenvolvimento para evitar Deadlock.
             if ($this->isLocalUrl($url)) {
                 return null;
@@ -403,7 +403,7 @@ class PdfController extends Controller
                 }
             }
         }
-        
+
         // Aplica fundos da galeria
         $galleryBackgrounds = [];
         if (!$skipExtras) {
@@ -419,7 +419,7 @@ class PdfController extends Controller
                 }
             }
         }
-       
+
 
         $defaultBgPos = $request->input('background_position');
         $defaultBgFit = $request->input('background_fit', 'contain');
@@ -459,7 +459,7 @@ class PdfController extends Controller
                 'background_data_uri' => null,
             ]]);
         }
-        
+
         return ['extraPages' => $extraPages, 'backgroundUrl' => $backgroundUrl];
     }
 
@@ -530,11 +530,16 @@ class PdfController extends Controller
     {
         $token = $matricula['id_cliente'] . '_' . Qlib::zerofill($matricula['id'], 5) . '/1';
         $meta = $this->getAllMatriculaMeta($matricula['id']);
-        
-        $dataCadastro = !empty($matricula['data']) ? Carbon::parse($matricula['data']) : now();
-        $validadeDias = (int)($meta['validade'] ?? 0);
-        $validadeData = (clone $dataCadastro)->addDays($validadeDias);
-        
+
+        // Function-level comment: Keep PDF validity aligned with the proposal screen,
+        // using the current emission date plus the configured validity days.
+        $dataEmissao = now();
+        $validadeDias = (int)($matricula['validade'] ?? ($meta['validade'] ?? 14));
+        if ($validadeDias <= 0) {
+            $validadeDias = 14;
+        }
+        $validadeData = (clone $dataEmissao)->addDays($validadeDias);
+
         $subtotalFormatado = number_format((float)($matricula['subtotal'] ?? 0), 2, ',', '.');
         $totalFormatado = number_format((float)($matricula['total'] ?? 0), 2, ',', '.');
         $cta_url = Qlib::getFrontUrl() . '/aluno/assinatura/' . $token ?? '';
@@ -546,8 +551,9 @@ class PdfController extends Controller
             'cliente_telefone' => $matricula['cliente']['celular'] ?? '',
             'cliente_zapsint' => Qlib::zerofill($matricula['id'], 5),
             'consultor_nome' => $matricula['consultor']['name'] ?? ($matricula['consultor']['nome'] ?? ''),
-            'data_formatada' => $dataCadastro->format('d/m/Y'),
+            'data_formatada' => $dataEmissao->format('d/m/Y'),
             'validade_formatada' => $validadeData->format('d/m/Y'),
+            'validade_dias' => $validadeDias,
             'desconto' => $matricula['desconto'],
             'subtotal_formatado' => $subtotalFormatado,
             'total_formatado' => $totalFormatado,
@@ -577,7 +583,7 @@ class PdfController extends Controller
         if (!$hasBackground) {
             $headerHtml = View::make('pdf.header')->render();
             $footerHtml = View::make('pdf.footer')->render();
-            
+
             // PT: Prepara header/footer para todas as engines para garantir caminhos locais/base64
             $headerHtml = $this->prepareHtml($headerHtml, true, $engine);
             $footerHtml = $this->prepareHtml($footerHtml, true, $engine);
@@ -600,7 +606,7 @@ class PdfController extends Controller
         $clienteSlug = Str::slug((string)($matricula['cliente_nome'] ?? 'cliente'));
         $clienteSlug = Str::limit($clienteSlug, 40, '');
         $cursoId = (string)($matricula['id_curso'] ?? 'curso');
-        
+
         $slug = 'matricula-' . $matricula['id'] . '-' . $cursoId . '-' . $clienteSlug;
         $filename = $slug . '.pdf';
         $relative = 'uploads/matriculas/' . $filename;
@@ -783,7 +789,9 @@ class PdfController extends Controller
             ->setTimeout(300);
 
         if ($config['no_store']) {
-            return $pdf->inline($fileInfo['filename']);
+            return response($pdf->output(), 200)
+                ->header('Content-Type', 'application/pdf')
+                ->header('Content-Disposition', 'inline; filename="' . $fileInfo['filename'] . '"');
         } else {
             $knp = app('snappy.pdf');
             $knp->setTimeout(300);
@@ -802,7 +810,7 @@ class PdfController extends Controller
     {
         $disk = Storage::disk('public');
         $relative = $fileInfo['relative'];
-        
+
         $mime = 'application/pdf';
         $size = $disk->exists($relative) ? $disk->size($relative) : null;
 
@@ -816,7 +824,7 @@ class PdfController extends Controller
         $post->guid = $relative;
         $post->post_mime_type = $mime;
         $post->post_value1 = $size;
-        
+
         $user = $request->user();
         $post->post_author = $user && !empty($user->id) ? $user->id : 0;
         $post->save();
@@ -878,26 +886,26 @@ class PdfController extends Controller
         if ($asyncResponse = $this->handleAsyncMatriculaJobs($request, $id)) {
             return $asyncResponse;
         }
-        
+
         $matricula = (new MatriculaController)->dm($id);
         $config = $this->getMatriculaPdfConfig($request);
-        
+
         $viewData = $this->prepareMatriculaViewData($request, $matricula, $config);
         $htmlData = $this->renderMatriculaHtml($viewData, $config['engine']);
         if ($request->boolean('debug_html')) {
             return response($htmlData['body'], 200)->header('Content-Type', 'text/html; charset=UTF-8');
         }
-        
+
         $fileInfo = $this->getMatriculaFileInfo($matricula);
-        
+
         $this->cleanupOldMatriculaPdfs($fileInfo['relative'], $matricula['id'], $config['fast_dev']);
-        
+
         $shouldGenerate = $this->shouldGenerateMatriculaPdf($fileInfo['relative'], $config);
-        
+
         if ($shouldGenerate && $config['force'] && Storage::disk('public')->exists($fileInfo['relative'])) {
             try { Storage::disk('public')->delete($fileInfo['relative']); } catch (\Throwable $e) {}
         }
-        
+
         if ($shouldGenerate) {
             $pdfResponse = $this->engineGeneratePdf($config, $htmlData, $fileInfo, $matricula);
             if ($pdfResponse !== null) {
@@ -909,7 +917,10 @@ class PdfController extends Controller
             return $this->persistAndRespondPdfRecord($request, $matricula, $fileInfo, $config);
         }
 
-        return response()->json(['message' => 'PDF gerado sem persistência'], 200);
+        return response()->json([
+            'message' => 'Falha ao retornar o preview do PDF.',
+            'error' => 'A engine de PDF nao devolveu um arquivo inline para visualizacao.',
+        ], 500);
     }
     /**
      * Converte HTML em PDF e salva no disco público.
@@ -944,7 +955,7 @@ class PdfController extends Controller
         // PT: Prepara o HTML (inline imagens e corrige hosts)
         // Se explícito em $config ou no request
         $useHeaderFooter = isset($config['use_header_footer']) ? $config['use_header_footer'] : $request->boolean('use_header_footer', true);
-        
+
         $headerHtml = '';
         $footerHtml = '';
         $engine = strtolower((string)($config['engine'] ?? env('PDF_ENGINE', 'wkhtmltopdf')));
@@ -1039,7 +1050,7 @@ class PdfController extends Controller
 
                     $shot->save($absolute);
                     $ret['ger_arquivo'] = $disk->exists($relative);
-                    
+
                     if ($ret['ger_arquivo'] && $short_code && $id_matricula) {
                          // ... (segue lógica de meta abaixo)
                     }
@@ -1150,7 +1161,7 @@ class PdfController extends Controller
     private function prepareHtml(string $rawHtml, bool $isTemplate = false, string $engine = 'wkhtmltopdf'): string
     {
         // 1. Converte imagens (tags <img> e background-image CSS)
-        // PT: Se engine for wkhtmltopdf, injeta 'file:///' direto. 
+        // PT: Se engine for wkhtmltopdf, injeta 'file:///' direto.
         $appUrl = env('APP_URL', 'http://localhost');
         $rawHtml = preg_replace_callback(
             '/(src=["\']|url\(["\']?|href=["\'])([^"\'\)\s>]+)(["\']?|\)?)/i',
@@ -1205,20 +1216,20 @@ class PdfController extends Controller
             if (preg_match('/<style>(.*?)<\/style>/is', $rawHtml, $match)) {
                 $styles = $match[0];
             }
-            
+
             // Extrai apenas o conteúdo dentro da div principal ou do body
             $bodyContent = $rawHtml;
             if (preg_match('/<body[^>]*>(.*?)<\/body>/is', $rawHtml, $match)) {
                 $bodyContent = $match[1];
             }
-            
+
             // Limpa tags desnecessárias para o shadow dom do chrome
             $bodyContent = preg_replace('/<(html|head|meta|title)[^>]*>|<\/(html|head|meta|title)>/i', '', $bodyContent);
             $bodyContent = preg_replace('/<body[^>]*>|<\/body>/i', '', $bodyContent);
 
             // Browsershot exige que o template seja um fragmento com estilos embutidos
             $type = str_contains($rawHtml, 'header') ? 'header' : 'footer';
-            
+
             // O segredo para esconder o header default do Chrome (título/data) é ter um template válido
             // e forçar as margens. Também inserimos um CSS reset específico do Chrome.
             $rawHtml = '<style>

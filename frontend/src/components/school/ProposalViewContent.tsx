@@ -165,8 +165,10 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
    */
   function maskMonetaryDisplay(raw: string | number | undefined | null): string {
     const s = String(raw ?? '').trim();
-    if (!s) return '';
-    const num = currencyRemoveMaskToNumber(s);
+    if (!s || s === 'null') return '';
+    // pt-BR: Se já tiver vírgula ou símbolo, remove máscara; caso contrário, é número puro do back
+    // en-US: If it has comma or symbol, unmask; otherwise it is a pure number from backend
+    const num = (s.includes(',') || s.includes('R$')) ? currencyRemoveMaskToNumber(s) : (Number(s) || 0);
     return formatCurrencyBRL(num);
   }
 
@@ -189,6 +191,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const subtotalMasked = useMemo(() => maskMonetaryDisplay((enrollment as any)?.subtotal), [enrollment]);
   const totalMasked = useMemo(() => maskMonetaryDisplay((enrollment as any)?.total), [enrollment]);
   const descontoMasked = useMemo(() => maskMonetaryDisplay((enrollment as any)?.desconto), [enrollment]);
+  const inscricaoMasked = useMemo(() => maskMonetaryDisplay((enrollment as any)?.inscricao), [enrollment]);
   const validadeDias = useMemo(() => String((enrollment as any)?.validade || '14'), [enrollment]);
   const clientName = client?.name || (client as any)?.nome || '';
   const clientPhone = client?.config?.celular || client?.config?.telefone_residencial || '';
@@ -311,6 +314,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                       totalMasked={totalMasked}
                       validityDate={computeValidityDate(validadeDias)}
                       validityDays={validadeDias}
+                      inscricaoMasked={inscricaoMasked}
                       etapa1Discount={etapa1Discount}
                       fuelExternalText={fuelExternalText}
                       parcelamento={parcelamento}

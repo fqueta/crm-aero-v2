@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Save, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Eye } from 'lucide-react';
 
 export interface EditFooterBarProps {
   /**
@@ -21,6 +21,12 @@ export interface EditFooterBarProps {
    * en-US: Handler to save and finish, returning to origin/listing.
    */
   onFinish?: () => void;
+  /**
+   * onView
+   * pt-BR: Handler para visualizar o registro (ex: abrir em nova aba).
+   * en-US: Handler to view the record (e.g. open in new tab).
+   */
+  onView?: () => void;
   /**
    * disabled
    * pt-BR: Desabilita ações enquanto há submissão/carregamento.
@@ -46,6 +52,12 @@ export interface EditFooterBarProps {
    */
   finishLabel?: string;
   /**
+   * viewLabel
+   * pt-BR: Texto do botão Visualizar.
+   * en-US: View button label.
+   */
+  viewLabel?: string;
+  /**
    * showContinue
    * pt-BR: Controla a exibição do botão "Salvar e Continuar".
    * en-US: Controls visibility of the "Save and Continue" button.
@@ -57,6 +69,12 @@ export interface EditFooterBarProps {
    * en-US: Controls visibility of the "Save and Finish" button.
    */
   showFinish?: boolean;
+  /**
+   * showView
+   * pt-BR: Controla a exibição do botão "Visualizar".
+   * en-US: Controls visibility of the "View" button.
+   */
+  showView?: boolean;
   /**
    * fixed
    * pt-BR: Define se a barra é fixa ao rodapé da janela.
@@ -82,12 +100,15 @@ export function EditFooterBar({
   onBack,
   onContinue,
   onFinish,
+  onView,
   disabled = false,
   backLabel = 'Voltar',
   continueLabel = 'Salvar e Continuar',
   finishLabel = 'Salvar e Finalizar',
+  viewLabel = 'Visualizar',
   showContinue = true,
   showFinish = true,
+  showView = false,
   fixed = true,
   className = '',
 }: EditFooterBarProps) {
@@ -101,6 +122,11 @@ export function EditFooterBar({
         <Button type="button" variant="ghost" onClick={onBack}>
           <ArrowLeft className="h-4 w-4 mr-2" /> {backLabel}
         </Button>
+        {showView && (
+          <Button type="button" variant="outline" onClick={onView} className="border-blue-200 text-blue-600 hover:bg-blue-50">
+            <Eye className="h-4 w-4 mr-2" /> {viewLabel}
+          </Button>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {showContinue && (
             <Button type="button" onClick={onContinue} disabled={disabled}>

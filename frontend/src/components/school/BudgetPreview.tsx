@@ -54,8 +54,10 @@ export default function BudgetPreview({
   validityDays?: string | number;
   fuelExternalText?: string;
   parcelamento?: {
-    linhas?: Array<{ parcela: string; valor: string; desconto: string }>;
+    linhas?: Array<{ parcela?: string; parcelas?: string; valor: string; desconto: string }>;
     texto_desconto?: string;
+    texto_preview_html?: string;
+    parcela_selecionada?: string;
   } | null;
 }) {
   // Helpers
@@ -111,21 +113,41 @@ export default function BudgetPreview({
     if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
     const s = String(v ?? '').trim();
     if (!s) return 0;
-    // Remove "R$", trim, remove thousands separator (.), replace decimal separator (,) with (.)
-    const clean = s.replace(/^R\$\s?/, '').trim();
-    const n = Number(clean.replace(/\./g, '').replace(',', '.'));
+    
+    // Remove "R$" e espaços
+    let clean = s.replace(/^R\$\s?/, '').trim();
+    
+    // Se contiver vírgula, assume formato BR (Ex: 1.234,56 ou 10,00)
+    if (clean.includes(',')) {
+      const n = Number(clean.replace(/\./g, '').replace(',', '.'));
+      return Number.isFinite(n) ? n : 0;
+    }
+    
+    // Se não contiver vírgula mas contiver ponto, pode ser US (10100.00) ou BR sem decimais (1.100)
+    // Se houver apenas um ponto e ele estiver na posição de centavos (2 casas), assume US.
+    // Para simplificar: se não tem vírgula, tenta converter direto. 
+    // Se o resultado for válido, usa.
+    const n = Number(clean);
     return Number.isFinite(n) ? n : 0;
   };
 
   // Helper para formatar valor monetário
   const formatValue = (v: any) => {
-    if (typeof v === 'number') {
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-    }
-    if (typeof v === 'string' && v.trim().length > 0) {
-      return v.startsWith('R$') ? v : `R$ ${v}`;
-    }
-    return 'R$ 0,00';
+    const num = parseToNumber(v);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+  };
+
+  /**
+   * parseInstallmentCount
+   * pt-BR: Extrai a quantidade de parcelas a partir de valores como "3", "3x" ou similares.
+   * en-US: Extracts installment count from values such as "3", "3x" or similar.
+   */
+  const parseInstallmentCount = (value: unknown): number => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 0;
+    const digits = raw.match(/\d+/)?.[0] || '';
+    const parsed = Number(digits);
+    return Number.isFinite(parsed) ? parsed : 0;
   };
 
   // Agrupa módulos por etapa
@@ -163,12 +185,6 @@ export default function BudgetPreview({
     if (stageName === 'Etapa 1') {
       return Math.max(0, stageSubtotal - etapa1Discount);
     } else {
-      // Assumindo que o desconto global se aplica apenas à Etapa 2 (parte prática), ou proporcionalmente
-      // Mas a lógica atual do renderStageTable aplica o desconto global APENAS nas etapas != 1
-      // Se houver múltiplas etapas != 1 (ex: Etapa 2 e Etapa 3), o desconto global seria aplicado em todas?
-      // A lógica original aplica parseToNumber(discountAmountMasked) em CADA etapa != 1. Isso parece duplicar desconto se houver >1 etapa prática.
-      // Vou manter a lógica do renderStageTable para consistência, mas idealmente desconto global deveria ser único.
-      // No contexto atual (Etapa 1 + Etapa 2), funciona pois só há uma etapa prática.
       const discount = parseToNumber(discountAmountMasked);
       return Math.max(0, stageSubtotal - discount);
     }
@@ -190,8 +206,6 @@ export default function BudgetPreview({
         stageDiscount = etapa1Discount;
         stageTotal = Math.max(0, stageSubtotal - stageDiscount);
     } else {
-        // Para outras etapas (Etapa 2), aplicamos o desconto global
-        // Assumindo que o desconto global se aplica à Etapa 2 (parte prática)
         stageDiscount = parseToNumber(discountAmountMasked);
         stageTotal = Math.max(0, stageSubtotal - stageDiscount);
     }
@@ -455,20 +469,38 @@ export default function BudgetPreview({
                          <TableHead className="font-bold text-black text-center uppercase text-[10px]">Valor da Parcela</TableHead>
                          <TableHead className="font-bold text-black text-center uppercase text-[10px]">Desconto Pontualidade</TableHead>
                          <TableHead className="font-bold text-black text-right uppercase text-[10px]">Parcela Líquida</TableHead>
+                         <TableHead className="font-bold text-black text-right uppercase text-[10px]">Total</TableHead>
                        </TableRow>
                      </TableHeader>
                      <TableBody>
                        {parcelamento.linhas.map((row, idx) => {
-                         const valorNum = parseToNumber(row.valor);
-                         const descontoNum = parseToNumber(row.desconto);
+                         const valRaw = row.valor;
+                         const descRaw = row.desconto;
+                         const parcelaNum = row.parcelas || row.parcela || '';
+                         
+                         const valorNum = parseToNumber(valRaw);
+                         const descontoNum = parseToNumber(descRaw);
                          const liquido = Math.max(valorNum - descontoNum, 0);
+                         const totalParcelas = parseInstallmentCount(parcelaNum);
+                         const totalParcelado = totalParcelas * liquido;
                          
                          return (
                            <TableRow key={`budget-parc-${idx}`} className="hover:bg-zinc-50/50">
-                             <TableCell className="text-center font-medium text-blue-700 bg-blue-50/30 whitespace-nowrap">{row.parcela}x</TableCell>
-                             <TableCell className="text-center font-mono text-xs">{row.valor}</TableCell>
-                             <TableCell className="text-center font-mono text-xs text-red-600">{row.desconto}</TableCell>
-                             <TableCell className="text-right font-bold text-green-700">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(liquido)}</TableCell>
+                             <TableCell className="text-center font-medium text-blue-700 bg-blue-50/30 whitespace-nowrap">
+                               {parcelaNum}{parcelaNum ? 'x' : ''}
+                             </TableCell>
+                             <TableCell className="text-center font-mono text-xs">
+                               {formatValue(valorNum)}
+                             </TableCell>
+                             <TableCell className="text-center font-mono text-xs text-red-600">
+                               {formatValue(descontoNum)}
+                             </TableCell>
+                             <TableCell className="text-right font-bold text-green-700">
+                               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(liquido)}
+                             </TableCell>
+                             <TableCell className="text-right font-bold text-blue-700">
+                               {formatValue(totalParcelado)}
+                             </TableCell>
                            </TableRow>
                          );
                        })}
@@ -480,14 +512,19 @@ export default function BudgetPreview({
                        <div 
                          className="text-xs text-blue-800 leading-relaxed space-y-1"
                          dangerouslySetInnerHTML={{ __html: (() => {
-                            const firstRow = parcelamento.linhas?.[0];
-                            if (!firstRow) return parcelamento.texto_desconto;
-                            const vNum = parseToNumber(firstRow.valor);
-                            const dNum = parseToNumber(firstRow.desconto);
+                            if (parcelamento.texto_preview_html) return parcelamento.texto_preview_html;
+
+                            // Fallback para resolver se não tiver o HTML pré-renderizado
+                            const selectedParcela = parcelamento.parcela_selecionada;
+                            const targetRow = (parcelamento.linhas || []).find(r => String(r.parcelas || r.parcela || '') === String(selectedParcela)) || parcelamento.linhas?.[0];
+                            
+                            if (!targetRow) return parcelamento.texto_desconto;
+                            const vNum = parseToNumber(targetRow.valor);
+                            const dNum = parseToNumber(targetRow.desconto);
                             const liqNum = Math.max(vNum - dNum, 0);
                             const liqStr = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(liqNum);
                             return String(parcelamento.texto_desconto)
-                              .replace(/\{total_parcelas\}/gi, String(firstRow.parcela || ''))
+                              .replace(/\{total_parcelas\}/gi, String(targetRow.parcelas || targetRow.parcela || ''))
                               .replace(/\{valor_parcela\}/gi, formatValue(vNum))
                               .replace(/\{desconto_pontualidade\}/gi, formatValue(dNum))
                               .replace(/\{parcela_com_desconto\}/gi, liqStr);

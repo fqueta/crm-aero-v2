@@ -848,35 +848,20 @@ export default function ProposalsEdit() {
           modsNorm.forEach((courseMod: any, courseIdx: number) => {
               // Tenta achar no ORC um módulo que corresponda a este do curso
               const courseTitle = normalizeStr(courseMod.titulo || courseMod.nome || '');
-              const courseStageNum = extractStageNum(courseMod.etapa);
+              const courseEtapaRaw = String(courseMod.etapa || '').toLowerCase().replace(/\s/g, '');
+              const isEtapa1 = courseEtapaRaw.includes('etapa1') || courseEtapaRaw.includes('teoria');
+              const courseStageNum = extractStageNum(courseEtapaRaw);
               
-              // 1. Tenta por título exato
+              // 1. Tenta por título exato (considerando a etapa)
               let foundInOrc = orc.modulos.find((savedMod: any) => {
                   const savedTitle = normalizeStr(savedMod.titulo || savedMod.nome || '');
-                  return savedTitle === courseTitle;
+                  const savedEtapaRaw = String(savedMod.etapa || '').toLowerCase().replace(/\s/g, '');
+                  const savedStageNum = extractStageNum(savedEtapaRaw);
+                  return savedTitle === courseTitle && (savedStageNum === courseStageNum || (isEtapa1 && (savedEtapaRaw.includes('etapa1') || savedEtapaRaw.includes('teoria'))));
               });
 
-              // 2. Se não achou por título, tenta por ordem na etapa
-              if (!foundInOrc && courseStageNum) {
-                  // Pega todos os módulos desta etapa no curso
-                  const courseStageMods = modsNorm.filter((m: any) => extractStageNum(m.etapa) === courseStageNum);
-                  // Encontra o índice relativo deste módulo dentro da etapa (0, 1, 2...)
-                  const relativeIdx = courseStageMods.findIndex((m: any) => m === courseMod);
-                  
-                  // Pega todos os módulos desta etapa no ORC salvo
-                  // IMPORTANTE: Aqui devemos filtrar apenas os módulos que realmente correspondem à etapa
-                  // e que estão em ordem. O problema é que o savedStageMods pode ter "buracos" se o usuário pulou fases.
-                  // Se o usuário selecionou Fase 1 e Fase 3, savedStageMods terá 2 itens.
-                  // O relativeIdx 0 (Fase 1) vai pegar o item 0 (Fase 1) -> OK
-                  // O relativeIdx 1 (Fase 2) vai pegar o item 1 (Fase 3) -> ERRADO! Isso causa o deslocamento.
-                  
-                  // CORREÇÃO: Não podemos confiar apenas no índice relativo do array filtrado se houver saltos.
-                  // Precisamos tentar encontrar por "título aproximado" ou desistir se não for exato.
-                  // Mas como fallback para estruturas rígidas, vamos tentar verificar se o título "contém" algo similar.
-                  
-                  // Nova estratégia: Se falhou por título exato, e estamos na etapa 2 (prática),
-                  // onde os nomes são bem definidos ("Fase 1...", "Fase 2..."), vamos tentar extrair o número da fase do título.
-                  
+              // 2. Se não achou por título exato, tenta por fases numeradas (ex: "Fase 1")
+              if (!foundInOrc && courseStageNum && !isEtapa1) {
                   const extractPhaseNum = (t: string) => {
                       const match = t.match(/fase\s*(\d+)/i);
                       return match ? match[1] : null;
@@ -888,52 +873,45 @@ export default function ProposalsEdit() {
                       foundInOrc = orc.modulos.find((savedMod: any) => {
                           const savedTitle = normalizeStr(savedMod.titulo || savedMod.nome || '');
                           const savedPhaseNum = extractPhaseNum(savedTitle);
-                          return savedPhaseNum === coursePhaseNum && extractStageNum(savedMod.etapa) === courseStageNum;
+                          const savedStageNum = extractStageNum(savedMod.etapa || '');
+                          return savedPhaseNum === coursePhaseNum && savedStageNum === courseStageNum;
                       });
-                  }
-                  
-                  // Se ainda não achou e NÃO é baseado em fases numeradas (ex: etapa 1),
-                  // aí sim usamos a lógica posicional, mas com muito cuidado.
-                  // Para etapa 1, geralmente seleciona-se tudo, então a lógica posicional funciona bem.
-                  // MAS, se o usuário desmarcar um item, a contagem muda e o posicional quebra (shift).
-                  // Portanto, só usamos posicional se a contagem de itens na etapa for igual (todos selecionados ou estrutura 1:1).
-                  if (!foundInOrc && courseStageNum === '1') {
-                      const savedStageMods = orc.modulos.filter((m: any) => extractStageNum(m.etapa) === courseStageNum);
-                      const courseStageMods = modsNorm.filter((m: any) => extractStageNum(m.etapa) === courseStageNum);
-                      
-                      if (savedStageMods.length === courseStageMods.length && savedStageMods[relativeIdx]) {
-                          foundInOrc = savedStageMods[relativeIdx];
-                      }
-                  }
-              }
-              // console.log('courseMod:', courseMod);
-              // console.log('foundInOrc Etapa:', foundInOrc.etapa);
-              // Verifica se a etapa do módulo encontrado bate com a do curso
-              // Isso previne que um módulo da etapa 2 seja usado para hidratar um da etapa 1 se houver confusão
-              if (foundInOrc) {
-                  const savedStageNum = extractStageNum(foundInOrc.etapa);
-                  if (savedStageNum && courseStageNum && savedStageNum !== courseStageNum) {
-                      foundInOrc = undefined;
                   }
               }
 
-              // Se achou correspondência no ORC, verifica se está "selecionado"
-              if (foundInOrc) {
-                  const price = Number(foundInOrc.valor || 0);
-                  const aircraftId = String(foundInOrc.aircraft_id || foundInOrc.aviao_id || '');
-                  // Considera selecionado se tem valor > 0 OU se é da etapa 1 (teórica/preliminar) que pode não ter valor nem aeronave
-                  // No JSON do usuário, etapa 1 tem valor 0 e aircraft_name "Aeronave undefined", mas existe no array modulos, então foi selecionado.
-                  const isEtapa1 = courseStageNum === '1';
-                  const isSelected = price > 0 || (aircraftId && aircraftId !== 'undefined' && aircraftId !== 'null' && aircraftId !== '') || isEtapa1;
+              // 3. Fallback posicional AGRESSIVO para Etapa 1 (Teórica)
+              // Para Etapa 1, confiamos na ordem da lista se o título falhar, pois a estrutura teórica é rígida
+              if (!foundInOrc && isEtapa1) {
+                  const savedStageMods = orc.modulos.filter((m: any) => {
+                      const et = String(m.etapa || '').toLowerCase().replace(/\s/g, '');
+                      return et.includes('etapa1') || et.includes('teoria') || extractStageNum(et) === '1';
+                  });
+                  const courseStageMods = modsNorm.filter((m: any) => {
+                      const et = String(m.etapa || '').toLowerCase().replace(/\s/g, '');
+                      return et.includes('etapa1') || et.includes('teoria') || extractStageNum(et) === '1';
+                  });
                   
-                  if (isSelected) {
-                      selections[courseIdx] = {
-                          selected: true,
-                          credits: Number(foundInOrc.limite || courseMod.limite || 0),
-                          aircraftId: aircraftId,
-                          price: price
-                      };
+                  const relativeIdx = courseStageMods.findIndex((m: any) => m === courseMod);
+                  if (relativeIdx !== -1 && savedStageMods[relativeIdx]) {
+                      foundInOrc = savedStageMods[relativeIdx];
                   }
+              }
+
+              // Se achou correspondência no ORC, ele está selecionado
+              if (foundInOrc) {
+                  const rawValor = foundInOrc.valor !== undefined && foundInOrc.valor !== null ? foundInOrc.valor : 0;
+                  const price = typeof rawValor === 'number' 
+                      ? rawValor 
+                      : currencyRemoveMaskToNumber(String(rawValor));
+                  
+                  const aircraftId = String(foundInOrc.aircraft_id || foundInOrc.aviao_id || '');
+                  
+                  selections[courseIdx] = {
+                      selected: true,
+                      credits: Number(foundInOrc.limite || courseMod.limite || 0),
+                      aircraftId: aircraftId && aircraftId !== 'undefined' && aircraftId !== 'null' ? aircraftId : '',
+                      price: price
+                  };
               }
           });
           
@@ -1327,18 +1305,27 @@ export default function ProposalsEdit() {
       tabela_id: values.parcelamento_id || '',
       texto_desconto: values.meta_texto_desconto || '',
       /**
+       * parcela_selecionada
+       * pt-BR: Armazena qual das linhas foi a escolhida pelo usuário.
+       * en-US: Stores which of the lines was chosen by the user.
+       */
+      parcela_selecionada: activeRow ? String(activeRow.parcela || '') : '',
+      /**
        * texto_preview_html
        * pt-BR: HTML do texto de desconto com shortcodes resolvidos a partir da linha ativa.
        * en-US: Discount text HTML with shortcodes resolved from the active row.
        */
       texto_preview_html: String(discountPreviewHtml || ''),
-      linhas: activeRow
-        ? [{
-            parcelas: String(activeRow.parcela || ''),
-            valor: currencyRemoveMaskToString(activeRow.valor || '') || '',
-            desconto: currencyRemoveMaskToString(activeRow.desconto || '') || '',
-          }]
-        : [],
+      /**
+       * linhas
+       * pt-BR: Persiste todas as opções de parcelamento (as que aparecem no modal).
+       * en-US: Persists all installment options (the ones that appear in the modal).
+       */
+      linhas: (discountRows || []).map(row => ({
+        parcelas: String(row.parcela || ''),
+        valor: currencyRemoveMaskToString(row.valor || '') || '',
+        desconto: currencyRemoveMaskToString(row.desconto || '') || '',
+      })),
     };
     payload.orc = { ...(payload.orc || {}), parcelamento: parcelamentoForOrc };
     return payload;
@@ -1354,10 +1341,10 @@ export default function ProposalsEdit() {
     const safe = (k: string, fallback: string = '') => String((enrollment as any)[k] ?? fallback);
     const metaSafe = (k: string, fallback: string = '') => String(((enrollment as any)?.meta?.[k]) ?? fallback);
     // Aplica máscaras monetárias iniciais a partir dos dados da matrícula
-    const descontoMaskedInit = formatCurrencyBRL(currencyRemoveMaskToNumber(safe('desconto', form.getValues('desconto') || '0,00')));
-    const inscricaoMaskedInit = formatCurrencyBRL(currencyRemoveMaskToNumber(safe('inscricao', form.getValues('inscricao') || '')));
-    const subtotalMaskedInit = formatCurrencyBRL(currencyRemoveMaskToNumber(safe('subtotal', form.getValues('subtotal') || '')));
-  const totalMaskedInit = formatCurrencyBRL(currencyRemoveMaskToNumber(safe('total', form.getValues('total') || '')));
+    const descontoMaskedInit = formatCurrencyBRL(Number(safe('desconto', '0')) || 0);
+    const inscricaoMaskedInit = formatCurrencyBRL(Number(safe('inscricao', '0')) || 0);
+    const subtotalMaskedInit = formatCurrencyBRL(Number(safe('subtotal', '0')) || 0);
+    const totalMaskedInit = formatCurrencyBRL(Number(safe('total', '0')) || 0);
     const currentRespId = safe('id_responsavel', '');
     // pt-BR: Só exibe a seção do responsável automaticamente se houver um ID válido (UUID/string não vazia e != '0')
     const hasStoredResponsible = currentRespId && 
@@ -1546,6 +1533,13 @@ export default function ProposalsEdit() {
       if ((!currentTexto || currentTexto.trim().length === 0) && parcelamento.texto_desconto) {
         form.setValue('meta_texto_desconto', String(parcelamento.texto_desconto));
       }
+
+      // Hidratar parcela selecionada
+      if (parcelamento.parcela_selecionada) {
+        form.setValue('total_parcelas', String(parcelamento.parcela_selecionada));
+        const idx = (rows || []).findIndex((r: any) => String(r.parcela) === String(parcelamento.parcela_selecionada));
+        if (idx !== -1) setActiveRowIndex(idx);
+      }
     } catch {
       // Silenciar erros de hidratação para não afetar UX
     }
@@ -1593,6 +1587,17 @@ export default function ProposalsEdit() {
   function handleSaveFinish() {
     finishAfterSaveRef.current = true;
     form.handleSubmit(onSubmit)();
+  }
+
+  /**
+   * handleView
+   * pt-BR: Abre a visualização da proposta em uma nova aba.
+   * en-US: Opens the proposal view in a new tab.
+   */
+  function handleView() {
+    if (id) {
+      navigate(`/admin/sales/proposals/view/${id}`);
+    }
   }
 
   /**
@@ -2486,6 +2491,8 @@ export default function ProposalsEdit() {
         onBack={handleBack}
         onContinue={handleSaveContinue}
         onFinish={handleSaveFinish}
+        onView={handleView}
+        showView={!!id}
         disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
       />
       {/* Modal de Personalização de Parcelamento */}

@@ -322,6 +322,7 @@ class MatriculaController extends Controller
             'combustivel' => ['nullable', 'numeric'],
             'subtotal' => ['nullable', 'numeric'],
             'total' => ['nullable', 'numeric'],
+            'inscricao' => ['nullable', 'numeric'],
             'orc'   => ['nullable', 'array'],
             // Parcelamentos vinculados ao curso da matrícula (máximo 2)
             'parcelamento_ids' => ['nullable', 'array', 'max:2'],
@@ -384,7 +385,8 @@ class MatriculaController extends Controller
                 $data['situacao_id'] = (int)$vs;
             }
         }
-        foreach (['desconto','combustivel','subtotal','total'] as $k) {
+        // Normalizar valores monetários
+        foreach (['desconto','combustivel','subtotal','total', 'inscricao'] as $k) {
             if (array_key_exists($k, $data)) {
                 $v = $data[$k];
                 if (is_string($v)) {
@@ -393,6 +395,7 @@ class MatriculaController extends Controller
                 }
             }
         }
+
         // Normalizar id_responsavel: '0' ou vazio -> null
         if (array_key_exists('id_responsavel', $data)) {
             $vr = trim((string)$data['id_responsavel']);
@@ -400,43 +403,23 @@ class MatriculaController extends Controller
                 $data['id_responsavel'] = null;
             }
         }
+        
         // Garantir string aparada para id_cliente
         if (array_key_exists('id_cliente', $data)) {
             $data['id_cliente'] = trim((string)$data['id_cliente']);
         }
-        // Consolidar extras em config
-        $config = [];
-        if (array_key_exists('config', $data)) {
-            if (is_array($data['config'])) {
-                $config = $data['config'];
-            } elseif (is_string($data['config']) && $data['config'] !== '') {
-                $decoded = json_decode($data['config'], true);
-                $config = is_array($decoded) ? $decoded : [];
-            }
-        }
-        if (array_key_exists('consultor', $data)) {
-            $config['consultor'] = $data['consultor'];
-            unset($data['consultor']);
-        }
-        if (array_key_exists('situacao', $data)) {
-            $config['situacao'] = $data['situacao'];
-            unset($data['situacao']);
-        }
-        if (array_key_exists('inscricao', $data)) {
-            $insc = str_replace([','], ['.'], trim((string)$data['inscricao']));
-            $config['inscricao'] = ($insc === '' ? null : (float)$insc);
-            unset($data['inscricao']);
-        }
-        if (array_key_exists('token', $data)) {
-            $config['token'] = $data['token'];
-            unset($data['token']);
-        }
+
+        // Mapear tag[] para tags (root field agora)
         if (array_key_exists('tag[]', $data)) {
             $tags = $data['tag[]'];
-            $config['tags'] = is_array($tags) ? $tags : [$tags];
+            $data['tags'] = is_array($tags) ? $tags : [$tags];
             unset($data['tag[]']);
         }
-        $data['config'] = $config;
+
+        // Nota: campos como 'inscricao', 'consultor', 'token' e 'tags' permanecem no root
+        // de $data para que o model Matricula os processe via setters customizados.
+        // Isso evita sobrescrever todo o campo JSON 'config' no banco.
+
         return $data;
     }
 

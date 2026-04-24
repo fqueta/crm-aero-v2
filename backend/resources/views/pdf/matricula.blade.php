@@ -2,6 +2,7 @@
     $tipo = $matricula['curso']['tipo'] ?? null;
     $curso = $matricula['curso_nome'] ?? null;
     $turma = $matricula['turma_nome'] ?? null;
+    $validadeDiasPdf = isset($validade_dias) && is_numeric($validade_dias) ? (int)$validade_dias : 14;
 @endphp
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -73,18 +74,20 @@
         }
 
         .styled-table th {
-            padding: 8px 12px;
+            padding: 6px 10px;
             font-weight: 700;
             border: none;
+            line-height: 1.15;
         }
         /* Arredondar cantos superiores da tabela */
         .styled-table thead tr th:first-child { border-top-left-radius: 12px; }
         .styled-table thead tr th:last-child { border-top-right-radius: 12px; }
 
         .styled-table td {
-            padding: 8px 12px;
+            padding: 5px 10px;
             border: none;
             /* border-bottom: 1px solid #e5e7eb; */
+            line-height: 1.12;
         }
 
         /* Zebra Striping */
@@ -205,6 +208,10 @@
         @media print {
             .section-title, .styled-table, .chips, div[style*="page-break-inside: avoid"] {
                 margin-top: 30px;
+            }
+            .budget-auto-shrink,
+            .budget-auto-shrink .styled-table:first-of-type {
+                margin-top: 0 !important;
             }
         }
         .page:last-of-type { page-break-after: auto; }
@@ -341,16 +348,8 @@
                                     return App\Services\Qlib::valor_moeda($v, 'R$');
                                 }
                             }
-                            $inscricaoVal = (float)($matricula['curso']['inscricao'] ?? 0);
+                            $inscricaoVal = (float)($matricula['inscricao'] ?? ($matricula['curso']['inscricao'] ?? 0));
                         @endphp
-
-                        <!-- MATRICULA BAR -->
-                        @if($inscricaoVal > 0)
-                            <div class="blue-pill-bar">
-                                <span>Matrícula</span>
-                                <span>{{ fmt_valor($inscricaoVal) }}</span>
-                            </div>
-                        @endif
 
                         @if($hasModules)
                             @foreach($groupedModules as $stageName => $stageModules)
@@ -551,8 +550,8 @@
                             </div>
                         @else
                             @php
-                                // Tenta pegar a validade do meta da matrícula, senão 7 dias padrão
-                                $diasValidade = isset($meta['validade']) && is_numeric($meta['validade']) ? (int)$meta['validade'] : 7;
+                                // Mantém a validade do PDF alinhada ao cálculo já resolvido no controller.
+                                $diasValidade = $validadeDiasPdf;
                             @endphp
                              <p style="font-weight: 700; margin: 0 0 4px;">Observações Importantes</p>
                              <p style="margin: 0 0 10px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::convert_number_to_words($diasValidade) }}) dias. O valor apresentado poderá ser pago:</p>
@@ -569,7 +568,7 @@
 
                         @if(!empty($linhas))
                             <div class="section-title" style="color: #0f2a5b; border-left: 4px solid #0f2a5b; padding-left: 10px; margin-bottom: 15px;">OPÇÕES DE PARCELAMENTO</div>
-                            
+
                             <table class="styled-table" style="margin-bottom: 20px;">
                                 <thead>
                                     <tr>
@@ -577,6 +576,7 @@
                                         <th style="text-align: right;">VALOR DA PARCELA</th>
                                         <th style="text-align: right;">DESCONTO PONTUALIDADE</th>
                                         <th style="text-align: right;">PARCELA LÍQUIDA</th>
+                                        <th style="text-align: right;">TOTAL</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -585,12 +585,17 @@
                                             $vParc = (float)($linha['valor'] ?? 0);
                                             $dParc = (float)($linha['desconto'] ?? 0);
                                             $vLiq = max($vParc - $dParc, 0);
+                                            $parcNum = $linha['parcelas'] ?? ($linha['parcela'] ?? '-');
+                                            preg_match('/\d+/', (string)$parcNum, $parcMatches);
+                                            $qtdParcelas = isset($parcMatches[0]) ? (int)$parcMatches[0] : 0;
+                                            $totalParcelado = $qtdParcelas * $vLiq;
                                         @endphp
                                         <tr>
-                                            <td style="text-align: center; font-weight: bold; color: #4472c4;">{{ $linha['parcelas'] ?? '-' }}</td>
+                                            <td style="text-align: center; font-weight: bold; color: #4472c4;">{{ $parcNum }}{{ is_numeric($parcNum) ? 'x' : '' }}</td>
                                             <td style="text-align: right;">{{ fmt_valor($vParc) }}</td>
                                             <td style="text-align: right; color: #ef4444;">{{ $dParc > 0 ? fmt_valor($dParc) : '-' }}</td>
                                             <td style="text-align: right; font-weight: bold; color: #00b050;">{{ fmt_valor($vLiq) }}</td>
+                                            <td style="text-align: right; font-weight: bold; color: #1d4ed8;">{{ fmt_valor($totalParcelado) }}</td>
                                         </tr>
                                     @endforeach
                                 </tbody>
@@ -601,15 +606,30 @@
                             $textoPreview = '';
                             if (!empty($orcArr) && isset($orcArr['parcelamento']) && is_array($orcArr['parcelamento'])) {
                                 $textoRaw = $orcArr['parcelamento']['texto_desconto'] ?? ($orcArr['parcelamento']['texto_preview_html'] ?? '');
-                                
-                                $firstRow = $linhas[0] ?? null;
-                                if ($firstRow) {
-                                    $vStr = isset($firstRow['valor']) ? fmt_valor($firstRow['valor']) : 'R$ 0,00';
-                                    $dStr = isset($firstRow['desconto']) ? fmt_valor($firstRow['desconto']) : 'R$ 0,00';
-                                    $vNum = (float)($firstRow['valor'] ?? 0);
-                                    $dNum = (float)($firstRow['desconto'] ?? 0);
+
+                                $selectedParcela = $orcArr['parcelamento']['parcela_selecionada'] ?? null;
+                                $targetRow = null;
+                                if ($selectedParcela) {
+                                    foreach ($linhas as $l) {
+                                        $pNum = $l['parcelas'] ?? ($l['parcela'] ?? '');
+                                        if ( (string)$pNum === (string)$selectedParcela ) {
+                                            $targetRow = $l;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if (!$targetRow) {
+                                    $targetRow = $linhas[0] ?? null;
+                                }
+
+                                if ($targetRow) {
+                                    $vStr = isset($targetRow['valor']) ? fmt_valor($targetRow['valor']) : 'R$ 0,00';
+                                    $dStr = isset($targetRow['desconto']) ? fmt_valor($targetRow['desconto']) : 'R$ 0,00';
+                                    $vNum = (float)($targetRow['valor'] ?? 0);
+                                    $dNum = (float)($targetRow['desconto'] ?? 0);
                                     $liqStr = fmt_valor(max($vNum - $dNum, 0));
-                                    $totalParc = $firstRow['parcelas'] ?? ($firstRow['parcela'] ?? '');
+                                    $totalParc = $targetRow['parcelas'] ?? ($targetRow['parcela'] ?? '');
 
                                     $textoPreview = str_replace(
                                         ['{total_parcelas}', '{valor_parcela}', '{desconto_pontualidade}', '{parcela_com_desconto}'],
@@ -649,20 +669,20 @@
         </div>
     @endforeach
     <script>
-        // PT: Script para ajustar o tamanho da fonte da página de orçamento (Página 2) 
+        // PT: Script para ajustar o tamanho da fonte da página de orçamento (Página 2)
         // para tentar manter tudo em uma única folha se o conteúdo for muito extenso.
         (function() {
             window.addEventListener('load', function() {
                 const container = document.querySelector('.budget-auto-shrink');
                 if (!container) return;
-                
+
                 // Limite aproximado de altura para conteúdo na A4 (em px, considerando margens)
                 // 240mm ~ 900px
-                const MAX_PIXELS = 880; 
-                
+                const MAX_PIXELS = 880;
+
                 let currentFont = 13; // Começa com um tamanho padrão confortável
                 container.style.fontSize = currentFont + 'px';
-                
+
                 let protection = 0;
                 while (container.scrollHeight > MAX_PIXELS && currentFont > 8 && protection < 20) {
                     currentFont -= 0.5;
