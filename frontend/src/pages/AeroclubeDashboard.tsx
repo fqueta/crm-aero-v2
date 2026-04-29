@@ -1,408 +1,1095 @@
-import React, { useMemo, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  DollarSign,
+  Percent,
+  Target,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
 import {
   ResponsiveContainer,
+  ComposedChart,
   BarChart,
   Bar,
-  LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
   CartesianGrid,
   XAxis,
   YAxis,
   Tooltip,
   Legend,
-} from "recharts";
+} from 'recharts';
+import { financialService } from '@/services/financialService';
+import {
+  FinancialDashboardData,
+  GeneralConversionReportResponse,
+  FinancialOverviewScheduleItem,
+  FinancialOverviewTransaction,
+  WonProposalReportItem,
+  WonProposalReportResponse,
+} from '@/types/financial';
 
 /**
- * AeroclubeDashboard
- * pt-BR: Dashboard com dados mockados inspirados na imagem fornecida.
- * Exibe gráficos de vendas/horas por mês, proporções (pizza),
- * evolução de metas e um registro de acessos.
- *
- * en-US: Dashboard using mocked data inspired by the provided screenshot.
- * Shows monthly sales/hours, pie proportions, goal trends and an access log.
+ * Retorna a data de hoje no formato yyyy-mm-dd.
+ */
+function getTodayInputValue(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Retorna o mês atual no formato yyyy-mm.
+ */
+function getCurrentMonthInputValue(): string {
+  return getTodayInputValue().slice(0, 7);
+}
+
+/**
+ * Garante que o mês selecionado seja válido e não fique no futuro.
+ */
+function normalizeDashboardMonth(period?: string): string {
+  const currentMonth = getCurrentMonthInputValue();
+
+  if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+    return currentMonth;
+  }
+
+  return period > currentMonth ? currentMonth : period;
+}
+
+/**
+ * Retorna o primeiro dia do mês de referência.
+ */
+function getMonthStartInputValue(period?: string): string {
+  const normalizedMonth = normalizeDashboardMonth(period);
+  return `${normalizedMonth}-01`;
+}
+
+/**
+ * Retorna o último dia útil do mês de referência, limitado à data atual.
+ */
+function getMonthEndInputValue(period?: string): string {
+  const normalizedMonth = normalizeDashboardMonth(period);
+  const [year, month] = normalizedMonth.split('-').map(Number);
+  const date = new Date(year, month, 0);
+  date.setHours(0, 0, 0, 0);
+
+  const computedEndDate = date.toISOString().slice(0, 10);
+  return computedEndDate > getTodayInputValue() ? getTodayInputValue() : computedEndDate;
+}
+
+/**
+ * Retorna o primeiro dia da janela analítica de 6 meses encerrada no mês de referência.
+ */
+function getDefaultPeriodStartInputValue(period?: string): string {
+  const normalizedMonth = normalizeDashboardMonth(period);
+  const [year, month] = normalizedMonth.split('-').map(Number);
+  const date = new Date(year, month - 1, 1);
+  date.setMonth(date.getMonth() - 5, 1);
+  date.setHours(0, 0, 0, 0);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Formata um mês yyyy-mm para exibição amigável.
+ */
+function formatMonthLabel(period?: string): string {
+  const normalizedMonth = normalizeDashboardMonth(period);
+  const parsed = new Date(`${normalizedMonth}-01T00:00:00`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return normalizedMonth;
+  }
+
+  return parsed.toLocaleDateString('pt-BR', {
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Retorna um mês deslocado para frente ou para trás.
+ */
+function shiftDashboardMonth(period: string, offset: number): string {
+  const normalizedMonth = normalizeDashboardMonth(period);
+  const [year, month] = normalizedMonth.split('-').map(Number);
+  const date = new Date(year, month - 1, 1);
+  date.setMonth(date.getMonth() + offset);
+  return normalizeDashboardMonth(date.toISOString().slice(0, 7));
+}
+
+/**
+ * Monta opções de seleção com os meses mais recentes disponíveis.
+ */
+function getDashboardMonthOptions(totalMonths = 18): Array<{ value: string; label: string }> {
+  const currentMonth = getCurrentMonthInputValue();
+  const [year, month] = currentMonth.split('-').map(Number);
+  const date = new Date(year, month - 1, 1);
+
+  return Array.from({ length: totalMonths }, (_, index) => {
+    const optionDate = new Date(date);
+    optionDate.setMonth(date.getMonth() - index);
+    const value = optionDate.toISOString().slice(0, 7);
+
+    return {
+      value,
+      label: formatMonthLabel(value),
+    };
+  });
+}
+
+/**
+ * Formata valores monetários no padrão brasileiro.
+ */
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(Number(value || 0));
+}
+
+/**
+ * Formata números inteiros no padrão pt-BR.
+ */
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('pt-BR').format(Number(value || 0));
+}
+
+/**
+ * Formata percentuais com duas casas.
+ */
+function formatPercentage(value: number): string {
+  return `${Number(value || 0).toFixed(2)}%`;
+}
+
+/**
+ * Formata datas ISO para o padrão brasileiro.
+ */
+function formatDate(value?: string | null): string {
+  if (!value) {
+    return '-';
+  }
+
+  const normalizedValue = value.includes('T') ? value : `${value}T00:00:00`;
+  const parsed = new Date(normalizedValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return '-';
+  }
+
+  return parsed.toLocaleDateString('pt-BR');
+}
+
+/**
+ * Exibe um tempo em dias com fallback amigável.
+ */
+function formatDays(value?: number | null): string {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+
+  return `${value} dias`;
+}
+
+/**
+ * Normaliza uma data ISO curta para chave mensal yyyy-mm.
+ */
+function getMonthKey(value?: string | null): string | null {
+  if (!value || value.length < 7) {
+    return null;
+  }
+
+  return value.slice(0, 7);
+}
+
+/**
+ * Dashboard principal da escola de aviação com foco comercial e financeiro.
  */
 export default function AeroclubeDashboard() {
-  /**
-   * Estado de UI: ano selecionado para gráficos principais
-   */
-  const [selectedYear, setSelectedYear] = useState<"2024" | "2025">("2025");
-  /**
-   * Mock: meses com valores de vendas, horas vendidas e meta do mês
-   */
-  const monthly2024 = useMemo(
-    () => [
-      { month: "JAN", value: 13500, hours: 85, meta: 12000 },
-      { month: "FEV", value: 9800, hours: 72, meta: 12000 },
-      { month: "MAR", value: 11200, hours: 76, meta: 12000 },
-      { month: "ABR", value: 12550, hours: 81, meta: 12000 },
-      { month: "MAI", value: 10120, hours: 70, meta: 12000 },
-      { month: "JUN", value: 9400, hours: 66, meta: 12000 },
-      { month: "JUL", value: 8900, hours: 64, meta: 12000 },
-      { month: "AGO", value: 15400, hours: 102, meta: 12000 },
-      { month: "SET", value: 11800, hours: 78, meta: 12000 },
-      { month: "OUT", value: 13200, hours: 84, meta: 12000 },
-      { month: "NOV", value: 12700, hours: 82, meta: 12000 },
-      { month: "DEZ", value: 14500, hours: 96, meta: 12000 },
-    ],
-    []
-  );
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthInputValue);
+  const [conversionReport, setConversionReport] = useState<GeneralConversionReportResponse | null>(null);
+  const [wonPeriodReport, setWonPeriodReport] = useState<WonProposalReportResponse | null>(null);
+  const [wonCurrentMonthReport, setWonCurrentMonthReport] = useState<WonProposalReportResponse | null>(null);
+  const [financialOverview, setFinancialOverview] = useState<FinancialDashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   /**
-   * Mock para 2025 – valores ligeiramente diferentes para comparação
+   * Carrega os dados principais do dashboard a partir dos relatórios existentes.
    */
-  const monthly2025 = useMemo(
-    () => [
-      { month: "JAN", value: 14200, hours: 90, meta: 14000 },
-      { month: "FEV", value: 10500, hours: 74, meta: 14000 },
-      { month: "MAR", value: 12100, hours: 80, meta: 14000 },
-      { month: "ABR", value: 12950, hours: 83, meta: 14000 },
-      { month: "MAI", value: 11320, hours: 76, meta: 14000 },
-      { month: "JUN", value: 9900, hours: 68, meta: 14000 },
-      { month: "JUL", value: 9400, hours: 66, meta: 14000 },
-      { month: "AGO", value: 16000, hours: 104, meta: 14000 },
-      { month: "SET", value: 12050, hours: 80, meta: 14000 },
-      { month: "OUT", value: 13800, hours: 86, meta: 14000 },
-      { month: "NOV", value: 13000, hours: 84, meta: 14000 },
-      { month: "DEZ", value: 15200, hours: 98, meta: 14000 },
-    ],
-    []
-  );
+  const loadDashboard = async (requestedMonth = selectedMonth) => {
+    const normalizedMonth = normalizeDashboardMonth(requestedMonth);
+    const periodStartDate = getDefaultPeriodStartInputValue(normalizedMonth);
+    const currentMonthStartDate = getMonthStartInputValue(normalizedMonth);
+    const endDate = getMonthEndInputValue(normalizedMonth);
+
+    if (normalizedMonth !== selectedMonth) {
+      setSelectedMonth(normalizedMonth);
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const [conversionData, wonPeriodData, wonCurrentMonthData, financialOverviewData] = await Promise.all([
+        financialService.reports.getGeneralConversionReport({
+          startDate: periodStartDate,
+          endDate,
+        }),
+        financialService.reports.getWonProposalsReport({
+          startDate: periodStartDate,
+          endDate,
+          perPage: 5000,
+        }),
+        financialService.reports.getWonProposalsReport({
+          startDate: currentMonthStartDate,
+          endDate,
+          perPage: 5000,
+        }),
+        financialService.dashboard.getDashboardData(normalizedMonth),
+      ]);
+
+      setConversionReport(conversionData);
+      setWonPeriodReport(wonPeriodData);
+      setWonCurrentMonthReport(wonCurrentMonthData);
+      setFinancialOverview(financialOverviewData);
+    } catch (error) {
+      console.error('Erro ao carregar dashboard do aeroclube:', error);
+      setLoadError('Nao foi possivel carregar o dashboard principal.');
+      toast.error('Erro ao carregar dashboard');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboard(selectedMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth]);
 
   /**
-   * Mock: série histórica de horas voadas por ano (valores genéricos)
+   * Abre a ficha do lead preservando a origem da navegação.
    */
-  const hoursHistory = useMemo(
-    () => [
-      { label: "JAN", y2020: 60, y2021: 72, y2022: 80, y2023: 75, y2024: 85, y2025: 90 },
-      { label: "FEV", y2020: 58, y2021: 68, y2022: 78, y2023: 70, y2024: 72, y2025: 74 },
-      { label: "MAR", y2020: 64, y2021: 70, y2022: 82, y2023: 73, y2024: 76, y2025: 80 },
-      { label: "ABR", y2020: 66, y2021: 71, y2022: 84, y2023: 76, y2024: 81, y2025: 83 },
-      { label: "MAI", y2020: 63, y2021: 69, y2022: 79, y2023: 71, y2024: 70, y2025: 76 },
-      { label: "JUN", y2020: 57, y2021: 66, y2022: 75, y2023: 68, y2024: 66, y2025: 68 },
-      { label: "JUL", y2020: 55, y2021: 64, y2022: 74, y2023: 66, y2024: 64, y2025: 66 },
-      { label: "AGO", y2020: 70, y2021: 85, y2022: 95, y2023: 90, y2024: 102, y2025: 104 },
-      { label: "SET", y2020: 60, y2021: 72, y2022: 80, y2023: 75, y2024: 78, y2025: 80 },
-      { label: "OUT", y2020: 62, y2021: 74, y2022: 82, y2023: 78, y2024: 84, y2025: 86 },
-      { label: "NOV", y2020: 61, y2021: 73, y2022: 81, y2023: 77, y2024: 82, y2025: 84 },
-      { label: "DEZ", y2020: 68, y2021: 80, y2022: 90, y2023: 85, y2024: 96, y2025: 98 },
-    ],
-    []
-  );
+  const openLeadView = (leadId?: string | null) => {
+    if (!leadId) {
+      return;
+    }
+
+    navigate(`/admin/clients/${encodeURIComponent(String(leadId))}/view`, {
+      state: { from: location },
+    });
+  };
 
   /**
-   * Mock: registro de acessos similar à tabela da imagem
+   * Abre a visualização da proposta preservando a origem da navegação.
    */
-  const accessLog = useMemo(
-    () => [
-      { id: 23031, date: "13/11/2025", time: "13:11:16", name: "Usuário demo", ip: "172.78.18.66" },
-      { id: 23030, date: "13/11/2025", time: "12:41:08", name: "Gabriela Fernandes", ip: "172.70.29.93" },
-      { id: 23029, date: "13/11/2025", time: "11:55:42", name: "Monique Ribeiro", ip: "172.70.142.70" },
-      { id: 23028, date: "13/11/2025", time: "11:41:05", name: "Usuario demo", ip: "172.70.114.45" },
-      { id: 23027, date: "12/11/2025", time: "14:13:54", name: "Maria Luíza da Silva Sanches", ip: "172.70.114.45" },
-      { id: 23026, date: "12/11/2025", time: "13:41:18", name: "Jessia Fakhri", ip: "172.70.140.130" },
-      { id: 23025, date: "12/11/2025", time: "12:31:52", name: "Leandro Lopardi", ip: "172.70.143.80" },
-      { id: 23024, date: "12/11/2025", time: "11:41:22", name: "Leandro Lopardi", ip: "172.70.143.80" },
-    ],
-    []
-  );
+  const openProposalView = (proposalId?: string | null) => {
+    if (!proposalId) {
+      return;
+    }
+
+    navigate(`/admin/sales/proposals/view/${encodeURIComponent(String(proposalId))}`, {
+      state: { from: location },
+    });
+  };
 
   /**
-   * Helpers para somatórios usados nas pizzas
+   * Monta a série financeira mensal a partir das propostas ganhas do período.
    */
-  const totals2024 = useMemo(() => ({
-    value: monthly2024.reduce((acc, m) => acc + m.value, 0),
-    hours: monthly2024.reduce((acc, m) => acc + m.hours, 0),
-  }), [monthly2024]);
-  const totals2025 = useMemo(() => ({
-    value: monthly2025.reduce((acc, m) => acc + m.value, 0),
-    hours: monthly2025.reduce((acc, m) => acc + m.hours, 0),
-  }), [monthly2025]);
+  const monthlyFinancial = useMemo(() => {
+    const baseMonths = conversionReport?.monthlyConversion ?? [];
+    const items = wonPeriodReport?.data ?? [];
+    const grouped = new Map<string, {
+      month: string;
+      label: string;
+      negotiatedAmount: number;
+      paidAmount: number;
+      remainingAmount: number;
+      proposalsWon: number;
+    }>();
 
-  const pieColors = ["#22c55e", "#ef4444", "#3b82f6", "#f59e0b"]; // verde, vermelho, azul, amarelo
+    baseMonths.forEach((item) => {
+      grouped.set(item.month, {
+        month: item.month,
+        label: item.label,
+        negotiatedAmount: 0,
+        paidAmount: 0,
+        remainingAmount: 0,
+        proposalsWon: 0,
+      });
+    });
+
+    items.forEach((item) => {
+      const monthKey = getMonthKey(item.gainDate);
+      if (!monthKey || !grouped.has(monthKey)) {
+        return;
+      }
+
+      const current = grouped.get(monthKey);
+      if (!current) {
+        return;
+      }
+
+      current.negotiatedAmount += Number(item.negotiatedAmount ?? 0);
+      current.paidAmount += Number(item.paidAmount ?? 0);
+      current.remainingAmount += Number(item.remainingAmount ?? 0);
+      current.proposalsWon += 1;
+    });
+
+    return Array.from(grouped.values());
+  }, [conversionReport, wonPeriodReport]);
 
   /**
-   * Derivados: dataset ativo conforme ano selecionado
+   * Lista as propostas ganhas com saldo pendente ordenadas pelo maior saldo.
    */
-  const activeMonthly = selectedYear === "2024" ? monthly2024 : monthly2025;
-  const activeTotals = selectedYear === "2024" ? totals2024 : totals2025;
-  const compareTotals = selectedYear === "2024" ? totals2025 : totals2024;
-  const variation = activeTotals.value - compareTotals.value;
+  const pendingWonProposals = useMemo(() => {
+    return (wonPeriodReport?.data ?? [])
+      .filter((item) => Number(item.remainingAmount ?? 0) > 0)
+      .sort((a, b) => Number(b.remainingAmount ?? 0) - Number(a.remainingAmount ?? 0))
+      .slice(0, 5);
+  }, [wonPeriodReport]);
+
+  /**
+   * Lista consultores ordenados por melhor performance de conversão.
+   */
+  const topConsultants = useMemo(() => {
+    return (conversionReport?.consultantBreakdown ?? [])
+      .slice()
+      .sort((a, b) => {
+        if (b.uniqueConvertedLeadsCount !== a.uniqueConvertedLeadsCount) {
+          return b.uniqueConvertedLeadsCount - a.uniqueConvertedLeadsCount;
+        }
+
+        return b.proposalsWonCount - a.proposalsWonCount;
+      })
+      .slice(0, 5);
+  }, [conversionReport]);
+
+  /**
+   * Gera o resumo financeiro do mês atual usando o relatório de ganhos.
+   */
+  const currentMonthFinancialSummary = useMemo(() => {
+    const summary = wonCurrentMonthReport?.summary;
+
+    return {
+      negotiatedAmount: Number(summary?.negotiatedAmount ?? 0),
+      paidAmount: Number(summary?.paidAmount ?? 0),
+      remainingAmount: Number(summary?.remainingAmount ?? 0),
+      paidAccounts: Number(summary?.paidAccounts ?? 0),
+      partialAccounts: Number(summary?.partialAccounts ?? 0),
+      pendingAccounts: Number(summary?.pendingAccounts ?? 0),
+      totalAccounts: Number(summary?.totalAccounts ?? 0),
+    };
+  }, [wonCurrentMonthReport]);
+
+  /**
+   * Consolida o resumo comercial do mês selecionado.
+   */
+  const selectedMonthSummary = useMemo(() => {
+    const fallbackSummary = conversionReport?.currentMonth.summary;
+    const selectedMonthData = (conversionReport?.monthlyConversion ?? []).find((item) => item.month === selectedMonth);
+
+    return {
+      leadsCount: Number(selectedMonthData?.leads ?? fallbackSummary?.leadsCount ?? 0),
+      uniqueConvertedLeadsCount: Number(selectedMonthData?.uniqueConvertedLeads ?? fallbackSummary?.uniqueConvertedLeadsCount ?? 0),
+      proposalsWonCount: Number(selectedMonthData?.proposalsWon ?? fallbackSummary?.proposalsWonCount ?? fallbackSummary?.conversionsCount ?? 0),
+      conversionRate: Number(selectedMonthData?.conversionRate ?? fallbackSummary?.conversionRate ?? 0),
+      averageConversionDays: Number(selectedMonthData?.averageConversionDays ?? fallbackSummary?.averageConversionDays ?? 0),
+    };
+  }, [conversionReport, selectedMonth]);
+
+  /**
+   * Retorna os recebimentos mais recentes entre as propostas ganhas.
+   */
+  const recentReceipts = useMemo(() => {
+    return (wonPeriodReport?.data ?? [])
+      .filter((item) => item.lastPaymentDate)
+      .slice()
+      .sort((a, b) => String(b.lastPaymentDate ?? '').localeCompare(String(a.lastPaymentDate ?? '')))
+      .slice(0, 5);
+  }, [wonPeriodReport]);
+
+  const currentMonthLabel = formatMonthLabel(selectedMonth);
+  const currentMonthValue = getCurrentMonthInputValue();
+  const monthOptions = useMemo(() => getDashboardMonthOptions(), []);
+  const financialStatusBreakdown = wonCurrentMonthReport?.statusBreakdown ?? [];
+  const financialSummary = financialOverview?.summary;
+  const upcomingReceivables = financialOverview?.upcomingReceivables ?? [];
+  const recentTransactions = financialOverview?.recentTransactions ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+          <p className="text-sm text-muted-foreground">Carregando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-[360px] items-center justify-center">
+        <Card className="w-full max-w-lg">
+          <CardHeader>
+            <CardTitle>Erro ao carregar dashboard</CardTitle>
+            <CardDescription>{loadError}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={loadDashboard}>Tentar novamente</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const conversionSeries = conversionReport?.monthlyConversion ?? [];
+  const recentConversions = conversionReport?.recentConversions ?? [];
 
   return (
     <div className="space-y-6">
-      {/* Hero/Header moderno com branding */}
       <Card className="overflow-hidden border-none shadow-none">
-        <div className="relative rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-600 p-6 text-white">
-          <div className="flex items-center gap-4">
-            {/* Logo: tenta usar /aeroclube-logo.svg e cai para /placeholder.svg se não existir */}
-            <img
-              src="/aeroclube-logo.svg"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/placeholder.svg"; }}
-              alt="Aeroclube logo"
-              className="h-12 w-auto drop-shadow"
-            />
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold">Painel do Aeroclube</h1>
-              <p className="text-sm md:text-base/relaxed opacity-90">Visão moderna com dados mockados — integração futura com sua API</p>
+        <div className="rounded-xl bg-gradient-to-br from-slate-950 via-slate-900 to-sky-900 p-6 text-white">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold md:text-3xl">Dashboard do Aeroclube</h1>
+              <p className="max-w-3xl text-sm opacity-90 md:text-base">
+                Visao executiva de captacao, conversao comercial e financeiro das propostas ganhas.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Badge className="bg-white/15 text-white hover:bg-white/20">
+                  Janela analitica: 6 meses ate {currentMonthLabel}
+                </Badge>
+                <Badge className="bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/25">
+                  Mes em foco: {currentMonthLabel}
+                </Badge>
+              </div>
             </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2">
-            <Badge className="bg-white/20 text-white hover:bg-white/30">Preview</Badge>
-            <Badge className="bg-black/20 text-white hover:bg-black/30">Mock Data</Badge>
+
+            <div className="flex w-full max-w-xl flex-col gap-3 lg:w-auto">
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                <Label htmlFor="dashboard-month" className="text-xs font-medium uppercase tracking-wide text-white/80">
+                  Mes de referencia
+                </Label>
+                <div className="mt-2 flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      onClick={() => setSelectedMonth((current) => shiftDashboardMonth(current, -1))}
+                      aria-label="Mês anterior"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                      <SelectTrigger
+                        id="dashboard-month"
+                        className="min-w-[180px] border-white/20 bg-white/10 text-white"
+                      >
+                        <SelectValue placeholder="Selecione o mês" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      onClick={() => setSelectedMonth((current) => shiftDashboardMonth(current, 1))}
+                      disabled={selectedMonth >= currentMonthValue}
+                      aria-label="Próximo mês"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-white/70">
+                  Use as setas ou escolha um mes da lista. O dashboard atualiza automaticamente.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button asChild variant="secondary">
+                  <Link to="/admin/reports/relatorio-geral">
+                    Relatorio geral
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild variant="secondary">
+                  <Link to="/admin/reports/relatorio-vendas">
+                    Relatorio de ganhos
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild variant="secondary">
+                  <Link to="/admin/financial">
+                    Financeiro
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </Card>
 
-      {/* Toolbar: seleção de ano e KPIs resumidos */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              variant={selectedYear === "2024" ? "default" : "outline"}
-              onClick={() => setSelectedYear("2024")}
-            >2024</Button>
-            <Button
-              variant={selectedYear === "2025" ? "default" : "outline"}
-              onClick={() => setSelectedYear("2025")}
-            >2025</Button>
-          </div>
-          <div className="text-sm text-muted-foreground">Totais do ano selecionado</div>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Valor total ({selectedYear})</CardTitle>
-              <CardDescription>Somatório anual em reais</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="text-2xl font-semibold">R$ {activeTotals.value.toLocaleString()}</div>
-              <div className="mt-1 flex items-center text-xs text-muted-foreground">
-                {variation >= 0 ? (
-                  <ArrowUpRight className="mr-1 h-4 w-4 text-green-600" />
-                ) : (
-                  <ArrowDownRight className="mr-1 h-4 w-4 text-red-600" />
-                )}
-                {variation >= 0 ? "acima" : "abaixo"} de {selectedYear === "2024" ? "2025" : "2024"} por R$ {Math.abs(variation).toLocaleString()}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Horas totais ({selectedYear})</CardTitle>
-              <CardDescription>Somatório anual de horas</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="text-2xl font-semibold">{activeTotals.hours.toLocaleString()} h</div>
-              <div className="mt-1 text-xs text-muted-foreground">Meta média mensal acompanhada nos gráficos</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Valor total (2024)</CardTitle>
-              <CardDescription>Comparativo rápido</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="text-2xl font-semibold">R$ {totals2024.value.toLocaleString()}</div>
-              <div className="mt-1 text-xs text-muted-foreground">Horas {totals2024.hours.toLocaleString()} h</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Valor total (2025)</CardTitle>
-              <CardDescription>Comparativo rápido</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="text-2xl font-semibold">R$ {totals2025.value.toLocaleString()}</div>
-              <div className="mt-1 text-xs text-muted-foreground">Horas {totals2025.hours.toLocaleString()} h</div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Linha superior com 2 gráficos (2024/2025) */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Vendas do ano de 2024</CardTitle>
-            <CardDescription>Valores e horas vendidas por mês</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly2024}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="value" name="Valor (R$)" fill="#3b82f6" />
-                <Bar dataKey="hours" name="Horas" fill="#ef4444" />
-                <Line type="monotone" dataKey="meta" name="Meta" stroke="#22c55e" strokeWidth={2} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Vendas do ano de 2025</CardTitle>
-            <CardDescription>Comparativo de valores/horas e metas</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly2025}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="value" name="Valor (R$)" fill="#3b82f6" />
-                <Bar dataKey="hours" name="Horas" fill="#ef4444" />
-                <Line type="monotone" dataKey="meta" name="Meta" stroke="#22c55e" strokeWidth={2} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Linha de pizzas */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Proporção de valores — 2024 x 2025</CardTitle>
-            <CardDescription>Total anual</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie dataKey="value" data={[
-                  { name: "2024", value: totals2024.value },
-                  { name: "2025", value: totals2025.value },
-                ]} cx="50%" cy="50%" outerRadius={100} label>
-                  {[0,1].map((i) => (
-                    <Cell key={`c-${i}`} fill={pieColors[i]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Proporção de horas — 2024 x 2025</CardTitle>
-            <CardDescription>Total anual</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie dataKey="value" data={[
-                  { name: "2024", value: totals2024.hours },
-                  { name: "2025", value: totals2025.hours },
-                ]} cx="50%" cy="50%" outerRadius={100} label>
-                  {[0,1].map((i) => (
-                    <Cell key={`c-h-${i}`} fill={pieColors[i+2]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Metas do ano de 2025</CardTitle>
-            <CardDescription>Evolução mensal</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={activeMonthly}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="value" name="Valor (R$)" stroke="#3b82f6" strokeWidth={2} />
-                <Line type="monotone" dataKey="meta" name="Meta" stroke="#22c55e" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Registro de acessos */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Registro de acessos</CardTitle>
-            <CardDescription>Últimos eventos</CardDescription>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Users className="h-4 w-4 text-primary" />
+              Leads do mes
+            </CardTitle>
+            <CardDescription>Captados em {currentMonthLabel}</CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="text-2xl font-semibold">{formatNumber(selectedMonthSummary.leadsCount)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Target className="h-4 w-4 text-primary" />
+              Leads convertidos
+            </CardTitle>
+            <CardDescription>Leads unicos com ganho no mes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatNumber(selectedMonthSummary.uniqueConvertedLeadsCount)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Percent className="h-4 w-4 text-primary" />
+              Taxa de conversao
+            </CardTitle>
+            <CardDescription>Leads unicos convertidos / leads captados</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatPercentage(selectedMonthSummary.conversionRate)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+              Negociado no mes
+            </CardTitle>
+            <CardDescription>Total das propostas ganhas</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.negotiatedAmount)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              Recebido no mes
+            </CardTitle>
+            <CardDescription>Recebimentos vinculados aos ganhos</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.paidAmount)}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <DollarSign className="h-4 w-4 text-amber-600" />
+              Saldo em aberto
+            </CardTitle>
+            <CardDescription>Restante a receber dos ganhos do mes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.remainingAmount)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <Card className={Number(financialSummary?.overdueReceivables ?? 0) > 0 ? 'border-amber-300 bg-amber-50/60' : ''}>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              Recebiveis vencidos
+            </CardTitle>
+            <CardDescription>Saldo vencido dentro do mes de referencia</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.overdueReceivables ?? 0))}</div>
+          </CardContent>
+        </Card>
+
+        <Card className={Number(financialSummary?.overduePayables ?? 0) > 0 ? 'border-rose-300 bg-rose-50/60' : ''}>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Clock3 className="h-4 w-4 text-rose-600" />
+              Pagaveis vencidos
+            </CardTitle>
+            <CardDescription>Compromissos vencidos no mesmo recorte</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.overduePayables ?? 0))}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <DollarSign className="h-4 w-4 text-emerald-600" />
+              Caixa liquido
+            </CardTitle>
+            <CardDescription>Entradas pagas menos saidas pagas no mes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.cashBalance ?? 0))}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Conversao mensal</CardTitle>
+            <CardDescription>Leads captados, leads convertidos e propostas ganhas ao longo do periodo.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={conversionSeries}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" />
+                <YAxis yAxisId="left" allowDecimals={false} />
+                <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${value}%`} />
+                <Tooltip />
+                <Legend />
+                <Bar yAxisId="left" dataKey="leads" name="Leads" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="left" dataKey="uniqueConvertedLeads" name="Leads convertidos" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="left" dataKey="proposalsWon" name="Propostas ganhas" fill="#14b8a6" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="conversionRate" name="Taxa (%)" stroke="#f59e0b" strokeWidth={2} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Financeiro dos ganhos</CardTitle>
+            <CardDescription>Negociado, recebido e saldo das propostas ganhas no mesmo periodo.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={monthlyFinancial}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" />
+                <YAxis tickFormatter={(value) => `R$ ${Math.round(Number(value) / 1000)}k`} />
+                <Tooltip formatter={(value: number) => formatCurrency(Number(value))} />
+                <Legend />
+                <Bar dataKey="negotiatedAmount" name="Negociado" fill="#0f766e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="paidAmount" name="Recebido" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <Line type="monotone" dataKey="remainingAmount" name="Saldo" stroke="#f97316" strokeWidth={2} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Desempenho por consultor</CardTitle>
+            <CardDescription>Top consultores do periodo por conversao de leads e propostas ganhas.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topConsultants} layout="vertical" margin={{ left: 20, right: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" allowDecimals={false} />
+                  <YAxis type="category" dataKey="consultantName" width={140} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="uniqueConvertedLeadsCount" name="Leads convertidos" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="proposalsWonCount" name="Propostas ganhas" fill="#14b8a6" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Id</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Hora</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>IP</TableHead>
+                    <TableHead>Consultor</TableHead>
+                    <TableHead>Leads</TableHead>
+                    <TableHead>Convertidos</TableHead>
+                    <TableHead>Ganhos</TableHead>
+                    <TableHead>Taxa</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {accessLog.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.id}</TableCell>
-                      <TableCell>{row.date}</TableCell>
-                      <TableCell>{row.time}</TableCell>
-                      <TableCell>{row.name}</TableCell>
-                      <TableCell>{row.ip}</TableCell>
+                  {topConsultants.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        Nenhum consultor encontrado no periodo.
+                      </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    topConsultants.map((item) => (
+                      <TableRow key={item.consultantId ?? item.consultantName}>
+                        <TableCell className="font-medium">{item.consultantName}</TableCell>
+                        <TableCell>{formatNumber(item.leadsCount)}</TableCell>
+                        <TableCell>{formatNumber(item.uniqueConvertedLeadsCount)}</TableCell>
+                        <TableCell>{formatNumber(item.proposalsWonCount)}</TableCell>
+                        <TableCell>{formatPercentage(item.conversionRate)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
           </CardContent>
         </Card>
 
-        {/* Histórico de horas por ano */}
         <Card>
           <CardHeader>
-            <CardTitle>Horas voadas — 2020 a 2025</CardTitle>
-            <CardDescription>Comparativo mensal</CardDescription>
+            <CardTitle>Status financeiro do mes</CardTitle>
+            <CardDescription>Situacao das propostas ganhas em {currentMonthLabel}.</CardDescription>
           </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={hoursHistory}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="y2020" name="2020" stroke="#64748b" />
-                <Line type="monotone" dataKey="y2021" name="2021" stroke="#a855f7" />
-                <Line type="monotone" dataKey="y2022" name="2022" stroke="#06b6d4" />
-                <Line type="monotone" dataKey="y2023" name="2023" stroke="#f59e0b" />
-                <Line type="monotone" dataKey="y2024" name="2024" stroke="#ef4444" />
-                <Line type="monotone" dataKey="y2025" name="2025" stroke="#22c55e" />
-              </LineChart>
-            </ResponsiveContainer>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3">
+              {financialStatusBreakdown.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Nenhum ganho financeiro registrado no mes atual.
+                </div>
+              ) : (
+                financialStatusBreakdown.map((item) => (
+                  <div key={String(item.status)} className="rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={item.status === 'paid' ? 'default' : item.status === 'partial' ? 'secondary' : 'outline'}>
+                            {item.label}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">{formatNumber(item.totalAccounts)} propostas</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Negociado {formatCurrency(item.negotiatedAmount)}
+                        </p>
+                      </div>
+                      <div className="text-right text-sm">
+                        <div>Recebido: {formatCurrency(item.paidAmount)}</div>
+                        <div className={Number(item.remainingAmount) > 0 ? 'text-amber-600' : 'text-emerald-600'}>
+                          Saldo: {Number(item.remainingAmount) > 0 ? formatCurrency(item.remainingAmount) : 'Quitado'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <div className="mb-1 flex items-center gap-2 font-medium">
+                <AlertTriangle className="h-4 w-4" />
+                Atencao financeira
+              </div>
+              <p>
+                Existem {formatNumber(currentMonthFinancialSummary.pendingAccounts + currentMonthFinancialSummary.partialAccounts)} propostas do mes atual com saldo pendente.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Propostas ganhas recentes</CardTitle>
+              <CardDescription>Ultimos ganhos registrados no CRM.</CardDescription>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin/reports/relatorio-geral">Ver relatorio</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Lead</TableHead>
+                    <TableHead>Data do ganho</TableHead>
+                    <TableHead>Tempo</TableHead>
+                    <TableHead>Consultor</TableHead>
+                    <TableHead className="text-right">Negociado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentConversions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        Nenhuma proposta ganha encontrada.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    recentConversions.slice(0, 5).map((item) => (
+                      <TableRow key={`${item.matriculaId}-${item.gainDate}`}>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <button
+                              type="button"
+                              className="w-fit text-left font-medium text-primary hover:underline"
+                              onClick={() => openLeadView(item.leadId)}
+                            >
+                              {item.leadName}
+                            </button>
+                            <button
+                              type="button"
+                              className="w-fit text-left text-xs text-muted-foreground hover:text-primary hover:underline"
+                              onClick={() => openProposalView(item.matriculaId)}
+                            >
+                              Matricula #{item.matriculaId}
+                            </button>
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatDate(item.gainDate)}</TableCell>
+                        <TableCell>{formatDays(item.conversionDays)}</TableCell>
+                        <TableCell>{item.consultantName || '-'}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(item.negotiatedAmount)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Ganhos com saldo pendente</CardTitle>
+              <CardDescription>Propostas ganhas que ainda exigem recebimento.</CardDescription>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin/reports/relatorio-vendas">Ver ganhos</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingWonProposals.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Nenhuma proposta ganha com saldo pendente no periodo atual.
+                </div>
+              ) : (
+                pendingWonProposals.map((item: WonProposalReportItem) => (
+                  <div key={item.id} className="flex items-start justify-between rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <p className="font-medium">{item.customerName || item.description}</p>
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <span>Ganho em {formatDate(item.gainDate)}</span>
+                        <span>•</span>
+                        <span>{item.statusLabel}</span>
+                        {item.matriculaId ? (
+                          <>
+                            <span>•</span>
+                            <button
+                              type="button"
+                              className="text-primary hover:underline"
+                              onClick={() => openProposalView(item.matriculaId)}
+                            >
+                              Matricula #{item.matriculaId}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="text-right text-sm">
+                      <div>Negociado: {formatCurrency(item.negotiatedAmount)}</div>
+                      <div>Recebido: {formatCurrency(item.paidAmount)}</div>
+                      <div className="font-medium text-amber-600">Saldo: {formatCurrency(item.remainingAmount)}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Ultimos recebimentos</CardTitle>
+            <CardDescription>Movimentos financeiros recentes ligados aos ganhos.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentReceipts.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Nenhum recebimento recente encontrado.
+                </div>
+              ) : (
+                recentReceipts.map((item) => (
+                  <div key={`${item.id}-${item.lastPaymentDate}`} className="flex items-center justify-between rounded-lg border p-4">
+                    <div>
+                      <p className="font-medium">{item.customerName || item.description}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Ultimo recebimento em {formatDate(item.lastPaymentDate)}
+                      </p>
+                    </div>
+                    <div className="text-right text-sm">
+                      <div>Recebido: {formatCurrency(item.paidAmount)}</div>
+                      <div className={Number(item.remainingAmount) > 0 ? 'text-amber-600' : 'text-emerald-600'}>
+                        {Number(item.remainingAmount) > 0 ? `Saldo ${formatCurrency(item.remainingAmount)}` : 'Quitado'}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Leitura rapida do mes</CardTitle>
+            <CardDescription>Resumo operacional para tomada de decisao.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border p-4">
+              <div className="mb-1 flex items-center gap-2 font-medium">
+                <Clock3 className="h-4 w-4 text-primary" />
+                Tempo medio de conversao
+              </div>
+              <p className="text-2xl font-semibold">{formatDays(selectedMonthSummary.averageConversionDays)}</p>
+              <p className="text-sm text-muted-foreground">
+                Na janela analitica, o menor ciclo foi {formatDays(conversionReport?.periodSummary.fastestConversionDays)} e o maior foi {formatDays(conversionReport?.periodSummary.slowestConversionDays)}.
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <div className="mb-1 flex items-center gap-2 font-medium">
+                <Target className="h-4 w-4 text-primary" />
+                Volume comercial
+              </div>
+              <p className="text-2xl font-semibold">{formatNumber(selectedMonthSummary.proposalsWonCount)} propostas ganhas</p>
+              <p className="text-sm text-muted-foreground">
+                {formatNumber(selectedMonthSummary.uniqueConvertedLeadsCount)} leads distintos geraram esses ganhos no mes.
+              </p>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <div className="mb-1 flex items-center gap-2 font-medium">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                Pendencias imediatas
+              </div>
+              <p className="text-2xl font-semibold">{formatNumber(pendingWonProposals.length)} ganhos com saldo em aberto</p>
+              <p className="text-sm text-muted-foreground">
+                Use o relatorio de ganhos e o financeiro para acompanhar cobrancas e parcelas futuras.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Proximos vencimentos</CardTitle>
+              <CardDescription>Contas a receber pendentes previstas para os proximos 30 dias.</CardDescription>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin/financial">Abrir financeiro</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {upcomingReceivables.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Nenhum recebivel previsto para os proximos 30 dias.
+                </div>
+              ) : (
+                upcomingReceivables.map((item: FinancialOverviewScheduleItem) => (
+                  <div key={item.id} className="flex items-start justify-between rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <p className="font-medium">{item.description}</p>
+                      <p className="text-sm text-muted-foreground">Vence em {formatDate(item.date)}</p>
+                    </div>
+                    <div className="text-right font-medium text-amber-600">
+                      {formatCurrency(item.amount)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Movimentacoes recentes</CardTitle>
+              <CardDescription>Ultimas transacoes do overview financeiro para leitura operacional.</CardDescription>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin/financial">Ver fluxo</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentTransactions.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Nenhuma movimentacao recente encontrada.
+                </div>
+              ) : (
+                recentTransactions.map((item: FinancialOverviewTransaction) => (
+                  <div key={item.id} className="flex items-start justify-between rounded-lg border p-4">
+                    <div className="space-y-1">
+                      <p className="font-medium">{item.description}</p>
+                      <p className="text-sm text-muted-foreground">{formatDate(item.date)}</p>
+                    </div>
+                    <div className={`text-right font-medium ${item.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {item.type === 'income' ? 'Entrada' : 'Saida'}: {formatCurrency(item.amount)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

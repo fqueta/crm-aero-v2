@@ -512,21 +512,26 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+export interface FinancialOverviewTransaction {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  type: TransactionType;
+}
+
+export interface FinancialOverviewScheduleItem {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+}
+
 export interface FinancialDashboardData {
   summary: FinancialSummary;
-  recentTransactions: CashFlowEntry[];
-  upcomingPayables: AccountPayable[];
-  upcomingReceivables: AccountReceivable[];
-  monthlyTrend: {
-    month: string;
-    income: number;
-    expenses: number;
-  }[];
-  categoryBreakdown: {
-    category: string;
-    amount: number;
-    type: TransactionType;
-  }[];
+  recentTransactions: FinancialOverviewTransaction[];
+  upcomingPayables: FinancialOverviewScheduleItem[];
+  upcomingReceivables: FinancialOverviewScheduleItem[];
 }
 
 // Filtros para listagens

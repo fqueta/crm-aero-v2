@@ -42,6 +42,16 @@
     ]
   },
   {
+    "title": "Financeiro",
+    "url": null,
+    "icon": "DollarSign",
+    "order": 7,
+    "submenu": [
+      { "title": "Contas", "url": "/financial", "order": 3 },
+      { "title": "Categorias", "url": "/financial/categories", "order": 4 }
+    ]
+  },
+  {
     "title": "Relatórios",
     "icon": "LineChart",
     "submenu": [

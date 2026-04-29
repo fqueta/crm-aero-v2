@@ -62,6 +62,7 @@ export interface ClientRecord {
   cpf: string | null;
   cnpj: string | null;
   razao: string | null;
+  chat_url?: string | null;
   config: ClientConfig;
   genero: "m" | "f" | "ni";
   status: "actived" | "inactived" | "pre_registred";
@@ -96,6 +97,7 @@ export interface CreateClientInput {
   cpf?: string;
   cnpj?: string;
   razao?: string;
+  chat_url?: string | null;
   config: ClientConfig;
   genero: "m" | "f" | "ni";
   status: "actived" | "inactived" | "pre_registred";
@@ -114,6 +116,7 @@ export interface UpdateClientInput {
   cpf?: string;
   cnpj?: string;
   razao?: string;
+  chat_url?: string | null;
   config?: ClientConfig;
   genero?: "m" | "f" | "ni";
   status?: "actived" | "inactived" | "pre_registred";

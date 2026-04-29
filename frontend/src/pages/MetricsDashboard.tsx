@@ -20,18 +20,31 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useMetricsList } from "@/hooks/metrics";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { MetricRecord } from "@/types/metrics";
 import { MetricsChart, ConversionFunnel } from "@/components/metrics/MetricsChart";
 import { ROIChart, ConversionMetrics } from "@/components/metrics/ROIChart";
+import DashboardMonthSelector from "@/components/dashboard/DashboardMonthSelector";
+import { formatMonthLabel, getCurrentMonthInputValue } from "@/lib/dashboardMonth";
+
+/**
+ * Converte o mês selecionado em parâmetros numéricos aceitos pelo endpoint de métricas.
+ */
+function getMetricsMonthParams(period: string): { year: number; month: number } {
+  const [year, month] = period.split("-").map(Number);
+  return { year, month };
+}
 
 /**
  * Dashboard de métricas com visualizações avançadas
  * Exibe KPIs, tendências e análises de performance do projeto
  */
 export default function MetricsDashboard() {
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthInputValue);
+  const selectedMonthLabel = formatMonthLabel(selectedMonth);
+  const metricsMonthParams = getMetricsMonthParams(selectedMonth);
   // Buscar dados de métricas
-  const { data: metricsData, isLoading, error } = useMetricsList();
+  const { data: metricsData, isLoading, error } = useMetricsList(metricsMonthParams);
 
   // Calcular métricas agregadas e KPIs
   const analytics = useMemo(() => {
@@ -187,7 +200,7 @@ export default function MetricsDashboard() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard de Métricas</h1>
           <p className="text-muted-foreground">
-            Análise de performance e KPIs do projeto
+            Análise de performance e KPIs do projeto em {selectedMonthLabel}
           </p>
         </div>
         <div className="flex gap-2">
@@ -204,6 +217,14 @@ export default function MetricsDashboard() {
             </Link>
           </Button>
         </div>
+      </div>
+
+      <div className="rounded-lg border p-4">
+        <DashboardMonthSelector
+          selectedMonth={selectedMonth}
+          onChange={setSelectedMonth}
+          helperText="KPIs, gráficos e tabelas deste dashboard seguem o mês de referência selecionado."
+        />
       </div>
 
       {/* KPIs Principais */}
@@ -336,7 +357,7 @@ export default function MetricsDashboard() {
           <MetricsChart
             data={analytics.recentMetrics}
             title="Performance Mensal"
-            description="Evolução das métricas ao longo do tempo"
+            description={`Evolução das métricas em ${selectedMonthLabel}`}
             type="bar"
           />
 
@@ -361,7 +382,7 @@ export default function MetricsDashboard() {
           <CardHeader>
             <CardTitle>Métricas Recentes</CardTitle>
             <CardDescription>
-              Últimos registros de performance
+              Últimos registros inseridos no sistema em {selectedMonthLabel}
             </CardDescription>
           </CardHeader>
           <CardContent>

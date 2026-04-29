@@ -1,6 +1,7 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Mail, Phone, MapPin, User, Building, Calendar, GraduationCap, Briefcase, FileText, DollarSign, Edit, Eye, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, User, Building, Calendar, GraduationCap, Briefcase, FileText, DollarSign, Edit, Eye, Trash2, ChevronDown, ChevronUp, Copy, ExternalLink, Share2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,8 +14,6 @@ import { phoneApplyMask } from '@/lib/masks/phone-apply-mask';
 import { useEnrollmentsList, useDeleteEnrollment } from '@/hooks/enrollments';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import ClientEventLogsCard from '@/components/clients/ClientEventLogsCard';
-
-
 
 /**
  * Página de visualização detalhada de um cliente específico

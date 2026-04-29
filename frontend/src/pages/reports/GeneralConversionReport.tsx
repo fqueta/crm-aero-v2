@@ -69,6 +69,41 @@ function getDefaultStartInputValue(): string {
 }
 
 /**
+ * Ajusta o intervalo para evitar datas futuras e períodos invertidos.
+ */
+function normalizeDateRange(startDate?: string, endDate?: string): {
+  startDate: string;
+  endDate: string;
+  adjusted: boolean;
+} {
+  const today = getTodayInputValue();
+  let normalizedStartDate = startDate || getDefaultStartInputValue();
+  let normalizedEndDate = endDate || today;
+  let adjusted = false;
+
+  if (normalizedStartDate > today) {
+    normalizedStartDate = today;
+    adjusted = true;
+  }
+
+  if (normalizedEndDate > today) {
+    normalizedEndDate = today;
+    adjusted = true;
+  }
+
+  if (normalizedStartDate > normalizedEndDate) {
+    normalizedStartDate = normalizedEndDate;
+    adjusted = true;
+  }
+
+  return {
+    startDate: normalizedStartDate,
+    endDate: normalizedEndDate,
+    adjusted,
+  };
+}
+
+/**
  * Formata números inteiros no padrão pt-BR.
  */
 function formatNumber(value: number): string {
@@ -192,13 +227,20 @@ export default function GeneralConversionReport() {
     nextConsultantId = consultantId,
     nextFunnelId = funnelId
   ) => {
+    const normalizedRange = normalizeDateRange(nextStartDate, nextEndDate);
+
+    if (normalizedRange.adjusted) {
+      setStartDate(normalizedRange.startDate);
+      setEndDate(normalizedRange.endDate);
+    }
+
     setIsLoading(true);
     setLoadError(null);
 
     try {
       const data = await financialService.reports.getGeneralConversionReport({
-        startDate: nextStartDate,
-        endDate: nextEndDate,
+        startDate: normalizedRange.startDate,
+        endDate: normalizedRange.endDate,
         consultantId: nextConsultantId !== 'all' ? nextConsultantId : undefined,
         funnelId: nextFunnelId !== 'all' ? nextFunnelId : undefined,
       });
@@ -226,7 +268,15 @@ export default function GeneralConversionReport() {
    * Aplica os filtros atuais.
    */
   const handleApplyFilters = () => {
-    loadReport(startDate, endDate, consultantId, funnelId);
+    const normalizedRange = normalizeDateRange(startDate, endDate);
+
+    if (normalizedRange.adjusted) {
+      setStartDate(normalizedRange.startDate);
+      setEndDate(normalizedRange.endDate);
+      toast('Periodo ajustado para um intervalo valido.');
+    }
+
+    loadReport(normalizedRange.startDate, normalizedRange.endDate, consultantId, funnelId);
   };
 
   /**
@@ -416,6 +466,7 @@ export default function GeneralConversionReport() {
               type="date"
               value={startDate}
               onChange={(event) => setStartDate(event.target.value)}
+              max={endDate || getTodayInputValue()}
             />
           </div>
           <div className="space-y-2">
@@ -425,6 +476,8 @@ export default function GeneralConversionReport() {
               type="date"
               value={endDate}
               onChange={(event) => setEndDate(event.target.value)}
+              min={startDate || undefined}
+              max={getTodayInputValue()}
             />
           </div>
           <div className="space-y-2">

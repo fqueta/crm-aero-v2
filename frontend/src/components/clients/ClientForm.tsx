@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
-import { CalendarIcon, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { CalendarIcon, CheckCircle, AlertCircle, Loader2, Eye, EyeOff, ExternalLink, Copy, Share2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useEffect, useCallback, useState, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { debounce } from 'lodash';
@@ -774,6 +775,82 @@ export function ClientForm({
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="chat_url"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-gray-700">URL do Chat</FormLabel>
+                      <div className="flex items-center gap-2">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            value={field.value || ''}
+                            placeholder="https://chat.example.com/user"
+                            className="h-11 flex-1"
+                          />
+                        </FormControl>
+                        {field.value && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-11 w-11"
+                              title="Copiar para área de transferência"
+                              onClick={() => {
+                                navigator.clipboard.writeText(field.value);
+                                toast.success('URL copiada para a área de transferência');
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-11 w-11"
+                              title="Abrir link"
+                              onClick={() => window.open(field.value, '_blank')}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-11 w-11"
+                              title="Compartilhar"
+                              onClick={async () => {
+                                if (navigator.share) {
+                                  try {
+                                    await navigator.share({
+                                      title: 'URL do Chat',
+                                      url: field.value,
+                                    });
+                                  } catch (err) {
+                                    if ((err as Error).name !== 'AbortError') {
+                                      console.error('Erro ao compartilhar:', err);
+                                    }
+                                  }
+                                } else {
+                                  navigator.clipboard.writeText(field.value);
+                                  toast.success('Link copiado (seu navegador não suporta compartilhamento nativo)');
+                                }
+                              }}
+                            >
+                              <Share2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             </AccordionContent>
           </AccordionItem>

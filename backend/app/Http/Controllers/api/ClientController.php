@@ -60,7 +60,7 @@ class ClientController extends Controller
         $order_by = $request->input('order_by', 'created_at');
         $order = $request->input('order', 'desc');
 
-        $query = Client::query()->orderBy($order_by, $order);
+        $query = Client::with('metas')->orderBy($order_by, $order);
 
         // Não exibir registros marcados como deletados ou excluídos
         $query->where(function($q) {
@@ -217,8 +217,35 @@ class ClientController extends Controller
             }
         }
         // Garantir chaves esperadas mesmo que nulas
-        $data['points'] = $data['points'] ?? null;
-        $data['is_alloyal'] = $data['is_alloyal'] ?? null;
+        // Enriquecer com meta campos (usermeta)
+        // EN: Enrich with meta fields (usermeta)
+        $metas = [];
+        if ($client instanceof Client || $client instanceof User) {
+            // Se as metas já foram carregadas (eager loading), usa a coleção
+            if ($client->relationLoaded('metas')) {
+                foreach ($client->metas as $meta) {
+                    $metas[$meta->meta_key] = $meta->meta_value;
+                }
+            } else {
+                // Caso contrário, carrega via pluck
+                $metas = $client->metas()->pluck('meta_value', 'meta_key')->toArray();
+            }
+        } elseif (is_array($client) && isset($client['metas']) && (is_array($client['metas']) || is_object($client['metas']))) {
+             foreach ($client['metas'] as $meta) {
+                if (is_object($meta)) {
+                    $metas[$meta->meta_key] = $meta->meta_value;
+                } elseif (is_array($meta)) {
+                    $metas[$meta['meta_key']] = $meta['meta_value'];
+                }
+            }
+        }
+        $data['metas'] = $metas;
+
+        // Promover campos específicos para a raiz para facilitar o front-end
+        // EN: Promote specific fields to the root for easier frontend access
+        if (isset($metas['chat_url'])) {
+            $data['chat_url'] = $metas['chat_url'];
+        }
 
         return $data;
     }
@@ -434,6 +461,19 @@ class ClientController extends Controller
         }
         // dd($validated);
         $client = Client::create($validated);
+
+        // Salvar meta campos se fornecidos
+        if ($request->has('metas')) {
+            $this->saveMetas($client->id, $request->get('metas'));
+        }
+        // Se chat_url vier na raiz, salva como meta
+        if ($request->has('chat_url')) {
+            Qlib::update_usermeta($client->id, 'chat_url', $request->get('chat_url'));
+        }
+
+        // recarregar com metas
+        $client->load('metas');
+
         // converter o client->config para array
         if (is_string($client->config)) {
             $client->config = json_decode($client->config, true) ?? [];
@@ -458,7 +498,7 @@ class ClientController extends Controller
             return response()->json(['error' => 'Acesso negado'], 403);
         }
 
-        $client = Client::findOrFail($id);
+        $client = Client::with('metas')->findOrFail($id);
 
         // Converter config para array
         if (is_string($client->config)) {
@@ -561,6 +601,15 @@ class ClientController extends Controller
         // dd($validated);
         $clientToUpdate->update($validated);
 
+        // Atualizar meta campos se fornecidos
+        if ($request->has('metas')) {
+            $this->saveMetas($clientToUpdate->id, $request->get('metas'));
+        }
+        // Se chat_url vier na raiz, salva como meta
+        if ($request->has('chat_url')) {
+            Qlib::update_usermeta($clientToUpdate->id, 'chat_url', $request->get('chat_url'));
+        }
+
         // Converter config para array na resposta
         if (is_string($clientToUpdate->config)) {
             $clientToUpdate->config = json_decode($clientToUpdate->config, true) ?? [];
@@ -603,6 +652,19 @@ class ClientController extends Controller
             'message' => 'Cliente movido para a lixeira com sucesso',
             'status' => 200
         ]);
+    }
+
+    /**
+     * Salva ou atualiza os meta campos do cliente.
+     * EN: Save or update client meta fields.
+     */
+    private function saveMetas($userId, $metas)
+    {
+        if (is_array($metas)) {
+            foreach ($metas as $key => $value) {
+                Qlib::update_usermeta($userId, $key, $value);
+            }
+        }
     }
 
     /**

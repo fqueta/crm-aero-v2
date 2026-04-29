@@ -112,6 +112,7 @@ const clientSchema = z.object({
     errorMap: () => ({ message: "Selecione o status" })
   }),
   autor: z.string().optional(),
+  chat_url: z.string().url("URL do chat inválida (deve começar com http:// ou https://)").or(z.literal("")).nullable().optional(),
   config: z.object({
     nome_fantasia: z.string().nullable().optional(),
     celular: z.string().nullable().optional().refine((val) => {
@@ -197,6 +198,7 @@ export default function ClientCreate() {
       genero: "ni",
       status: "actived",
       autor: "",
+      chat_url: "",
       config: {
         nome_fantasia: "",
         celular: "",
@@ -269,6 +271,7 @@ export default function ClientCreate() {
       genero: data.genero,
       status: data.status,
       autor: data.autor,
+      chat_url: data.chat_url,
       // Inclui informações de atendimento no config
       config: data.config,
     };

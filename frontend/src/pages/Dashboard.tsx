@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,39 @@ import { useRecentActivities, useRegistrationData, usePendingPreRegistrations } 
 import { ClientRegistrationChart } from "@/components/ClientRegistrationChart";
 import { VisitorTrendChart } from "@/components/VisitorTrendChart";
 import { useAuth } from "@/contexts/AuthContext";
+import DashboardMonthSelector from "@/components/dashboard/DashboardMonthSelector";
+import {
+  formatMonthLabel,
+  getCurrentMonthInputValue,
+  getMonthDateRange,
+  normalizeDashboardMonth,
+} from "@/lib/dashboardMonth";
+
+/**
+ * Converte formatos comuns de data para comparação no dashboard.
+ */
+function normalizeDateString(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+    return value.slice(0, 10);
+  }
+
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (match) {
+    const [, day, month, year] = match;
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
 
 /**
  * Dashboard
@@ -36,8 +70,10 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthInputValue);
   const userPermission = Number(user?.permission_id ?? 0);
   const canShowPartners = userPermission < 5;
+  const monthRange = getMonthDateRange(selectedMonth);
   // Hooks para buscar dados das entidades
   const { data: clientsData, isLoading: clientsLoading } = useClientsList({ limit: 1 });
   const { data: partnersData, isLoading: partnersLoading } = usePartnersList({ limit: 1 });
@@ -46,7 +82,10 @@ export default function Dashboard() {
 
   // Hooks para dados dinâmicos do dashboard
   const { data: recentActivities, isLoading: activitiesLoading, error: activitiesError } = useRecentActivities(4);
-  const { data: registrationData, isLoading: registrationLoading, error: registrationError } = useRegistrationData();
+  const { data: registrationData, isLoading: registrationLoading, error: registrationError } = useRegistrationData(
+    monthRange.startDate,
+    monthRange.endDate
+  );
   const { data: pendingPreRegistrations, isLoading: pendingLoading, error: pendingError } = usePendingPreRegistrations(3);
   // console.log('pendingPreRegistrations:', pendingPreRegistrations);
   // Verificar se há erro 403 (Acesso negado)
@@ -110,9 +149,22 @@ export default function Dashboard() {
   };
 
   // Dados dinâmicos ou fallback para dados mock
-  const recentClientActivities = recentActivities || [];
-  const clientRegistrationData = registrationData || [];
-  const pendingPreRegistrationsData = pendingPreRegistrations || [];
+  const selectedMonthLabel = formatMonthLabel(selectedMonth);
+  const recentClientActivities = useMemo(() => {
+    return (recentActivities || []).filter((activity) => {
+      const normalizedDate = normalizeDateString(activity.created_at);
+      return normalizedDate ? normalizedDate.startsWith(normalizeDashboardMonth(selectedMonth)) : false;
+    });
+  }, [recentActivities, selectedMonth]);
+  const clientRegistrationData = useMemo(() => {
+    return (registrationData || []).filter((item) => item.date.startsWith(normalizeDashboardMonth(selectedMonth)));
+  }, [registrationData, selectedMonth]);
+  const pendingPreRegistrationsData = useMemo(() => {
+    return (pendingPreRegistrations || []).filter((item) => {
+      const normalizedDate = normalizeDateString(item.date);
+      return normalizedDate ? normalizedDate.startsWith(normalizeDashboardMonth(selectedMonth)) : false;
+    });
+  }, [pendingPreRegistrations, selectedMonth]);
   // console.log('pendingPreRegistrationsData:', pendingPreRegistrationsData);
   // Verificação simples dos dados de registro
   // if (clientRegistrationData.length > 0) {
@@ -146,6 +198,20 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <div className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-sm font-medium text-foreground">Filtro do dashboard</h2>
+          <p className="text-sm text-muted-foreground">
+            Aplicando o recorte de {selectedMonthLabel} nas listas e gráficos operacionais.
+          </p>
+        </div>
+        <DashboardMonthSelector
+          selectedMonth={selectedMonth}
+          onChange={setSelectedMonth}
+          helperText="Os totais de entidades continuam gerais; gráfico e listas seguem o mês selecionado."
+        />
+      </div>
+
 
 
       
@@ -163,7 +229,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Evolução dos Cadastros de Clientes</CardTitle>
-              <CardDescription>Acompanhamento diário dos cadastros por status nos últimos 14 dias</CardDescription>
+              <CardDescription>Acompanhamento diário dos cadastros por status em {selectedMonthLabel}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-center py-8">
@@ -175,7 +241,7 @@ export default function Dashboard() {
           <ClientRegistrationChart 
             data={clientRegistrationData}
             title="Evolução dos Cadastros de Clientes"
-            description="Acompanhamento diário dos cadastros por status nos últimos 14 dias"
+            description={`Acompanhamento diário dos cadastros por status em ${selectedMonthLabel}`}
           />
         )}
       </div>
@@ -185,7 +251,7 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle>Atividades Recentes - Clientes</CardTitle>
             <CardDescription>
-              Últimos cadastros e alterações de clientes
+              Últimos cadastros e alterações de clientes em {selectedMonthLabel}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -196,7 +262,7 @@ export default function Dashboard() {
                 </div>
               ) : recentClientActivities.length === 0 ? (
                 <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground">Nenhuma atividade recente</p>
+                  <p className="text-sm text-muted-foreground">Nenhuma atividade encontrada no mês selecionado</p>
                 </div>
               ) : (
                 recentClientActivities.map((activity) => (
@@ -251,7 +317,7 @@ export default function Dashboard() {
               Pré-cadastros Pendentes
             </CardTitle>
             <CardDescription>
-              Cadastros aguardando aprovação
+              Cadastros aguardando aprovação em {selectedMonthLabel}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -262,7 +328,7 @@ export default function Dashboard() {
                 </div>
               ) : pendingPreRegistrationsData.length === 0 ? (
                 <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground">Nenhum pré-registro pendente</p>
+                  <p className="text-sm text-muted-foreground">Nenhum pré-registro pendente no mês selecionado</p>
                 </div>
               ) : (
                 pendingPreRegistrationsData.map((item) => (

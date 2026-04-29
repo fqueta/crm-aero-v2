@@ -97,11 +97,14 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
     setIsLoading(true);
     try {
       const response = await financialService.accountsReceivable.getAll(filters);
-      setAccounts(response.data);
-      setTotalPages(response.totalPages);
-      setTotal(response.total);
+      setAccounts(Array.isArray(response?.data) ? response.data : []);
+      setTotalPages(Number(response?.totalPages ?? 0));
+      setTotal(Number(response?.total ?? 0));
     } catch (error: unknown) {
       console.error('Erro ao carregar contas a receber:', error);
+      setAccounts([]);
+      setTotalPages(0);
+      setTotal(0);
       toast.error('Erro ao carregar contas a receber');
     } finally {
       setIsLoading(false);

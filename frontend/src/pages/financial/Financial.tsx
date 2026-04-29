@@ -30,6 +30,8 @@ import {
 import { financialService } from '../../services/financialService';
 import AccountsPayableTable from '../../components/financial/AccountsPayableTable';
 import AccountsReceivableTable from '../../components/financial/AccountsReceivableTable';
+import DashboardMonthSelector from '@/components/dashboard/DashboardMonthSelector';
+import { formatMonthLabel, getCurrentMonthInputValue } from '@/lib/dashboardMonth';
 
 /**
  * Componente principal do módulo financeiro
@@ -38,7 +40,8 @@ export const Financial: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<FinancialDashboardData | null>(null);
   const [categories, setCategories] = useState<FinancialCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedPeriod, setSelectedPeriod] = useState('30d');
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthInputValue);
+  const selectedMonthLabel = formatMonthLabel(selectedMonth);
 
   /**
    * Carrega dados do dashboard
@@ -47,7 +50,7 @@ export const Financial: React.FC = () => {
     setIsLoading(true);
     try {
       const [dashData, categoriesData] = await Promise.all([
-        financialService.dashboard.getDashboardData(selectedPeriod),
+        financialService.dashboard.getDashboardData(selectedMonth),
         financialService.categories.getAll()
       ]);
       
@@ -66,7 +69,7 @@ export const Financial: React.FC = () => {
    */
   useEffect(() => {
     loadDashboardData();
-  }, [selectedPeriod]);
+  }, [selectedMonth]);
 
   /**
    * Formata valor monetário
@@ -123,7 +126,7 @@ export const Financial: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Financeiro</h1>
-          <p className="text-gray-600">Controle financeiro completo da sua empresa</p>
+          <p className="text-gray-600">Controle financeiro completo da sua empresa em {selectedMonthLabel}</p>
         </div>
         
         <div className="flex gap-2">
@@ -136,6 +139,14 @@ export const Financial: React.FC = () => {
             Fluxo de Caixa
           </Button>
         </div>
+      </div>
+
+      <div className="rounded-lg border p-4">
+        <DashboardMonthSelector
+          selectedMonth={selectedMonth}
+          onChange={setSelectedMonth}
+          helperText="Os cards, transações recentes e próximos vencimentos seguem o mês selecionado."
+        />
       </div>
 
       {/* Cards de Resumo */}
@@ -151,7 +162,7 @@ export const Financial: React.FC = () => {
               <div className="text-2xl font-bold text-green-600">
                 {formatCurrency(summary.totalIncome)}
               </div>
-              <p className="text-xs text-gray-600">Últimos 30 dias</p>
+              <p className="text-xs text-gray-600">{selectedMonthLabel}</p>
             </CardContent>
           </Card>
 
@@ -165,7 +176,7 @@ export const Financial: React.FC = () => {
               <div className="text-2xl font-bold text-red-600">
                 {formatCurrency(summary.totalExpenses)}
               </div>
-              <p className="text-xs text-gray-600">Últimos 30 dias</p>
+              <p className="text-xs text-gray-600">{selectedMonthLabel}</p>
             </CardContent>
           </Card>
 
@@ -179,7 +190,7 @@ export const Financial: React.FC = () => {
               <div className={`text-2xl font-bold ${getValueColor(summary.netProfit)}`}>
                 {formatCurrency(summary.netProfit)}
               </div>
-              <p className="text-xs text-gray-600">Últimos 30 dias</p>
+              <p className="text-xs text-gray-600">{selectedMonthLabel}</p>
             </CardContent>
           </Card>
 
@@ -245,6 +256,7 @@ export const Financial: React.FC = () => {
         <Card>
           <CardHeader>
             <CardTitle>Transações Recentes</CardTitle>
+              <CardDescription>Movimentações mais recentes em {selectedMonthLabel}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -278,6 +290,7 @@ export const Financial: React.FC = () => {
           <Card>
             <CardHeader>
               <CardTitle>Próximas Contas a Receber</CardTitle>
+              <CardDescription>Recebimentos previstos a partir do recorte selecionado</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -286,14 +299,13 @@ export const Financial: React.FC = () => {
                     <div>
                       <p className="font-medium">{account.description}</p>
                       <p className="text-sm text-gray-600">
-                        {account.customerName} • {formatDate(account.dueDate)}
+                        Vencimento em {formatDate(account.date)}
                       </p>
                     </div>
                     <div className="text-right">
                       <div className="font-medium text-green-600">
                         {formatCurrency(account.amount)}
                       </div>
-                      {getStatusBadge(account.status)}
                     </div>
                   </div>
                 ))}
@@ -307,6 +319,7 @@ export const Financial: React.FC = () => {
           <Card>
             <CardHeader>
               <CardTitle>Próximas Contas a Pagar</CardTitle>
+              <CardDescription>Pagamentos previstos a partir do recorte selecionado</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -315,14 +328,13 @@ export const Financial: React.FC = () => {
                     <div>
                       <p className="font-medium">{account.description}</p>
                       <p className="text-sm text-gray-600">
-                        {account.supplierName} • {formatDate(account.dueDate)}
+                        Vencimento em {formatDate(account.date)}
                       </p>
                     </div>
                     <div className="text-right">
                       <div className="font-medium text-red-600">
                         {formatCurrency(account.amount)}
                       </div>
-                      {getStatusBadge(account.status)}
                     </div>
                   </div>
                 ))}

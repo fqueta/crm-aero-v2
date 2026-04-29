@@ -90,4 +90,13 @@ class User extends Authenticatable
     {
         $this->notify(new ResetPasswordNotification($token));
     }
+
+    /**
+     * Relacionamento com os meta campos do usuário.
+     * EN: Relationship with user meta fields.
+     */
+    public function metas()
+    {
+        return $this->hasMany(UserMeta::class, 'user_id');
+    }
 }

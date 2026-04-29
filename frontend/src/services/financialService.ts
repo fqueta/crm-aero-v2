@@ -55,8 +55,8 @@ export const accountsPayableService = {
       }
     });
     
-    const response = await api.get(`/financial/accounts-payable?${params}`);
-    return response.data;
+    const response = await api.get<PaginatedResponse<AccountPayable>>(`/financial/accounts-payable?${params}`);
+    return response;
   },
 
   /**
@@ -123,8 +123,8 @@ export const accountsReceivableService = {
       }
     });
     
-    const response = await api.get(`/financial/accounts-receivable?${params}`);
-    return response.data;
+    const response = await api.get<PaginatedResponse<AccountReceivable>>(`/financial/accounts-receivable?${params}`);
+    return response;
   },
 
   /**
@@ -227,8 +227,8 @@ export const cashFlowService = {
       }
     });
     
-    const response = await api.get(`/financial/cash-flow?${params}`);
-    return response.data;
+    const response = await api.get<PaginatedResponse<CashFlowEntry>>(`/financial/cash-flow?${params}`);
+    return response;
   },
 
   /**
@@ -312,8 +312,8 @@ export const dashboardService = {
    */
   async getDashboardData(period?: string): Promise<FinancialDashboardData> {
     const params = period ? `?period=${period}` : '';
-    const response = await api.get(`/financial/dashboard${params}`);
-    return response.data;
+    const response = await api.get<FinancialDashboardData>(`/financial/overview${params}`);
+    return response;
   },
 
   /**
