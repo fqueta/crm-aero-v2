@@ -43,7 +43,7 @@ class UserController extends Controller
         $this->routeName = request()->route()->getName();
         $this->permissionService = $permissionService;
         $this->sec = request()->segment(3);
-        $this->cliente_permission_id = (new ClientController)->cliente_permission_id ?? Qlib::qoption('permission_client_id');
+        $this->cliente_permission_id = (int) (Qlib::qoption('permission_client_id') ?? 5);
     }
     /**
      * Listar todos os usuários

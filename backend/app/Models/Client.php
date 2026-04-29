@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Http\Controllers\Api\ClientController;
 use Illuminate\Database\Eloquent\Builder;
 use App\Models\User;
 use App\Services\Qlib;
@@ -14,7 +13,7 @@ class Client extends User
     // Sempre traz só usuários com permission_id = 5
     protected static function booted()
     {
-        $cliente_permission_id = (new ClientController)->cliente_permission_id ?? Qlib::qoption('permission_client_id');
+        $cliente_permission_id = (int) (Qlib::qoption('permission_client_id') ?? 5);
         static::creating(function ($client) use ($cliente_permission_id) {
             $client->permission_id = $cliente_permission_id; // força sempre grupo cliente
         });
