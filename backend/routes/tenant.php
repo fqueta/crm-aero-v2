@@ -37,6 +37,7 @@ use App\Http\Controllers\api\ComponentController;
 use App\Http\Controllers\api\UploadController;
 use App\Http\Controllers\api\PaginaController;
 use App\Http\Controllers\api\RegisterController;
+use App\Http\Controllers\api\UserAccessReportController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\api\CursoController;
 use App\Http\Controllers\TurmaController;
@@ -122,6 +123,7 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::put('user/profile',[UserController::class,'updateProfile'])->name('user.profile.update');
         Route::get('user/can',[UserController::class,'can_access'])->name('perfil.can');
         Route::post('/logout',[AuthController::class,'logout'])->name('logout');
+        Route::get('reports/user-access', [UserAccessReportController::class, 'index'])->name('reports.user-access');
         Route::apiResource('users', UserController::class,['parameters' => [
             'users' => 'id'
         ]]);

@@ -2,6 +2,7 @@ import { ChevronUp, ChevronDown, User, Wrench } from "lucide-react";
 import * as React from "react";
 import { NavLink, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { MenuItemDTO } from "@/types/menu";
 
 import {
   Sidebar,
@@ -39,7 +40,7 @@ import { buildMenuFromDTO, filterMenuByViewAccess, defaultMenu } from "@/lib/men
  */
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { menu: apiMenu, logout } = useAuth();
+  const { menu: apiMenu, logout, user } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
   const collapsed = state === "collapsed";
@@ -101,10 +102,59 @@ export function AppSidebar() {
     });
   };
 
+  /**
+   * cloneMenuItems
+   * pt-BR: Clona o menu recursivamente para permitir ajustes locais sem mutar o estado de autenticação.
+   * en-US: Recursively clones the menu so local adjustments don't mutate auth state.
+   */
+  const cloneMenuItems = (items: MenuItemDTO[]): MenuItemDTO[] =>
+    items.map((item) => ({
+      ...item,
+      items: item.items ? cloneMenuItems(item.items) : undefined,
+    }));
+
+  /**
+   * injectSuperAdminReports
+   * pt-BR: Injeta relatórios exclusivos do superadmin no grupo "Relatórios".
+   * en-US: Injects super-admin-only reports into the "Reports" group.
+   */
+  const injectSuperAdminReports = (items: MenuItemDTO[]): MenuItemDTO[] => {
+    if (Number(user?.permission_id ?? 0) !== 1) {
+      return items;
+    }
+
+    const nextItems = cloneMenuItems(items);
+    const reportsGroup = nextItems.find((item) => item.title === "Relatórios");
+
+    if (!reportsGroup) {
+      return nextItems;
+    }
+
+    const reportUrl = "/admin/reports/relatorio-acessos";
+    const alreadyExists = (reportsGroup.items ?? []).some((item) => item.url === reportUrl);
+
+    if (!alreadyExists) {
+      reportsGroup.items = [
+        ...(reportsGroup.items ?? []),
+        {
+          id: "user-access-report",
+          parent_id: reportsGroup.id,
+          title: "Relatório de Acessos",
+          url: reportUrl,
+          icon: "BarChart3",
+          can_view: true,
+        },
+      ];
+    }
+
+    return nextItems;
+  };
+
   // Build menu from API data or use default menu
-  const baseMenu = apiMenu && apiMenu.length > 0 
-    ? buildMenuFromDTO(apiMenu) 
-    : buildMenuFromDTO(defaultMenu);
+  const resolvedMenuSource = injectSuperAdminReports(
+    apiMenu && apiMenu.length > 0 ? apiMenu : defaultMenu
+  );
+  const baseMenu = buildMenuFromDTO(resolvedMenuSource);
 
   // Filter by can_view access
   const menuItems = filterMenuByViewAccess(baseMenu);

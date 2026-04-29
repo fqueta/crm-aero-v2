@@ -8,6 +8,7 @@ import { UserPrefsProvider } from "@/contexts/UserPrefsContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AdminProtectedRoute } from "./components/auth/AdminProtectedRoute";
+import { SuperAdminGuard } from "./components/auth/SuperAdminGuard";
 import { AuthRedirect } from "./components/auth/AuthRedirect";
 import { AppLayout } from "./components/layout/AppLayout";
 // import Dashboard from "./pages/Dashboard";
@@ -63,6 +64,7 @@ import Financial from "./pages/financial/Financial";
 import FinancialCategories from "./pages/FinancialCategories";
 import GeneralConversionReport from "./pages/reports/GeneralConversionReport";
 import WonProposalsReport from "./pages/reports/WonProposalsReport";
+import UserAccessReport from "./pages/reports/UserAccessReport";
 import PublicClientForm from "@/pages/PublicClientForm";
 import ProposalSignature from "@/pages/ProposalSignature";
 import ProposalApproval from "@/pages/ProposalApproval";
@@ -781,6 +783,15 @@ const App = () => {
                       <WonProposalsReport />
                     </PermissionGuard>
                   </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/reports/relatorio-acessos" element={
+                <AdminProtectedRoute>
+                  <SuperAdminGuard>
+                    <AppLayout>
+                      <UserAccessReport />
+                    </AppLayout>
+                  </SuperAdminGuard>
                 </AdminProtectedRoute>
               } />
 

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\MenuController;
+use App\Models\EventLog;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -14,11 +16,48 @@ class AuthController extends Controller
      * Filtra menu pelo array de permissões do usuário
      */
 
+    /**
+     * Registra um evento de autenticação para alimentar auditoria de acesso.
+     */
+    private function registerAuthEvent(Request $request, User $user, string $action, ?string $description = null, array $payload = []): void
+    {
+        try {
+            EventLog::create([
+                'entity_type' => 'auth',
+                'entity_id' => (string) $user->id,
+                'action' => $action,
+                'description' => $description,
+                'payload' => $payload,
+                'actor_id' => (string) $user->id,
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $exception) {
+            \Log::warning('Falha ao registrar evento de autenticacao', [
+                'user_id' => $user->id ?? null,
+                'action' => $action,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
 
     public function logout(Request $request)
     {
         // $request->user()->currentAccessToken()->delete();
         $user = $request->user();
+        $activeTokensBeforeLogout = method_exists($user, 'tokens') ? $user->tokens()->count() : 0;
+
+        $this->registerAuthEvent(
+            $request,
+            $user,
+            'logout',
+            'Logout realizado com sucesso',
+            [
+                'user_agent' => $request->userAgent(),
+                'active_tokens_before_logout' => $activeTokensBeforeLogout,
+            ]
+        );
+
         // $user = Auth::user();
         // dd($user);
         $user->tokens()->delete();
@@ -67,6 +106,18 @@ class AuthController extends Controller
         // $filteredMenu = $this->filterMenuByPermissions($menu, $allowedPermissions);
         $filteredMenu = (new MenuController)->getMenus($pid);
         $token = $user->createToken('developer')->plainTextToken;
+
+        $this->registerAuthEvent(
+            $request,
+            $user,
+            'login',
+            'Login realizado com sucesso',
+            [
+                'user_agent' => $request->userAgent(),
+                'permission_id' => $user->permission_id ?? null,
+            ]
+        );
+
         return response()->json([
             'user' => $user,
             // 'permissions' => $allowedPermissions,

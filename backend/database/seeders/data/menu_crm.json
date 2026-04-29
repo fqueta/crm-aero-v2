@@ -61,6 +61,7 @@
       { "title": "Balanço", "url": "/reports/relatorio-balanco" },
       { "title": "Turmas", "url": "/reports/relatorio-turmas" },
       { "title": "Atendimento", "url": "/reports/relatorio-atendimento" },
+      { "title": "Acessos", "url": "/reports/relatorio-acessos" },
       { "title": "Horas Voadas", "url": "/reports/horas_voadas" },
       { "title": "Contratos vencidos", "url": "/reports/contratos_vencidos" }
     ]

@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Tooltip as MetricTooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -19,6 +20,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   Clock3,
   DollarSign,
   Percent,
@@ -435,6 +437,8 @@ export default function AeroclubeDashboard() {
   const financialSummary = financialOverview?.summary;
   const upcomingReceivables = financialOverview?.upcomingReceivables ?? [];
   const recentTransactions = financialOverview?.recentTransactions ?? [];
+  const conversionMetricHelpText =
+    'Leads convertidos contam leads unicos com pelo menos um ganho no periodo. Propostas ganhas contam todos os ganhos, inclusive quando o mesmo lead fecha mais de uma proposta.';
 
   if (isLoading) {
     return (
@@ -578,6 +582,16 @@ export default function AeroclubeDashboard() {
             <CardTitle className="flex items-center gap-2 text-sm">
               <Target className="h-4 w-4 text-primary" />
               Leads convertidos
+              <MetricTooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className="text-muted-foreground" aria-label="Entender leads convertidos">
+                    <CircleHelp className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-sm">
+                  {conversionMetricHelpText}
+                </TooltipContent>
+              </MetricTooltip>
             </CardTitle>
             <CardDescription>Leads unicos com ganho no mes</CardDescription>
           </CardHeader>
@@ -683,7 +697,19 @@ export default function AeroclubeDashboard() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Conversao mensal</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Conversao mensal
+              <MetricTooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className="text-muted-foreground" aria-label="Entender a conversão mensal">
+                    <CircleHelp className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-sm">
+                  {conversionMetricHelpText}
+                </TooltipContent>
+              </MetricTooltip>
+            </CardTitle>
             <CardDescription>Leads captados, leads convertidos e propostas ganhas ao longo do periodo.</CardDescription>
           </CardHeader>
           <CardContent className="h-[320px]">
