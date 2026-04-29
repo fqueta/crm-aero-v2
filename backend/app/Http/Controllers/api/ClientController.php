@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
@@ -334,6 +334,27 @@ class ClientController extends Controller
     }
 
     /**
+     * Sincroniza o celular principal recebido em `config.celular` com a coluna raiz `celular`.
+     * EN: Sync the primary phone received in `config.celular` with the root `celular` column.
+     */
+    private function syncRootCellphoneFromConfig(Request $request): void
+    {
+        $rootCellphone = $this->normalizeOptionalString($request->get('celular'));
+        $config = $request->input('config');
+
+        if ($rootCellphone !== null || !is_array($config)) {
+            return;
+        }
+
+        $configCellphone = $this->normalizeOptionalString($config['celular'] ?? null);
+        if ($configCellphone !== null) {
+            $request->merge([
+                'celular' => $configCellphone,
+            ]);
+        }
+    }
+
+    /**
      * Criar um novo cliente
      */
     public function store(Request $request)
@@ -345,6 +366,8 @@ class ClientController extends Controller
         if (!$this->permissionService->isHasPermission('create')) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
+
+        $this->syncRootCellphoneFromConfig($request);
 
         // Verificar se o email já existe na lixeira
         if ($request->filled('email')) {
@@ -536,7 +559,15 @@ class ClientController extends Controller
             return response()->json(['error' => 'Acesso negado'], 403);
         }
 
+        $this->syncRootCellphoneFromConfig($request);
         $clientToUpdate = Client::findOrFail($id);
+
+        // Remover máscara do celular para manter a coluna raiz consistente.
+        if ($request->filled('celular')) {
+            $request->merge([
+                'celular' => preg_replace('/\D/', '', (string) $request->input('celular')),
+            ]);
+        }
 
         // Normalizar campos opcionais para null quando vazios (evita unique com "")
         $request->merge([
