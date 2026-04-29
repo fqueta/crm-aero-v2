@@ -6,6 +6,7 @@
 // Enums para status e categorias
 export enum AccountStatus {
   PENDING = 'pending',
+  PARTIAL = 'partial',
   PAID = 'paid',
   OVERDUE = 'overdue',
   CANCELLED = 'cancelled'
@@ -26,7 +27,8 @@ export enum PaymentMethod {
   BANK_TRANSFER = 'bank_transfer',
   PIX = 'pix',
   CHECK = 'check',
-  BOLETO = 'boleto'
+  BOLETO = 'boleto',
+  OTHER = 'other'
 }
 
 export enum RecurrenceType {
@@ -48,6 +50,7 @@ export interface BaseAccount {
   category: string;
   paymentMethod?: PaymentMethod;
   notes?: string;
+  config?: Record<string, unknown>;
   attachments?: string[];
   createdAt: string;
   updatedAt: string;
@@ -75,11 +78,31 @@ export interface AccountReceivable extends BaseAccount {
   serviceOrderId?: string;
   invoiceNumber?: string;
   receivedDate?: string;
+  paymentDate?: string;
+  paidAmount?: number;
+  remainingAmount?: number;
+  paymentsTotal?: number;
+  paymentsCount?: number;
+  payments?: FinancialAccountPayment[];
   discountAmount?: number;
   interestAmount?: number;
   recurrence?: RecurrenceType;
   installments?: number;
   currentInstallment?: number;
+}
+
+export interface FinancialAccountPayment {
+  id: string;
+  financialAccountId: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: PaymentMethod | string;
+  notes?: string;
+  createdBy?: string;
+  token?: string;
+  config?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Fluxo de Caixa
@@ -195,6 +218,15 @@ export interface ReportFilter {
   supplierId?: string;
 }
 
+export interface WonProposalReportFilter {
+  startDate?: string;
+  endDate?: string;
+  status?: 'pending' | 'partial' | 'paid' | 'all';
+  search?: string;
+  page?: number;
+  perPage?: number;
+}
+
 export interface FinancialSummary {
   totalIncome: number;
   totalExpenses: number;
@@ -242,6 +274,183 @@ export interface BillingReport {
     quantity: number;
     totalAmount: number;
   }[];
+}
+
+export interface WonProposalReportItem {
+  id: string;
+  matriculaId: string | null;
+  customerName?: string;
+  description: string;
+  contractNumber?: string;
+  status: AccountStatus | string;
+  statusLabel: string;
+  gainDate?: string | null;
+  lastPaymentDate?: string | null;
+  negotiatedAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentsCount: number;
+  gainObservation?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WonProposalReportSummary {
+  totalAccounts: number;
+  negotiatedAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paidAccounts: number;
+  partialAccounts: number;
+  pendingAccounts: number;
+  conversionAverage: number;
+}
+
+export interface WonProposalReportStatusBreakdown {
+  status: AccountStatus | string;
+  label: string;
+  totalAccounts: number;
+  negotiatedAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+}
+
+export interface WonProposalReportResponse {
+  data: WonProposalReportItem[];
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+  from: number | null;
+  to: number | null;
+  summary: WonProposalReportSummary;
+  statusBreakdown: WonProposalReportStatusBreakdown[];
+  filters: {
+    startDate?: string | null;
+    endDate?: string | null;
+    status?: string | null;
+    search?: string | null;
+  };
+}
+
+export interface GeneralConversionReportFilter {
+  startDate?: string;
+  endDate?: string;
+  consultantId?: string;
+  funnelId?: string;
+}
+
+export type GeneralConversionReportDetailType =
+  | 'leads'
+  | 'unique_converted_leads'
+  | 'won_proposals';
+
+export interface GeneralConversionReportSummary {
+  leadsCount: number;
+  conversionsCount: number;
+  proposalsWonCount: number;
+  uniqueConvertedLeadsCount: number;
+  conversionRate: number;
+  proposalWinRate: number;
+  averageConversionDays: number;
+  medianConversionDays: number;
+  fastestConversionDays: number | null;
+  slowestConversionDays: number | null;
+}
+
+export interface GeneralConversionReportMonthlyItem {
+  month: string;
+  label: string;
+  leads: number;
+  conversions: number;
+  proposalsWon: number;
+  uniqueConvertedLeads: number;
+  conversionRate: number;
+  proposalWinRate: number;
+  averageConversionDays: number;
+}
+
+export interface GeneralConversionReportBucketItem {
+  bucket: string;
+  count: number;
+}
+
+export interface GeneralConversionReportRecentItem {
+  leadId: string;
+  leadName: string;
+  matriculaId: string;
+  consultantName?: string | null;
+  leadCreatedAt: string;
+  gainDate: string;
+  conversionDays: number;
+  negotiatedAmount: number;
+}
+
+export interface GeneralConversionReportConsultantItem {
+  consultantId: string | null;
+  consultantName: string;
+  leadsCount: number;
+  uniqueConvertedLeadsCount: number;
+  proposalsWonCount: number;
+  conversionRate: number;
+  averageConversionDays: number;
+}
+
+export interface GeneralConversionReportResponse {
+  filters: {
+    startDate: string;
+    endDate: string;
+    consultantId?: string | null;
+    funnelId?: string | null;
+  };
+  currentMonth: {
+    label: string;
+    summary: GeneralConversionReportSummary;
+  };
+  periodSummary: GeneralConversionReportSummary;
+  monthlyConversion: GeneralConversionReportMonthlyItem[];
+  conversionTimeBuckets: GeneralConversionReportBucketItem[];
+  consultantBreakdown: GeneralConversionReportConsultantItem[];
+  recentConversions: GeneralConversionReportRecentItem[];
+}
+
+export interface GeneralConversionReportLeadDetailItem {
+  leadId: string;
+  leadName: string;
+  leadCreatedAt: string;
+}
+
+export interface GeneralConversionReportUniqueConvertedDetailItem {
+  leadId: string;
+  leadName: string;
+  leadCreatedAt: string;
+  gainDate: string;
+  conversionDays: number;
+  consultantName?: string | null;
+  proposalsWonCount: number;
+}
+
+export interface GeneralConversionReportWonProposalDetailItem {
+  leadId: string;
+  leadName: string;
+  matriculaId: string;
+  leadCreatedAt: string;
+  gainDate: string;
+  conversionDays: number;
+  consultantName?: string | null;
+  negotiatedAmount: number;
+}
+
+export interface GeneralConversionReportDetailResponse {
+  type: GeneralConversionReportDetailType;
+  title: string;
+  total: number;
+  items: Array<
+    | GeneralConversionReportLeadDetailItem
+    | GeneralConversionReportUniqueConvertedDetailItem
+    | GeneralConversionReportWonProposalDetailItem
+  >;
 }
 
 // DTOs para formulários

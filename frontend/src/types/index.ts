@@ -217,7 +217,7 @@ export interface Payment {
   installment_amount: number;
   payment_date: string;
   due_date?: string;
-  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
+  status: 'pending' | 'partial' | 'paid' | 'overdue' | 'cancelled';
   notes?: string;
   created_at: string;
   updated_at: string;

@@ -164,7 +164,7 @@ class PermissionService
             $url = '/school/classes';
         }
         if(
-            $name=='api.matriculas.index' || $name == 'api.event-logs.index' || $name == 'api.matriculas.update' || $name == 'api.matriculas.show' || $name == 'api.matriculas.store' || $name == 'api.matriculas.destroy' || $name == 'api.matriculas.all' || $name == 'api.matriculas.update-stage' || $name == 'api.matriculas.update-status'
+            $name=='api.matriculas.index' || $name == 'api.financial.accounts-receivable.receive' || $name == 'api.event-logs.index' || $name == 'api.matriculas.update' || $name == 'api.matriculas.show' || $name == 'api.matriculas.store' || $name == 'api.matriculas.destroy' || $name == 'api.matriculas.all' || $name == 'api.matriculas.update-stage' || $name == 'api.matriculas.update-status'
             ){
             $url = '/sales';
         }

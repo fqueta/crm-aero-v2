@@ -16,8 +16,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { useRegisterClientAttendance, useClientAttendances } from '@/hooks/clients';
 import { useUpdateEnrollmentStatus } from '@/hooks/enrollments';
 import { useToast } from '@/hooks/use-toast';
+import { financialService } from '@/services/financialService';
+import { currencyApplyMask, currencyRemoveMaskToString } from '@/lib/masks/currency';
 import { cn, formatDate } from '@/lib/utils';
 import { CreateClientAttendanceInput } from '@/types/attendance';
+import { PaymentMethod } from '@/types/financial';
+import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, CircleDot, Clock3, Headset, MessageSquareText, XCircle } from 'lucide-react';
 
 interface ProposalAttendanceCardProps {
@@ -25,7 +29,31 @@ interface ProposalAttendanceCardProps {
   clientId?: string;
   clientName?: string;
   status?: string;
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
+  proposalAmountLabel?: string;
+}
+
+interface ProposalAttendanceItem {
+  id?: string | number;
+  channel?: string | null;
+  created_at?: string;
+  observation?: string | null;
+  attendant?: {
+    name?: string | null;
+  } | null;
+  metadata?: {
+    duration?: number | string | null;
+  } | null;
+}
+
+interface ProposalGainPaymentItem {
+  id?: string | number;
+  amount?: string | number | null;
+  payment_date?: string | null;
+  payment_method?: string | null;
+  notes?: string | null;
+  paymentDate?: string | null;
+  paymentMethod?: string | null;
 }
 
 const DEFAULT_LOSS_REASONS = [
@@ -98,6 +126,181 @@ function getChannelLabel(channel?: string | null): string {
 }
 
 /**
+ * formatStatusDate
+ * pt-BR: Formata datas ISO simples para exibicao no resumo do status.
+ * en-US: Formats simple ISO dates for the status summary.
+ */
+function formatStatusDate(value?: string | null): string {
+  if (!value) return '—';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-');
+    return `${day}/${month}/${year}`;
+  }
+  return String(value);
+}
+
+/**
+ * formatCurrencyBRL
+ * pt-BR: Formata numeros monetarios em BRL para exibicao no card.
+ * en-US: Formats monetary values in BRL for display in the card.
+ */
+function formatCurrencyBRL(value?: string | number | null): string {
+  const amount = Number(value || 0);
+  if (!isFinite(amount)) return '—';
+
+  try {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
+  } catch {
+    return `R$ ${amount.toFixed(2)}`;
+  }
+}
+
+/**
+ * formatCurrencyInputValue
+ * pt-BR: Formata um valor numerico salvo para reutilizacao em inputs monetarios ja preenchidos.
+ * en-US: Formats a persisted numeric value for reuse in prefilled currency inputs.
+ */
+function formatCurrencyInputValue(value?: string | number | null): string {
+  if (value === null || value === undefined || value === '') return '';
+
+  const amount = Number(value);
+  if (!isFinite(amount)) return '';
+
+  try {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
+  } catch {
+    return `R$ ${amount.toFixed(2)}`;
+  }
+}
+
+/**
+ * getFinancialStatusLabel
+ * pt-BR: Traduz o status financeiro resumido do ganho para exibicao no card.
+ * en-US: Translates the summarized financial gain status for card display.
+ */
+function getFinancialStatusLabel(value?: string | null): string {
+  switch (String(value || '').toLowerCase()) {
+    case 'paid':
+      return 'Quitado';
+    case 'partial':
+      return 'Parcial';
+    case 'cancelled':
+      return 'Cancelado';
+    case 'overdue':
+      return 'Vencido';
+    default:
+      return 'Pendente';
+  }
+}
+
+/**
+ * getPaymentMethodLabel
+ * pt-BR: Converte o metodo de pagamento em um rótulo amigável.
+ * en-US: Converts the payment method code into a friendly label.
+ */
+function getPaymentMethodLabel(value?: string | null): string {
+  switch (String(value || '').toLowerCase()) {
+    case 'cash':
+      return 'Dinheiro';
+    case 'credit_card':
+      return 'Cartão de Crédito';
+    case 'debit_card':
+      return 'Cartão de Débito';
+    case 'bank_transfer':
+      return 'Transferência Bancária';
+    case 'pix':
+      return 'PIX';
+    case 'check':
+      return 'Cheque';
+    case 'boleto':
+      return 'Boleto';
+    case 'other':
+      return 'Outro';
+    default:
+      return value ? String(value) : 'Não informado';
+  }
+}
+
+/**
+ * getPaymentDateValue
+ * pt-BR: Normaliza a leitura da data entre formatos antigos e novos do pagamento.
+ * en-US: Normalizes payment date access between legacy and current payload shapes.
+ */
+function getPaymentDateValue(payment?: ProposalGainPaymentItem | null): string {
+  return payment?.payment_date || payment?.paymentDate || '';
+}
+
+/**
+ * getPaymentMethodValue
+ * pt-BR: Normaliza a leitura da forma de pagamento entre formatos antigos e novos.
+ * en-US: Normalizes payment method access between legacy and current payload shapes.
+ */
+function getPaymentMethodValue(payment?: ProposalGainPaymentItem | null): string {
+  return payment?.payment_method || payment?.paymentMethod || '';
+}
+
+/**
+ * extractApiErrorMessage
+ * pt-BR: Extrai a primeira mensagem amigavel de um payload de erro da API, incluindo erros de validacao.
+ * en-US: Extracts the first friendly message from an API error payload, including validation errors.
+ */
+function extractApiErrorMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const message = 'message' in payload ? payload.message : undefined;
+  const errors = 'errors' in payload ? payload.errors : undefined;
+
+  if (errors && typeof errors === 'object') {
+    for (const value of Object.values(errors as Record<string, unknown>)) {
+      if (Array.isArray(value) && value.length > 0) {
+        return String(value[0]);
+      }
+
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+  }
+
+  if (typeof message === 'string' && message.trim()) {
+    return message;
+  }
+
+  return null;
+}
+
+/**
+ * getErrorMessage
+ * pt-BR: Extrai uma mensagem amigavel de erros desconhecidos das mutacoes.
+ * en-US: Extracts a friendly message from unknown mutation errors.
+ */
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null) {
+    const payloadMessage = extractApiErrorMessage(
+      (error as { response?: { data?: unknown }; data?: unknown }).response?.data
+        ?? (error as { data?: unknown }).data
+        ?? error
+    );
+
+    if (payloadMessage) {
+      return payloadMessage;
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message?: unknown }).message || fallback);
+  }
+
+  return fallback;
+}
+
+/**
  * ProposalAttendanceCard
  * pt-BR: Card lateral da proposta para registrar atendimentos e marcar ganho/perda.
  * en-US: Proposal sidebar card to register attendances and mark win/loss.
@@ -108,22 +311,53 @@ export default function ProposalAttendanceCard({
   clientName,
   status,
   meta,
+  proposalAmountLabel,
 }: ProposalAttendanceCardProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [winDialogOpen, setWinDialogOpen] = useState(false);
   const [lossDialogOpen, setLossDialogOpen] = useState(false);
+  const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [channel, setChannel] = useState('whatsapp');
   const [observation, setObservation] = useState('');
   const [duration, setDuration] = useState('');
   const [tagsText, setTagsText] = useState('');
+  const [gainDate, setGainDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [negotiatedAmount, setNegotiatedAmount] = useState('');
+  const [paidAmount, setPaidAmount] = useState('');
+  const [gainObservation, setGainObservation] = useState('');
   const [lossDate, setLossDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lossReason, setLossReason] = useState('');
   const [lossObservation, setLossObservation] = useState('');
+  const [receiveDate, setReceiveDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receiveAmount, setReceiveAmount] = useState('');
+  const [receiveMethod, setReceiveMethod] = useState<PaymentMethod>(PaymentMethod.OTHER);
+  const [receiveNotes, setReceiveNotes] = useState('');
 
   const statusMeta = useMemo(() => getStatusMeta(status), [status]);
+  const currentGainDate = typeof meta?.data_ganho === 'string' ? meta.data_ganho : '';
+  const currentNegotiatedAmount = typeof meta?.valor_negociado_ganho === 'string' ? meta.valor_negociado_ganho : '';
+  const currentEntryAmount = typeof meta?.valor_entrada_ganho === 'string' ? meta.valor_entrada_ganho : '';
+  const currentPaidAmount = typeof meta?.valor_recebido_ganho === 'string'
+    ? meta.valor_recebido_ganho
+    : (typeof meta?.valor_pago === 'string' ? meta.valor_pago : '');
+  const currentRemainingAmount = typeof meta?.saldo_ganho === 'string' ? meta.saldo_ganho : '';
+  const currentFinancialStatus = typeof meta?.financeiro_status_ganho === 'string' ? meta.financeiro_status_ganho : '';
+  const currentGainObservation = typeof meta?.observacao_ganho === 'string' ? meta.observacao_ganho : '';
+  const currentFinancialAccountId = meta?.financial_gain_account_id ? String(meta.financial_gain_account_id) : '';
+  const currentGainPayments = useMemo<ProposalGainPaymentItem[]>(() => {
+    return Array.isArray(meta?.pagamentos_ganho) ? (meta.pagamentos_ganho as ProposalGainPaymentItem[]) : [];
+  }, [meta?.pagamentos_ganho]);
   const currentLossDate = typeof meta?.data_perda === 'string' ? meta.data_perda : '';
   const currentLossReason = typeof meta?.motivo_perda === 'string' ? meta.motivo_perda : '';
   const currentLossObservation = typeof meta?.observacao_perda === 'string' ? meta.observacao_perda : '';
+  const remainingGainAmount = Number(currentRemainingAmount || 0);
+  const editingPayment = useMemo(() => {
+    return currentGainPayments.find((payment) => String(payment.id || '') === String(editingPaymentId || '')) || null;
+  }, [currentGainPayments, editingPaymentId]);
   const { data: attendancesResponse, isLoading: isLoadingAttendances } = useClientAttendances(
     String(clientId || ''),
     { per_page: 5 },
@@ -132,9 +366,22 @@ export default function ProposalAttendanceCard({
   const updateEnrollmentStatusMutation = useUpdateEnrollmentStatus();
   const registerAttendanceMutation = useRegisterClientAttendance();
 
-  const attendances = useMemo(() => {
-    return Array.isArray(attendancesResponse?.data) ? attendancesResponse.data : [];
+  const attendances = useMemo<ProposalAttendanceItem[]>(() => {
+    return Array.isArray(attendancesResponse?.data) ? (attendancesResponse.data as ProposalAttendanceItem[]) : [];
   }, [attendancesResponse?.data]);
+
+  /**
+   * resetReceiveForm
+   * pt-BR: Prepara o modal de parcela com o saldo atual da proposta.
+   * en-US: Prepares the installment modal with the proposal's current outstanding balance.
+   */
+  const resetReceiveForm = () => {
+    setReceiveDate(new Date().toISOString().slice(0, 10));
+    setReceiveAmount(remainingGainAmount > 0 ? formatCurrencyInputValue(remainingGainAmount) : '');
+    setReceiveMethod(PaymentMethod.OTHER);
+    setReceiveNotes('');
+    setEditingPaymentId(null);
+  };
 
   /**
    * handleChangeStatus
@@ -143,6 +390,19 @@ export default function ProposalAttendanceCard({
    */
   const handleChangeStatus = (nextStatus: 'a' | 'g' | 'p') => {
     if (!enrollmentId || updateEnrollmentStatusMutation.isPending) return;
+
+    if (nextStatus === 'g') {
+      setGainDate(currentGainDate || new Date().toISOString().slice(0, 10));
+      setNegotiatedAmount(
+        currentNegotiatedAmount
+          ? formatCurrencyInputValue(currentNegotiatedAmount)
+          : (proposalAmountLabel || '')
+      );
+      setPaidAmount(currentEntryAmount ? formatCurrencyInputValue(currentEntryAmount) : '');
+      setGainObservation(currentGainObservation || '');
+      setWinDialogOpen(true);
+      return;
+    }
 
     if (nextStatus === 'p') {
       setLossDate(currentLossDate || new Date().toISOString().slice(0, 10));
@@ -161,10 +421,66 @@ export default function ProposalAttendanceCard({
             description: `A proposta foi marcada como ${getStatusMeta(nextStatus).label.toLowerCase()}.`,
           });
         },
-        onError: (error: any) => {
+        onError: (error: unknown) => {
           toast({
             title: 'Erro ao atualizar status',
-            description: String(error?.message || 'Não foi possível atualizar a proposta.'),
+            description: getErrorMessage(error, 'Nao foi possivel atualizar a proposta.'),
+            variant: 'destructive',
+          });
+        },
+      }
+    );
+  };
+
+  /**
+   * handleConfirmWin
+   * pt-BR: Confirma o ganho da proposta e envia valor negociado, entrada inicial e observacao.
+   * en-US: Confirms the proposal win and sends negotiated value, initial payment and observation.
+   */
+  const handleConfirmWin = () => {
+    if (!enrollmentId || updateEnrollmentStatusMutation.isPending) return;
+
+    const normalizedNegotiatedAmount = currencyRemoveMaskToString(negotiatedAmount || '');
+    const normalizedPaidAmount = currencyRemoveMaskToString(paidAmount || '');
+    if (!gainDate || Number(normalizedNegotiatedAmount) <= 0) {
+      toast({
+        title: 'Campos obrigatorios',
+        description: 'Informe a data do ganho e um valor negociado maior que zero.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (Number(normalizedPaidAmount || '0') > Number(normalizedNegotiatedAmount || '0')) {
+      toast({
+        title: 'Valores inconsistentes',
+        description: 'A entrada inicial nao pode ser maior que o valor negociado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    updateEnrollmentStatusMutation.mutate(
+      {
+        id: String(enrollmentId),
+        status: 'g',
+        gain_date: gainDate,
+        negotiated_amount: normalizedNegotiatedAmount,
+        paid_amount: normalizedPaidAmount || '0',
+        gain_observation: gainObservation.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setWinDialogOpen(false);
+          toast({
+            title: 'Ganho registrado',
+            description: 'A proposta foi marcada como ganho e o financeiro foi preparado para recebimentos parciais.',
+          });
+        },
+        onError: (error: unknown) => {
+          toast({
+            title: 'Erro ao registrar ganho',
+            description: getErrorMessage(error, 'Nao foi possivel registrar o ganho da proposta.'),
             variant: 'destructive',
           });
         },
@@ -204,10 +520,10 @@ export default function ProposalAttendanceCard({
             description: 'A proposta foi marcada como perda com os dados informados.',
           });
         },
-        onError: (error: any) => {
+        onError: (error: unknown) => {
           toast({
             title: 'Erro ao registrar perda',
-            description: String(error?.message || 'Não foi possível registrar a perda da proposta.'),
+            description: getErrorMessage(error, 'Nao foi possivel registrar a perda da proposta.'),
             variant: 'destructive',
           });
         },
@@ -257,15 +573,171 @@ export default function ProposalAttendanceCard({
             description: 'O evento de atendimento foi salvo com sucesso.',
           });
         },
-        onError: (error: any) => {
+        onError: (error: unknown) => {
           toast({
             title: 'Erro ao registrar atendimento',
-            description: String(error?.message || 'Não foi possível registrar o atendimento.'),
+            description: getErrorMessage(error, 'Nao foi possivel registrar o atendimento.'),
             variant: 'destructive',
           });
         },
       }
     );
+  };
+
+  /**
+   * handleOpenReceiveDialog
+   * pt-BR: Abre o modal para registrar uma nova parcela da proposta ganha.
+   * en-US: Opens the modal to register a new installment for the won proposal.
+   */
+  const handleOpenReceiveDialog = () => {
+    if (!currentFinancialAccountId) {
+      toast({
+        title: 'Financeiro indisponivel',
+        description: 'Esta proposta ainda nao possui uma conta financeira vinculada.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    resetReceiveForm();
+    setReceiveDialogOpen(true);
+  };
+
+  /**
+   * handleEditReceivePayment
+   * pt-BR: Carrega uma parcela existente no modal para manutencao.
+   * en-US: Loads an existing installment into the modal for maintenance.
+   */
+  const handleEditReceivePayment = (payment: ProposalGainPaymentItem) => {
+    if (!currentFinancialAccountId || !payment?.id) return;
+
+    setEditingPaymentId(String(payment.id));
+    setReceiveDate(getPaymentDateValue(payment) || new Date().toISOString().slice(0, 10));
+    setReceiveAmount(formatCurrencyInputValue(payment.amount));
+    setReceiveMethod((getPaymentMethodValue(payment) || PaymentMethod.OTHER) as PaymentMethod);
+    setReceiveNotes(payment.notes || '');
+    setReceiveDialogOpen(true);
+  };
+
+  /**
+   * refreshProposalFinancialData
+   * pt-BR: Revalida caches relacionados a proposta, logs e financeiro apos alteracoes.
+   * en-US: Revalidates proposal, logs and financial caches after changes.
+   */
+  const refreshProposalFinancialData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['enrollments'] }),
+      queryClient.invalidateQueries({ queryKey: ['enrollments', 'detail', String(enrollmentId)] }),
+      queryClient.invalidateQueries({ queryKey: ['event-logs'] }),
+      queryClient.invalidateQueries({ queryKey: ['accounts-receivable'] }),
+    ]);
+  };
+
+  /**
+   * handleSubmitReceivePayment
+   * pt-BR: Registra uma nova parcela no financeiro e atualiza proposta e histórico.
+   * en-US: Registers a new financial installment and refreshes the proposal and history.
+   */
+  const handleSubmitReceivePayment = async () => {
+    if (!currentFinancialAccountId || isSubmittingPayment) return;
+
+    const normalizedReceiveAmount = Number(currencyRemoveMaskToString(receiveAmount || '0'));
+    const currentEditingAmount = Number(editingPayment?.amount || 0);
+    const maxAllowedAmount = editingPaymentId ? remainingGainAmount + currentEditingAmount : remainingGainAmount;
+    if (!receiveDate || normalizedReceiveAmount <= 0) {
+      toast({
+        title: 'Campos obrigatorios',
+        description: 'Informe a data do recebimento e um valor maior que zero.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (maxAllowedAmount > 0 && normalizedReceiveAmount > maxAllowedAmount) {
+      toast({
+        title: 'Valor acima do saldo',
+        description: editingPaymentId
+          ? 'A parcela editada nao pode ultrapassar o total disponivel da proposta.'
+          : 'A parcela nao pode ser maior que o saldo pendente da proposta.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsSubmittingPayment(true);
+      if (editingPaymentId) {
+        await financialService.accountsReceivable.updatePayment(
+          currentFinancialAccountId,
+          editingPaymentId,
+          receiveDate,
+          receiveMethod,
+          normalizedReceiveAmount,
+          receiveNotes.trim() || undefined
+        );
+      } else {
+        await financialService.accountsReceivable.markAsReceived(
+          currentFinancialAccountId,
+          receiveDate,
+          receiveMethod,
+          normalizedReceiveAmount,
+          receiveNotes.trim() || undefined
+        );
+      }
+
+      await refreshProposalFinancialData();
+
+      setReceiveDialogOpen(false);
+      toast({
+        title: editingPaymentId ? 'Parcela atualizada' : 'Parcela registrada',
+        description: editingPaymentId
+          ? 'A parcela foi atualizada e a proposta ja reflete o novo saldo.'
+          : 'O novo recebimento foi salvo e a proposta foi atualizada.',
+      });
+    } catch (error) {
+      toast({
+        title: editingPaymentId ? 'Erro ao atualizar parcela' : 'Erro ao registrar parcela',
+        description: getErrorMessage(
+          error,
+          editingPaymentId
+            ? 'Nao foi possivel atualizar a parcela da proposta.'
+            : 'Nao foi possivel registrar a nova parcela da proposta.'
+        ),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmittingPayment(false);
+    }
+  };
+
+  /**
+   * handleDeleteReceivePayment
+   * pt-BR: Remove uma parcela da proposta apos confirmacao do usuario.
+   * en-US: Deletes a proposal installment after user confirmation.
+   */
+  const handleDeleteReceivePayment = async (payment: ProposalGainPaymentItem) => {
+    if (!currentFinancialAccountId || !payment?.id || isSubmittingPayment) return;
+    const confirmed = window.confirm('Deseja realmente excluir esta parcela do financeiro?');
+    if (!confirmed) return;
+
+    try {
+      setIsSubmittingPayment(true);
+      await financialService.accountsReceivable.deletePayment(currentFinancialAccountId, String(payment.id));
+      await refreshProposalFinancialData();
+
+      toast({
+        title: 'Parcela removida',
+        description: 'A parcela foi excluida e o saldo da proposta foi recalculado.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Erro ao remover parcela',
+        description: getErrorMessage(error, 'Nao foi possivel remover a parcela da proposta.'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmittingPayment(false);
+    }
   };
 
   return (
@@ -290,11 +762,123 @@ export default function ProposalAttendanceCard({
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">{statusMeta.description}</p>
+            {statusMeta.code === 'g' && (
+              <div className="pt-2 space-y-1 text-xs text-muted-foreground">
+                <div>
+                  <span className="font-semibold text-foreground">Data do ganho:</span>{' '}
+                  {formatStatusDate(currentGainDate)}
+                </div>
+                <div>
+                  <span className="font-semibold text-foreground">Valor negociado:</span>{' '}
+                  {currentNegotiatedAmount ? formatCurrencyBRL(currentNegotiatedAmount) : proposalAmountLabel || '—'}
+                </div>
+                <div>
+                  <span className="font-semibold text-foreground">Total recebido:</span>{' '}
+                  {currentPaidAmount ? formatCurrencyBRL(currentPaidAmount) : '—'}
+                </div>
+                <div>
+                  <span className="font-semibold text-foreground">Saldo pendente:</span>{' '}
+                  {currentRemainingAmount ? formatCurrencyBRL(currentRemainingAmount) : '—'}
+                </div>
+                {currentEntryAmount && (
+                  <div>
+                    <span className="font-semibold text-foreground">Entrada inicial:</span>{' '}
+                    {formatCurrencyBRL(currentEntryAmount)}
+                  </div>
+                )}
+                <div>
+                  <span className="font-semibold text-foreground">Status financeiro:</span>{' '}
+                  {getFinancialStatusLabel(currentFinancialStatus)}
+                  {currentGainPayments.length > 0 ? ` • ${currentGainPayments.length} pagamento(s)` : ''}
+                </div>
+                {currentGainObservation && (
+                  <div>
+                    <span className="font-semibold text-foreground">Observacoes:</span>{' '}
+                    {currentGainObservation}
+                  </div>
+                )}
+                <div className="pt-2">
+                  <div className="font-semibold text-foreground mb-2">Parcelas recebidas</div>
+                  {currentGainPayments.length > 0 ? (
+                    <div className="space-y-2">
+                      {currentGainPayments.map((payment, index) => (
+                        <div key={String(payment.id || index)} className="rounded-lg border border-border/60 bg-background/80 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-semibold text-foreground">
+                              {formatCurrencyBRL(payment.amount)}
+                            </span>
+                            <span>{formatStatusDate(getPaymentDateValue(payment))}</span>
+                          </div>
+                          <div className="mt-1 text-[11px]">
+                            Forma: {getPaymentMethodLabel(getPaymentMethodValue(payment))}
+                          </div>
+                          {payment.notes && (
+                            <div className="mt-1 text-[11px]">
+                              Obs.: {payment.notes}
+                            </div>
+                          )}
+                          {payment.id && (
+                            <div className="mt-3 flex items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() => handleEditReceivePayment(payment)}
+                                disabled={isSubmittingPayment}
+                              >
+                                Editar
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px] text-red-600"
+                                onClick={() => handleDeleteReceivePayment(payment)}
+                                disabled={isSubmittingPayment}
+                              >
+                                Excluir
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border/70 bg-background/60 p-3 text-[11px] text-muted-foreground">
+                      Nenhuma parcela registrada ate o momento.
+                    </div>
+                  )}
+                </div>
+                <div className="pt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleOpenReceiveDialog}
+                    disabled={!currentFinancialAccountId || remainingGainAmount <= 0 || isSubmittingPayment}
+                    className="w-full"
+                  >
+                    Registrar parcela futura
+                  </Button>
+                  {!currentFinancialAccountId && (
+                    <p className="mt-2 text-[11px] text-amber-700">
+                      O financeiro desta proposta ainda nao foi vinculado.
+                    </p>
+                  )}
+                  {currentFinancialAccountId && remainingGainAmount <= 0 && (
+                    <p className="mt-2 text-[11px] text-emerald-700">
+                      Esta proposta ja esta quitada no financeiro.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
             {statusMeta.code === 'p' && (currentLossDate || currentLossReason) && (
               <div className="pt-2 space-y-1 text-xs text-muted-foreground">
                 <div>
                   <span className="font-semibold text-foreground">Data da perda:</span>{' '}
-                  {currentLossDate ? currentLossDate.split('-').reverse().join('/') : '—'}
+                  {formatStatusDate(currentLossDate)}
                 </div>
                 <div>
                   <span className="font-semibold text-foreground">Motivo:</span>{' '}
@@ -388,7 +972,7 @@ export default function ProposalAttendanceCard({
               </div>
             )}
 
-            {!isLoadingAttendances && attendances.map((attendance: any) => (
+            {!isLoadingAttendances && attendances.map((attendance) => (
               <div
                 key={String(attendance.id)}
                 className="rounded-xl border border-border/50 bg-white dark:bg-zinc-900 p-4 shadow-sm space-y-2"
@@ -499,6 +1083,213 @@ export default function ProposalAttendanceCard({
             </Button>
             <Button onClick={handleSubmitAttendance} disabled={!clientId || registerAttendanceMutation.isPending}>
               Salvar atendimento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={receiveDialogOpen}
+        onOpenChange={(open) => {
+          setReceiveDialogOpen(open);
+          if (!open) resetReceiveForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>{editingPaymentId ? 'Editar parcela da proposta' : 'Registrar parcela da proposta'}</DialogTitle>
+            <DialogDescription>
+              {editingPaymentId
+                ? 'Ajuste os dados da parcela e mantenha o saldo da proposta sincronizado.'
+                : 'Lance um novo recebimento sem sair da visualizacao da proposta.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+                  Negociado
+                </div>
+                <div className="text-sm font-semibold text-foreground">
+                  {currentNegotiatedAmount ? formatCurrencyBRL(currentNegotiatedAmount) : proposalAmountLabel || '—'}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+                  Recebido
+                </div>
+                <div className="text-sm font-semibold text-foreground">
+                  {currentPaidAmount ? formatCurrencyBRL(currentPaidAmount) : '—'}
+                </div>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-amber-700/80">
+                  Saldo atual
+                </div>
+                <div className="text-sm font-semibold text-amber-900">
+                  {currentRemainingAmount ? formatCurrencyBRL(currentRemainingAmount) : '—'}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Data do recebimento
+              </label>
+              <Input type="date" value={receiveDate} onChange={(event) => setReceiveDate(event.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Valor da parcela
+              </label>
+              <Input
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={receiveAmount}
+                onChange={(event) => setReceiveAmount(currencyApplyMask(event.target.value))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Forma de pagamento
+              </label>
+              <Select value={receiveMethod} onValueChange={(value) => setReceiveMethod(value as PaymentMethod)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a forma de pagamento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PaymentMethod.CASH}>Dinheiro</SelectItem>
+                  <SelectItem value={PaymentMethod.PIX}>PIX</SelectItem>
+                  <SelectItem value={PaymentMethod.BANK_TRANSFER}>Transferência Bancária</SelectItem>
+                  <SelectItem value={PaymentMethod.DEBIT_CARD}>Cartão de Débito</SelectItem>
+                  <SelectItem value={PaymentMethod.CREDIT_CARD}>Cartão de Crédito</SelectItem>
+                  <SelectItem value={PaymentMethod.BOLETO}>Boleto</SelectItem>
+                  <SelectItem value={PaymentMethod.CHECK}>Cheque</SelectItem>
+                  <SelectItem value={PaymentMethod.OTHER}>Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Observacoes
+              </label>
+              <Textarea
+                placeholder="Ex.: segunda parcela, pagamento parcial, acordo comercial."
+                value={receiveNotes}
+                onChange={(event) => setReceiveNotes(event.target.value)}
+                className="min-h-[110px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceiveDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmitReceivePayment} disabled={isSubmittingPayment || !currentFinancialAccountId}>
+              {editingPaymentId ? 'Salvar alteracoes' : 'Salvar parcela'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={winDialogOpen}
+        onOpenChange={(open) => {
+          setWinDialogOpen(open);
+          if (open) {
+            setGainDate(currentGainDate || new Date().toISOString().slice(0, 10));
+            setNegotiatedAmount(
+              currentNegotiatedAmount
+                ? formatCurrencyInputValue(currentNegotiatedAmount)
+                : (proposalAmountLabel || '')
+            );
+            setPaidAmount(currentEntryAmount ? formatCurrencyInputValue(currentEntryAmount) : '');
+            setGainObservation(currentGainObservation || '');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Registrar ganho da proposta</DialogTitle>
+            <DialogDescription>
+              Informe a data do ganho, o valor negociado e a entrada inicial para criar o crediario da proposta.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {proposalAmountLabel && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-700/80">
+                  Valor da proposta
+                </div>
+                <div className="text-sm font-semibold text-emerald-900">
+                  {proposalAmountLabel}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Data do ganho
+              </label>
+              <Input type="date" value={gainDate} onChange={(event) => setGainDate(event.target.value)} />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Valor negociado
+              </label>
+              <Input
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={negotiatedAmount}
+                onChange={(event) => setNegotiatedAmount(currencyApplyMask(event.target.value))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Entrada recebida agora
+              </label>
+              <Input
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={paidAmount}
+                onChange={(event) => setPaidAmount(currencyApplyMask(event.target.value))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Deixe zerado se a proposta foi ganha, mas ainda nao houve recebimento.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Observacoes ou comentarios
+              </label>
+              <Textarea
+                placeholder="Descreva detalhes relevantes sobre o fechamento da proposta."
+                value={gainObservation}
+                onChange={(event) => setGainObservation(event.target.value)}
+                className="min-h-[120px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWinDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={handleConfirmWin}
+              disabled={updateEnrollmentStatusMutation.isPending}
+            >
+              Confirmar ganho
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -292,9 +292,21 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::delete('financial/accounts-receivable/{id}', function(Request $request, $id) {
             return app(FinancialAccountController::class)->destroy($request, $id);
         })->name('financial.accounts-receivable.destroy');
+        Route::get('reports/general-conversion', [\App\Http\Controllers\api\MatriculaController::class, 'generalConversionReport'])
+            ->name('reports.general-conversion');
+        Route::get('reports/general-conversion/details', [\App\Http\Controllers\api\MatriculaController::class, 'generalConversionReportDetails'])
+            ->name('reports.general-conversion.details');
+        Route::get('financial/reports/won-proposals', [FinancialAccountController::class, 'wonProposalsReport'])
+            ->name('financial.reports.won-proposals');
         Route::patch('financial/accounts-receivable/{id}/receive', function(Request $request, $id) {
             return app(FinancialAccountController::class)->receive($request, $id);
         })->name('financial.accounts-receivable.receive');
+        Route::patch('financial/accounts-receivable/{id}/payments/{paymentId}', function(Request $request, $id, $paymentId) {
+            return app(FinancialAccountController::class)->updatePayment($request, $id, $paymentId);
+        })->name('financial.accounts-receivable.payments.update');
+        Route::delete('financial/accounts-receivable/{id}/payments/{paymentId}', function(Request $request, $id, $paymentId) {
+            return app(FinancialAccountController::class)->destroyPayment($request, $id, $paymentId);
+        })->name('financial.accounts-receivable.payments.destroy');
         Route::patch('financial/accounts-receivable/{id}/cancel', function(Request $request, $id) {
             return app(FinancialAccountController::class)->cancel($request, $id);
         })->name('financial.accounts-receivable.cancel');

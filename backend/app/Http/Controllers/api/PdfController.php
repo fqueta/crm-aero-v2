@@ -564,6 +564,11 @@ class PdfController extends Controller
             'cta_url' => $cta_url,
             'cta_text' => $config['cta_text'],
             'extra_pages' => $resolvedPages['extraPages'],
+            'aviso_importante' => str_replace(
+                ['{dias}', '{dias_extenso}'],
+                [$validadeDias, Qlib::convert_number_to_words($validadeDias)],
+                Qlib::get_post_by_shortcode('aviso-informacoes-importantes-proposta')['obs'] ?? ''
+            ),
             'matricula' => $matricula,
         ];
     }

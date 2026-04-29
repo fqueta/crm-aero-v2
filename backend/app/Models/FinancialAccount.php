@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Builder;
 
 class FinancialAccount extends Model
@@ -69,9 +70,9 @@ class FinancialAccount extends Model
     {
         static::addGlobalScope('notDeleted', function (Builder $builder) {
             $builder->where(function($query) {
-                $query->whereNull('excluido')->orWhere('excluido', '!=', 's');
+                $query->whereNull('excluido')->orWhere('excluido', false);
             })->where(function($query) {
-                $query->whereNull('deletado')->orWhere('deletado', '!=', 's');
+                $query->whereNull('deletado')->orWhere('deletado', false);
             });
         });
     }
@@ -101,6 +102,14 @@ class FinancialAccount extends Model
     }
 
     /**
+     * Relacionamento com os recebimentos/pagamentos lançados para a conta.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(FinancialAccountPayment::class, 'financial_account_id')->orderBy('payment_date')->orderBy('id');
+    }
+
+    /**
      * Scope para contas a receber
      */
     public function scopeReceivable($query)
@@ -125,6 +134,14 @@ class FinancialAccount extends Model
     }
 
     /**
+     * Scope para contas parcialmente liquidadas.
+     */
+    public function scopePartial($query)
+    {
+        return $query->where('status', 'partial');
+    }
+
+    /**
      * Scope para contas pagas
      */
     public function scopePaid($query)
@@ -139,7 +156,7 @@ class FinancialAccount extends Model
     {
         return $query->where('status', 'overdue')
                     ->orWhere(function($q) {
-                        $q->where('status', 'pending')
+                        $q->whereIn('status', ['pending', 'partial'])
                           ->where('due_date', '<', now());
                     });
     }
@@ -189,7 +206,7 @@ class FinancialAccount extends Model
      */
     public function isOverdue(): bool
     {
-        return $this->status === 'pending' && $this->due_date < now()->toDateString();
+        return in_array($this->status, ['pending', 'partial'], true) && $this->due_date < now()->toDateString();
     }
 
     /**
@@ -208,7 +225,7 @@ class FinancialAccount extends Model
         if ($this->isPaid()) {
             return 0.0;
         }
-        return $this->amount - ($this->paid_amount ?? 0);
+        return max(0, (float) $this->amount - (float) ($this->paid_amount ?? 0));
     }
 
     /**
@@ -256,6 +273,7 @@ class FinancialAccount extends Model
     {
         return [
             'pending' => 'Pendente',
+            'partial' => 'Parcial',
             'paid' => 'Pago',
             'overdue' => 'Vencido',
             'cancelled' => 'Cancelado',

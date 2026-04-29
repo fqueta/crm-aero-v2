@@ -2,7 +2,7 @@
  * Tabela para exibição e gerenciamento de contas a receber
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -14,6 +14,7 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Textarea } from '../ui/textarea';
 import {
   Select,
   SelectContent,
@@ -28,6 +29,14 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog';
 import { toast } from 'react-hot-toast';
 import {
   MoreHorizontal,
@@ -38,7 +47,9 @@ import {
   Trash2,
   Check,
   X,
-  Download
+  Download,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   AccountReceivable,
@@ -49,6 +60,7 @@ import {
 } from '../../types/financial';
 import { financialService } from '../../services/financialService';
 import AccountReceivableForm from './AccountReceivableForm';
+import { currencyApplyMask, currencyRemoveMaskToString } from '../../lib/masks/currency';
 
 interface AccountsReceivableTableProps {
   categories: FinancialCategory[];
@@ -70,31 +82,38 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
   });
   const [totalPages, setTotalPages] = useState(0);
   const [total, setTotal] = useState(0);
+  const [isReceiveDialogOpen, setIsReceiveDialogOpen] = useState(false);
+  const [selectedReceiveAccount, setSelectedReceiveAccount] = useState<AccountReceivable | undefined>();
+  const [receiveAmount, setReceiveAmount] = useState('');
+  const [receiveDate, setReceiveDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [receiveMethod, setReceiveMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
+  const [receiveNotes, setReceiveNotes] = useState('');
+  const [expandedAccounts, setExpandedAccounts] = useState<string[]>([]);
 
   /**
    * Carrega as contas a receber
    */
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await financialService.accountsReceivable.getAll(filters);
       setAccounts(response.data);
       setTotalPages(response.totalPages);
       setTotal(response.total);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erro ao carregar contas a receber:', error);
       toast.error('Erro ao carregar contas a receber');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters]);
 
   /**
    * Carrega dados quando filtros mudam
    */
   useEffect(() => {
     loadAccounts();
-  }, [filters]);
+  }, [loadAccounts]);
 
   /**
    * Formata valor monetário
@@ -109,7 +128,8 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
   /**
    * Formata data
    */
-  const formatDate = (dateString: string): string => {
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('pt-BR');
   };
 
@@ -119,12 +139,13 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
   const getStatusBadge = (status: AccountStatus) => {
     const statusConfig = {
       [AccountStatus.PENDING]: { label: 'Pendente', variant: 'secondary' as const },
+      [AccountStatus.PARTIAL]: { label: 'Parcial', variant: 'secondary' as const },
       [AccountStatus.PAID]: { label: 'Recebido', variant: 'default' as const },
       [AccountStatus.OVERDUE]: { label: 'Vencido', variant: 'destructive' as const },
       [AccountStatus.CANCELLED]: { label: 'Cancelado', variant: 'outline' as const }
     };
 
-    const config = statusConfig[status];
+    const config = statusConfig[status] || statusConfig[AccountStatus.PENDING];
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
@@ -139,7 +160,9 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
   /**
    * Retorna label da forma de pagamento
    */
-  const getPaymentMethodLabel = (method: PaymentMethod): string => {
+  const getPaymentMethodLabel = (method?: PaymentMethod | string): string => {
+    if (!method) return '-';
+
     const labels = {
       [PaymentMethod.CASH]: 'Dinheiro',
       [PaymentMethod.CREDIT_CARD]: 'Cartão de Crédito',
@@ -147,9 +170,10 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
       [PaymentMethod.BANK_TRANSFER]: 'Transferência',
       [PaymentMethod.PIX]: 'PIX',
       [PaymentMethod.CHECK]: 'Cheque',
-      [PaymentMethod.BOLETO]: 'Boleto'
+      [PaymentMethod.BOLETO]: 'Boleto',
+      [PaymentMethod.OTHER]: 'Outro',
     };
-    return labels[method] || method;
+    return labels[method as keyof typeof labels] || String(method);
   };
 
   /**
@@ -169,22 +193,77 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
   };
 
   /**
-   * Marca conta como recebida
+   * Abre o modal para registrar uma nova parcela/recebimento.
    */
-  const handleMarkAsReceived = async (account: AccountReceivable) => {
-    try {
-      const receivedDate = new Date().toISOString().split('T')[0];
-      await financialService.accountsReceivable.markAsReceived(
-        account.id,
-        receivedDate,
-        account.paymentMethod || PaymentMethod.CASH
-      );
-      toast.success('Conta marcada como recebida!');
-      loadAccounts();
-    } catch (error: any) {
-      console.error('Erro ao marcar conta como recebida:', error);
-      toast.error('Erro ao marcar conta como recebida');
+  const openReceiveDialog = (account: AccountReceivable) => {
+    const availableMethods = Object.values(PaymentMethod);
+    const initialMethod = availableMethods.includes((account.paymentMethod || '') as PaymentMethod)
+      ? (account.paymentMethod as PaymentMethod)
+      : PaymentMethod.OTHER;
+
+    setSelectedReceiveAccount(account);
+    setReceiveDate(new Date().toISOString().split('T')[0]);
+    setReceiveMethod(initialMethod);
+    setReceiveAmount(formatCurrency(account.remainingAmount || account.amount));
+    setReceiveNotes('');
+    setIsReceiveDialogOpen(true);
+  };
+
+  /**
+   * Fecha e limpa o modal de recebimento.
+   */
+  const resetReceiveDialog = () => {
+    setIsReceiveDialogOpen(false);
+    setSelectedReceiveAccount(undefined);
+    setReceiveAmount('');
+    setReceiveDate(new Date().toISOString().split('T')[0]);
+    setReceiveMethod(PaymentMethod.CASH);
+    setReceiveNotes('');
+  };
+
+  /**
+   * Registra uma parcela na conta selecionada.
+   */
+  const handleSubmitReceive = async () => {
+    if (!selectedReceiveAccount) return;
+
+    const normalizedAmount = Number(currencyRemoveMaskToString(receiveAmount || ''));
+    const remainingAmount = Number(selectedReceiveAccount.remainingAmount || selectedReceiveAccount.amount || 0);
+
+    if (!receiveDate || normalizedAmount <= 0) {
+      toast.error('Informe a data e um valor de recebimento maior que zero.');
+      return;
     }
+
+    if (normalizedAmount > remainingAmount) {
+      toast.error('O valor informado nao pode ser maior que o saldo pendente da conta.');
+      return;
+    }
+
+    try {
+      await financialService.accountsReceivable.markAsReceived(
+        selectedReceiveAccount.id,
+        receiveDate,
+        receiveMethod,
+        normalizedAmount,
+        receiveNotes.trim() || undefined
+      );
+      toast.success('Parcela registrada com sucesso!');
+      resetReceiveDialog();
+      loadAccounts();
+    } catch (error: unknown) {
+      console.error('Erro ao registrar parcela:', error);
+      toast.error('Erro ao registrar parcela');
+    }
+  };
+
+  /**
+   * Expande ou recolhe o histórico de parcelas da conta.
+   */
+  const toggleAccountPayments = (accountId: string) => {
+    setExpandedAccounts((prev) => (
+      prev.includes(accountId) ? prev.filter((id) => id !== accountId) : [...prev, accountId]
+    ));
   };
 
   /**
@@ -196,7 +275,7 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
         await financialService.accountsReceivable.cancel(account.id);
         toast.success('Conta cancelada!');
         loadAccounts();
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Erro ao cancelar conta:', error);
         toast.error('Erro ao cancelar conta');
       }
@@ -212,7 +291,7 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
         await financialService.accountsReceivable.delete(account.id);
         toast.success('Conta excluída!');
         loadAccounts();
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Erro ao excluir conta:', error);
         toast.error('Erro ao excluir conta');
       }
@@ -280,6 +359,7 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value={AccountStatus.PENDING}>Pendente</SelectItem>
+              <SelectItem value={AccountStatus.PARTIAL}>Parcial</SelectItem>
               <SelectItem value={AccountStatus.PAID}>Recebido</SelectItem>
               <SelectItem value={AccountStatus.OVERDUE}>Vencido</SelectItem>
               <SelectItem value={AccountStatus.CANCELLED}>Cancelado</SelectItem>
@@ -301,6 +381,8 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
                   <TableHead>Descrição</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Valor</TableHead>
+                  <TableHead>Recebido</TableHead>
+                  <TableHead>Saldo</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Categoria</TableHead>
@@ -309,68 +391,146 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {accounts.map((account) => (
-                  <TableRow key={account.id}>
-                    <TableCell className="font-medium">
-                      {account.description}
-                      {account.invoiceNumber && (
-                        <div className="text-sm text-gray-500">
-                          NF: {account.invoiceNumber}
-                        </div>
-                      )}
-                      {account.serviceOrderId && (
-                        <div className="text-sm text-gray-500">
-                          OS: {account.serviceOrderId}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>{account.customerName || '-'}</TableCell>
-                    <TableCell>{formatCurrency(account.amount)}</TableCell>
-                    <TableCell>{formatDate(account.dueDate)}</TableCell>
-                    <TableCell>{getStatusBadge(account.status)}</TableCell>
-                    <TableCell>{getCategoryName(account.category)}</TableCell>
-                    <TableCell>
-                      {account.paymentMethod ? getPaymentMethodLabel(account.paymentMethod) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEditAccount(account)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar
-                          </DropdownMenuItem>
-                          
-                          {account.status === AccountStatus.PENDING && (
-                            <DropdownMenuItem onClick={() => handleMarkAsReceived(account)}>
-                              <Check className="h-4 w-4 mr-2" />
-                              Marcar como Recebido
-                            </DropdownMenuItem>
+                {accounts.map((account) => {
+                  const paymentsCount = account.paymentsCount || account.payments?.length || 0;
+                  const isExpanded = expandedAccounts.includes(account.id);
+                  const canReceive = [AccountStatus.PENDING, AccountStatus.PARTIAL, AccountStatus.OVERDUE].includes(account.status);
+
+                  return (
+                    <React.Fragment key={account.id}>
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          <div>{account.description}</div>
+                          {account.invoiceNumber && (
+                            <div className="text-sm text-gray-500">
+                              NF: {account.invoiceNumber}
+                            </div>
                           )}
-                          
-                          {account.status === AccountStatus.PENDING && (
-                            <DropdownMenuItem onClick={() => handleCancelAccount(account)}>
-                              <X className="h-4 w-4 mr-2" />
-                              Cancelar
-                            </DropdownMenuItem>
+                          {account.serviceOrderId && (
+                            <div className="text-sm text-gray-500">
+                              OS: {account.serviceOrderId}
+                            </div>
                           )}
-                          
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteAccount(account)}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {paymentsCount} pagamento(s)
+                            </span>
+                            {paymentsCount > 0 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => toggleAccountPayments(account.id)}
+                              >
+                                {isExpanded ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
+                                {isExpanded ? 'Ocultar parcelas' : 'Ver parcelas'}
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{account.customerName || '-'}</TableCell>
+                        <TableCell>{formatCurrency(account.amount)}</TableCell>
+                        <TableCell>{formatCurrency(account.paidAmount || account.paymentsTotal || 0)}</TableCell>
+                        <TableCell>{formatCurrency(account.remainingAmount || 0)}</TableCell>
+                        <TableCell>{formatDate(account.dueDate)}</TableCell>
+                        <TableCell>{getStatusBadge(account.status)}</TableCell>
+                        <TableCell>{getCategoryName(account.category)}</TableCell>
+                        <TableCell>{getPaymentMethodLabel(account.paymentMethod)}</TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEditAccount(account)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Editar
+                              </DropdownMenuItem>
+                              
+                              {canReceive && (
+                                <DropdownMenuItem onClick={() => openReceiveDialog(account)}>
+                                  <Check className="h-4 w-4 mr-2" />
+                                  Registrar parcela
+                                </DropdownMenuItem>
+                              )}
+
+                              {paymentsCount > 0 && (
+                                <DropdownMenuItem onClick={() => toggleAccountPayments(account.id)}>
+                                  {isExpanded ? <ChevronUp className="h-4 w-4 mr-2" /> : <ChevronDown className="h-4 w-4 mr-2" />}
+                                  {isExpanded ? 'Ocultar parcelas' : 'Ver parcelas'}
+                                </DropdownMenuItem>
+                              )}
+                              
+                              {account.status === AccountStatus.PENDING && (
+                                <DropdownMenuItem onClick={() => handleCancelAccount(account)}>
+                                  <X className="h-4 w-4 mr-2" />
+                                  Cancelar
+                                </DropdownMenuItem>
+                              )}
+                              
+                              <DropdownMenuItem 
+                                onClick={() => handleDeleteAccount(account)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+
+                      {isExpanded && (
+                        <TableRow className="bg-muted/30">
+                          <TableCell colSpan={10}>
+                            <div className="space-y-3 py-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-semibold">Histórico de parcelas</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Total recebido {formatCurrency(account.paidAmount || account.paymentsTotal || 0)} de {formatCurrency(account.amount)}
+                                  </div>
+                                </div>
+                                {canReceive && (
+                                  <Button type="button" size="sm" onClick={() => openReceiveDialog(account)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Nova parcela
+                                  </Button>
+                                )}
+                              </div>
+
+                              <div className="grid gap-3 md:grid-cols-2">
+                                {(account.payments || []).map((payment) => (
+                                  <div key={payment.id} className="rounded-lg border bg-background p-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className="text-sm font-semibold">
+                                        {formatCurrency(payment.amount)}
+                                      </span>
+                                      <Badge variant="outline">
+                                        {formatDate(payment.paymentDate)}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-2 text-xs text-muted-foreground">
+                                      Forma: {getPaymentMethodLabel(payment.paymentMethod)}
+                                    </div>
+                                    {payment.notes && (
+                                      <div className="mt-2 text-xs text-muted-foreground">
+                                        Obs.: {payment.notes}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
 
@@ -415,6 +575,102 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
         account={selectedAccount}
         categories={categories}
       />
+
+      <Dialog open={isReceiveDialogOpen} onOpenChange={(open) => !open && resetReceiveDialog()}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Registrar parcela</DialogTitle>
+            <DialogDescription>
+              Lance um novo recebimento parcial para a conta selecionada.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {selectedReceiveAccount && (
+              <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                <div className="font-semibold">{selectedReceiveAccount.description}</div>
+                <div className="mt-1 text-muted-foreground">
+                  Cliente: {selectedReceiveAccount.customerName || '-'}
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs">
+                  <div>
+                    <span className="font-semibold text-foreground">Total:</span> {formatCurrency(selectedReceiveAccount.amount)}
+                  </div>
+                  <div>
+                    <span className="font-semibold text-foreground">Recebido:</span> {formatCurrency(selectedReceiveAccount.paidAmount || selectedReceiveAccount.paymentsTotal || 0)}
+                  </div>
+                  <div>
+                    <span className="font-semibold text-foreground">Saldo:</span> {formatCurrency(selectedReceiveAccount.remainingAmount || 0)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Valor da parcela
+              </label>
+              <Input
+                inputMode="numeric"
+                placeholder="R$ 0,00"
+                value={receiveAmount}
+                onChange={(event) => setReceiveAmount(currencyApplyMask(event.target.value))}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Data do recebimento
+                </label>
+                <Input type="date" value={receiveDate} onChange={(event) => setReceiveDate(event.target.value)} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Forma de pagamento
+                </label>
+                <Select value={receiveMethod} onValueChange={(value) => setReceiveMethod(value as PaymentMethod)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={PaymentMethod.CASH}>Dinheiro</SelectItem>
+                    <SelectItem value={PaymentMethod.CREDIT_CARD}>Cartão de Crédito</SelectItem>
+                    <SelectItem value={PaymentMethod.DEBIT_CARD}>Cartão de Débito</SelectItem>
+                    <SelectItem value={PaymentMethod.BANK_TRANSFER}>Transferência Bancária</SelectItem>
+                    <SelectItem value={PaymentMethod.PIX}>PIX</SelectItem>
+                    <SelectItem value={PaymentMethod.CHECK}>Cheque</SelectItem>
+                    <SelectItem value={PaymentMethod.BOLETO}>Boleto</SelectItem>
+                    <SelectItem value={PaymentMethod.OTHER}>Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Observações
+              </label>
+              <Textarea
+                value={receiveNotes}
+                onChange={(event) => setReceiveNotes(event.target.value)}
+                placeholder="Ex.: entrada, reforço, negociação complementar."
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={resetReceiveDialog}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmitReceive}>
+              Salvar parcela
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

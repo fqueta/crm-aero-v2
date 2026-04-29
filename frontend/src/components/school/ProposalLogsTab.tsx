@@ -39,6 +39,18 @@ interface ProposalLogsTabProps {
   enrollmentId: string;
 }
 
+interface ProposalEventLog {
+  id: string | number;
+  action: string;
+  description?: string | null;
+  payload?: Record<string, unknown> | null;
+  actor_id?: string | null;
+  actor?: {
+    name?: string | null;
+  } | null;
+  created_at: string;
+}
+
 const getActionConfig = (action: string) => {
   switch (action) {
     case 'status_changed':
@@ -66,10 +78,46 @@ const getActionConfig = (action: string) => {
     case 'proposta_error':
     case 'contratos_error':
       return { label: 'Erro na Geração', icon: Activity, color: 'text-red-600', bg: 'bg-red-500/10', border: 'border-red-200' };
+    case 'financial_receivable_synced':
+      return { label: 'Financeiro Vinculado', icon: Download, color: 'text-emerald-600', bg: 'bg-emerald-500/10', border: 'border-emerald-200' };
+    case 'financial_payment_received':
+      return { label: 'Parcela Recebida', icon: PlusCircle, color: 'text-emerald-600', bg: 'bg-emerald-500/10', border: 'border-emerald-200' };
+    case 'financial_payment_updated':
+      return { label: 'Parcela Atualizada', icon: Edit3, color: 'text-amber-600', bg: 'bg-amber-500/10', border: 'border-amber-200' };
+    case 'financial_payment_deleted':
+      return { label: 'Parcela Removida', icon: Trash2, color: 'text-red-600', bg: 'bg-red-500/10', border: 'border-red-200' };
     default:
       return { label: action, icon: FileText, color: 'text-gray-500', bg: 'bg-gray-500/10', border: 'border-gray-200' };
   }
 };
+
+/**
+ * getPaymentMethodLabel
+ * pt-BR: Traduz o codigo da forma de pagamento no historico.
+ * en-US: Translates the payment method code in the history.
+ */
+function getPaymentMethodLabel(value?: string | null): string {
+  switch (String(value || '').toLowerCase()) {
+    case 'cash':
+      return 'Dinheiro';
+    case 'credit_card':
+      return 'Cartão de Crédito';
+    case 'debit_card':
+      return 'Cartão de Débito';
+    case 'bank_transfer':
+      return 'Transferência Bancária';
+    case 'pix':
+      return 'PIX';
+    case 'check':
+      return 'Cheque';
+    case 'boleto':
+      return 'Boleto';
+    case 'other':
+      return 'Outro';
+    default:
+      return value ? String(value) : 'Não informado';
+  }
+}
 
 /**
  * formatLossDate
@@ -93,17 +141,37 @@ function formatLossDate(value?: string | null): string {
 }
 
 /**
+ * formatCurrencyBRL
+ * pt-BR: Formata valores monetarios para exibicao no resumo do log.
+ * en-US: Formats monetary values for display in the log summary.
+ */
+function formatCurrencyBRL(value?: string | number | null): string {
+  const amount = Number(value || 0);
+  if (!isFinite(amount)) return '—';
+
+  try {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
+  } catch {
+    return `R$ ${amount.toFixed(2)}`;
+  }
+}
+
+/**
  * renderPayloadSummary
  * pt-BR: Renderiza um resumo amigável do payload quando o evento possui dados importantes.
  * en-US: Renders a friendly payload summary when the event contains important data.
  */
-function renderPayloadSummary(log: any) {
+function renderPayloadSummary(log: ProposalEventLog) {
   const payload = log?.payload;
   if (!payload || typeof payload !== 'object') return null;
 
   if (log.action === 'status_changed') {
     const fromLabel = payload?.from_status_label || payload?.from_status;
     const toLabel = payload?.to_status_label || payload?.to_status;
+    const gainDate = payload?.gain_date;
+    const negotiatedAmount = payload?.negotiated_amount;
+    const paidAmount = payload?.paid_amount;
+    const gainObservation = payload?.gain_observation;
     const lossDate = payload?.loss_date;
     const lossReason = payload?.loss_reason;
     const lossObservation = payload?.loss_observation;
@@ -114,6 +182,30 @@ function renderPayloadSummary(log: any) {
           <span className="font-semibold text-foreground">Status:</span>{' '}
           {fromLabel || '—'} {'->'} {toLabel || '—'}
         </div>
+        {gainDate && (
+          <div>
+            <span className="font-semibold text-foreground">Data do ganho:</span>{' '}
+            {formatLossDate(String(gainDate))}
+          </div>
+        )}
+        {negotiatedAmount && (
+          <div>
+            <span className="font-semibold text-foreground">Valor negociado:</span>{' '}
+            {formatCurrencyBRL(negotiatedAmount)}
+          </div>
+        )}
+        {paidAmount && (
+          <div>
+            <span className="font-semibold text-foreground">Entrada inicial:</span>{' '}
+            {formatCurrencyBRL(paidAmount)}
+          </div>
+        )}
+        {gainObservation && (
+          <div>
+            <span className="font-semibold text-foreground">Observacoes:</span>{' '}
+            {String(gainObservation)}
+          </div>
+        )}
         {lossDate && (
           <div>
             <span className="font-semibold text-foreground">Data da perda:</span>{' '}
@@ -130,6 +222,202 @@ function renderPayloadSummary(log: any) {
           <div>
             <span className="font-semibold text-foreground">Observações:</span>{' '}
             {String(lossObservation)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (log.action === 'financial_receivable_synced') {
+    const amount = payload?.amount || payload?.negotiated_amount;
+    const paidAmount = payload?.paid_amount;
+    const remainingAmount = payload?.remaining_amount;
+    const status = payload?.status;
+
+    return (
+      <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+        {amount && (
+          <div>
+            <span className="font-semibold text-foreground">Valor negociado:</span>{' '}
+            {formatCurrencyBRL(amount)}
+          </div>
+        )}
+        {paidAmount !== undefined && paidAmount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Total recebido:</span>{' '}
+            {formatCurrencyBRL(paidAmount)}
+          </div>
+        )}
+        {remainingAmount !== undefined && remainingAmount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Saldo pendente:</span>{' '}
+            {formatCurrencyBRL(remainingAmount)}
+          </div>
+        )}
+        {status && (
+          <div>
+            <span className="font-semibold text-foreground">Status financeiro:</span>{' '}
+            {String(status)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (log.action === 'financial_payment_received') {
+    const amount = payload?.amount;
+    const paymentDate = payload?.payment_date;
+    const paymentMethod = payload?.payment_method;
+    const notes = payload?.notes;
+    const paidAmount = payload?.paid_amount;
+    const remainingAmount = payload?.remaining_amount;
+    const status = payload?.status;
+
+    return (
+      <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+        {amount !== undefined && amount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Parcela:</span>{' '}
+            {formatCurrencyBRL(amount)}
+          </div>
+        )}
+        {paymentDate && (
+          <div>
+            <span className="font-semibold text-foreground">Data do recebimento:</span>{' '}
+            {formatLossDate(String(paymentDate))}
+          </div>
+        )}
+        {paymentMethod && (
+          <div>
+            <span className="font-semibold text-foreground">Forma de pagamento:</span>{' '}
+            {getPaymentMethodLabel(String(paymentMethod))}
+          </div>
+        )}
+        {paidAmount !== undefined && paidAmount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Total recebido:</span>{' '}
+            {formatCurrencyBRL(paidAmount)}
+          </div>
+        )}
+        {remainingAmount !== undefined && remainingAmount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Saldo pendente:</span>{' '}
+            {formatCurrencyBRL(remainingAmount)}
+          </div>
+        )}
+        {status && (
+          <div>
+            <span className="font-semibold text-foreground">Status financeiro:</span>{' '}
+            {String(status)}
+          </div>
+        )}
+        {notes && (
+          <div>
+            <span className="font-semibold text-foreground">Observacoes:</span>{' '}
+            {String(notes)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (log.action === 'financial_payment_updated') {
+    const before = payload?.before as Record<string, unknown> | undefined;
+    const after = payload?.after as Record<string, unknown> | undefined;
+    const paidAmount = payload?.paid_amount;
+    const remainingAmount = payload?.remaining_amount;
+    const status = payload?.status;
+
+    return (
+      <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+        {before && after && (
+          <>
+            <div>
+              <span className="font-semibold text-foreground">Valor:</span>{' '}
+              {formatCurrencyBRL(before.amount as string | number | null)} {'->'} {formatCurrencyBRL(after.amount as string | number | null)}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Data:</span>{' '}
+              {formatLossDate(String(before.payment_date || ''))} {'->'} {formatLossDate(String(after.payment_date || ''))}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Forma:</span>{' '}
+              {getPaymentMethodLabel(String(before.payment_method || ''))} {'->'} {getPaymentMethodLabel(String(after.payment_method || ''))}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Observacoes:</span>{' '}
+              {String(before.notes || '—')} {'->'} {String(after.notes || '—')}
+            </div>
+          </>
+        )}
+        {paidAmount !== undefined && paidAmount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Total recebido:</span>{' '}
+            {formatCurrencyBRL(paidAmount)}
+          </div>
+        )}
+        {remainingAmount !== undefined && remainingAmount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Saldo pendente:</span>{' '}
+            {formatCurrencyBRL(remainingAmount)}
+          </div>
+        )}
+        {status && (
+          <div>
+            <span className="font-semibold text-foreground">Status financeiro:</span>{' '}
+            {String(status)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (log.action === 'financial_payment_deleted') {
+    const deletedPayment = payload?.deleted_payment as Record<string, unknown> | undefined;
+    const paidAmount = payload?.paid_amount;
+    const remainingAmount = payload?.remaining_amount;
+    const status = payload?.status;
+
+    return (
+      <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+        {deletedPayment && (
+          <>
+            <div>
+              <span className="font-semibold text-foreground">Parcela removida:</span>{' '}
+              {formatCurrencyBRL(deletedPayment.amount as string | number | null)}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Data:</span>{' '}
+              {formatLossDate(String(deletedPayment.paymentDate || ''))}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Forma:</span>{' '}
+              {getPaymentMethodLabel(String(deletedPayment.paymentMethod || ''))}
+            </div>
+            {deletedPayment.notes && (
+              <div>
+                <span className="font-semibold text-foreground">Observacoes:</span>{' '}
+                {String(deletedPayment.notes)}
+              </div>
+            )}
+          </>
+        )}
+        {paidAmount !== undefined && paidAmount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Total recebido:</span>{' '}
+            {formatCurrencyBRL(paidAmount)}
+          </div>
+        )}
+        {remainingAmount !== undefined && remainingAmount !== null && (
+          <div>
+            <span className="font-semibold text-foreground">Saldo pendente:</span>{' '}
+            {formatCurrencyBRL(remainingAmount)}
+          </div>
+        )}
+        {status && (
+          <div>
+            <span className="font-semibold text-foreground">Status financeiro:</span>{' '}
+            {String(status)}
           </div>
         )}
       </div>
@@ -154,7 +442,19 @@ export default function ProposalLogsTab({ enrollmentId }: ProposalLogsTabProps) 
     entity_id: String(enrollmentId),
   });
 
-  const logs = (data?.data || (data as any)?.items || []) as any[];
+  const logs = useMemo<ProposalEventLog[]>(() => {
+    const source = data as { data?: ProposalEventLog[]; items?: ProposalEventLog[] } | undefined;
+
+    if (Array.isArray(source?.data)) {
+      return source.data;
+    }
+
+    if (Array.isArray(source?.items)) {
+      return source.items;
+    }
+
+    return [];
+  }, [data]);
 
   // Group logs by Date
   const groupedLogs = useMemo(() => {

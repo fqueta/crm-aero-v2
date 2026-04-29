@@ -61,6 +61,8 @@ import ShowServiceOrder from "./pages/ShowServiceOrder";
 import QuickCreateServiceOrder from "./pages/QuickCreateServiceOrder";
 import Financial from "./pages/financial/Financial";
 import FinancialCategories from "./pages/FinancialCategories";
+import GeneralConversionReport from "./pages/reports/GeneralConversionReport";
+import WonProposalsReport from "./pages/reports/WonProposalsReport";
 import PublicClientForm from "@/pages/PublicClientForm";
 import ProposalSignature from "@/pages/ProposalSignature";
 import ProposalApproval from "@/pages/ProposalApproval";
@@ -738,6 +740,45 @@ const App = () => {
                       requireRemote={false}
                     >
                       <FinancialCategories />
+                    </PermissionGuard>
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/reports/relatorio-vendas" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <PermissionGuard
+                      required="reports.financial.view"
+                      menuPath="/admin/reports/relatorio-vendas"
+                      requireRemote={false}
+                    >
+                      <WonProposalsReport />
+                    </PermissionGuard>
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/reports/relatorio-geral" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <PermissionGuard
+                      required="reports.view"
+                      menuPath="/admin/reports/relatorio-geral"
+                      requireRemote={false}
+                    >
+                      <GeneralConversionReport />
+                    </PermissionGuard>
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/reports/financial" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <PermissionGuard
+                      required="reports.financial.view"
+                      menuPath="/admin/reports/financial"
+                      requireRemote={false}
+                    >
+                      <WonProposalsReport />
                     </PermissionGuard>
                   </AppLayout>
                 </AdminProtectedRoute>

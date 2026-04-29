@@ -227,8 +227,14 @@ export const defaultMenu: MenuItemDTO[] = [
         can_view: true
       },
       {
-        title: "Financeiro",
-        url: "/admin/reports/financial",
+        title: "Relatório Geral",
+        url: "/admin/reports/relatorio-geral",
+        permission: "reports.view",
+        can_view: true
+      },
+      {
+        title: "Relatório de Vendas",
+        url: "/admin/reports/relatorio-vendas",
         permission: "reports.financial.view",
         can_view: true
       }

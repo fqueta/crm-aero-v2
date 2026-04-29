@@ -22,8 +22,25 @@ import {
   PaginatedResponse,
   AccountsFilter,
   CashFlowFilter,
-  ReportFilter
+  ReportFilter,
+  WonProposalReportFilter,
+  WonProposalReportResponse,
+  GeneralConversionReportFilter,
+  GeneralConversionReportResponse,
+  GeneralConversionReportDetailResponse
 } from '../types/financial';
+
+/**
+ * Constrói um rótulo amigável a partir do status financeiro.
+ */
+function getFinancialStatusLabel(status?: string): string {
+  if (status === 'paid') return 'Pago';
+  if (status === 'partial') return 'Parcial';
+  if (status === 'pending') return 'Pendente';
+  if (status === 'cancelled') return 'Cancelado';
+  if (status === 'overdue') return 'Vencido';
+  return status || 'Nao informado';
+}
 
 // Serviços para Contas a Pagar
 export const accountsPayableService = {
@@ -137,11 +154,47 @@ export const accountsReceivableService = {
   /**
    * Marca uma conta como recebida
    */
-  async markAsReceived(id: string, receivedDate: string, paymentMethod: string): Promise<AccountReceivable> {
+  async markAsReceived(
+    id: string,
+    receivedDate: string,
+    paymentMethod: string,
+    amount?: number,
+    notes?: string
+  ): Promise<AccountReceivable> {
     const response = await api.patch(`/financial/accounts-receivable/${id}/receive`, {
       receivedDate,
-      paymentMethod
+      paymentMethod,
+      amount,
+      notes,
     });
+    return response.data;
+  },
+
+  /**
+   * Atualiza uma parcela previamente registrada em uma conta a receber.
+   */
+  async updatePayment(
+    id: string,
+    paymentId: string,
+    receivedDate: string,
+    paymentMethod: string,
+    amount: number,
+    notes?: string
+  ): Promise<AccountReceivable> {
+    const response = await api.patch(`/financial/accounts-receivable/${id}/payments/${paymentId}`, {
+      receivedDate,
+      paymentMethod,
+      amount,
+      notes,
+    });
+    return response.data;
+  },
+
+  /**
+   * Remove uma parcela previamente registrada em uma conta a receber.
+   */
+  async deletePayment(id: string, paymentId: string): Promise<AccountReceivable> {
+    const response = await api.delete(`/financial/accounts-receivable/${id}/payments/${paymentId}`);
     return response.data;
   },
 
@@ -279,6 +332,173 @@ export const dashboardService = {
 // Serviços para Relatórios
 export const reportsService = {
   /**
+   * Obtém o relatório geral das propostas marcadas como ganho.
+   */
+  async getWonProposalsReport(filters: WonProposalReportFilter = {}): Promise<WonProposalReportResponse> {
+    const page = Math.max(1, filters.page ?? 1);
+    const perPage = Math.max(1, filters.perPage ?? 15);
+    const response = await api.get<{
+      data: AccountReceivable[];
+      current_page?: number;
+      last_page?: number;
+      per_page?: number;
+      total?: number;
+    }>('/financial/accounts-receivable', {
+      type: 'receivable',
+      source: 'proposal_gain',
+      status: filters.status && filters.status !== 'all' ? filters.status : undefined,
+      search: filters.search,
+      due_date_from: filters.startDate,
+      due_date_to: filters.endDate,
+      per_page: 5000,
+      order_by: 'due_date',
+      order: 'desc',
+    });
+
+    const allItems = Array.isArray(response?.data) ? response.data : [];
+    const mappedItems = allItems.map((item) => {
+      const config = (item.config ?? {}) as Record<string, unknown>;
+      const negotiatedAmount = Number(item.amount ?? 0);
+      const paidAmount = Number(item.paidAmount ?? 0);
+      const remainingAmount = Number(item.remainingAmount ?? Math.max(0, negotiatedAmount - paidAmount));
+
+      return {
+        id: String(item.id),
+        matriculaId: config.matricula_id ? String(config.matricula_id) : null,
+        customerName: item.customerName,
+        description: item.description,
+        contractNumber: item.contractNumber,
+        status: item.status,
+        statusLabel: getFinancialStatusLabel(item.status),
+        gainDate: typeof config.gain_date === 'string' ? config.gain_date : item.dueDate,
+        lastPaymentDate: item.paymentDate,
+        negotiatedAmount,
+        paidAmount,
+        remainingAmount,
+        paymentsCount: Number(item.paymentsCount ?? 0),
+        gainObservation: typeof config.gain_observation === 'string' ? config.gain_observation : null,
+        notes: item.notes,
+        createdAt: (item as any).created_at,
+        updatedAt: (item as any).updated_at,
+      };
+    });
+
+    const summary = mappedItems.reduce((accumulator, item) => {
+      accumulator.totalAccounts += 1;
+      accumulator.negotiatedAmount += item.negotiatedAmount;
+      accumulator.paidAmount += item.paidAmount;
+      accumulator.remainingAmount += item.remainingAmount;
+
+      if (item.status === 'paid') accumulator.paidAccounts += 1;
+      if (item.status === 'partial') accumulator.partialAccounts += 1;
+      if (item.status === 'pending') accumulator.pendingAccounts += 1;
+
+      return accumulator;
+    }, {
+      totalAccounts: 0,
+      negotiatedAmount: 0,
+      paidAmount: 0,
+      remainingAmount: 0,
+      paidAccounts: 0,
+      partialAccounts: 0,
+      pendingAccounts: 0,
+      conversionAverage: 0,
+    });
+
+    summary.conversionAverage = summary.totalAccounts > 0
+      ? summary.negotiatedAmount / summary.totalAccounts
+      : 0;
+
+    const statuses: Array<'paid' | 'partial' | 'pending'> = ['paid', 'partial', 'pending'];
+    const statusBreakdown = statuses
+      .map((status) => {
+        const items = mappedItems.filter((item) => item.status === status);
+        const negotiatedAmount = items.reduce((total, item) => total + item.negotiatedAmount, 0);
+        const paidAmount = items.reduce((total, item) => total + item.paidAmount, 0);
+        const remainingAmount = items.reduce((total, item) => total + item.remainingAmount, 0);
+
+        return {
+          status,
+          label: getFinancialStatusLabel(status),
+          totalAccounts: items.length,
+          negotiatedAmount,
+          paidAmount,
+          remainingAmount,
+        };
+      })
+      .filter((item) => item.totalAccounts > 0);
+
+    const total = mappedItems.length;
+    const lastPage = Math.max(1, Math.ceil(total / perPage));
+    const safePage = Math.min(page, lastPage);
+    const offset = (safePage - 1) * perPage;
+    const pagedItems = mappedItems.slice(offset, offset + perPage);
+
+    return {
+      data: pagedItems,
+      current_page: safePage,
+      last_page: lastPage,
+      per_page: perPage,
+      total,
+      from: total === 0 ? null : offset + 1,
+      to: total === 0 ? null : offset + pagedItems.length,
+      summary: {
+        ...summary,
+        negotiatedAmount: Number(summary.negotiatedAmount.toFixed(2)),
+        paidAmount: Number(summary.paidAmount.toFixed(2)),
+        remainingAmount: Number(summary.remainingAmount.toFixed(2)),
+        conversionAverage: Number(summary.conversionAverage.toFixed(2)),
+      },
+      statusBreakdown: statusBreakdown.map((item) => ({
+        ...item,
+        negotiatedAmount: Number(item.negotiatedAmount.toFixed(2)),
+        paidAmount: Number(item.paidAmount.toFixed(2)),
+        remainingAmount: Number(item.remainingAmount.toFixed(2)),
+      })),
+      filters: {
+        startDate: filters.startDate ?? null,
+        endDate: filters.endDate ?? null,
+        status: filters.status ?? null,
+        search: filters.search ?? null,
+      },
+    };
+  },
+
+  /**
+   * Obtém o relatório geral de conversão comercial por período.
+   */
+  async getGeneralConversionReport(
+    filters: GeneralConversionReportFilter = {}
+  ): Promise<GeneralConversionReportResponse> {
+    const response = await api.get<GeneralConversionReportResponse>('/reports/general-conversion', {
+      start_date: filters.startDate,
+      end_date: filters.endDate,
+      consultant_id: filters.consultantId,
+      funnel_id: filters.funnelId,
+    });
+
+    return response;
+  },
+
+  /**
+   * Obtém a lista detalhada que compõe os cards do relatório geral.
+   */
+  async getGeneralConversionReportDetails(
+    type: 'leads' | 'unique_converted_leads' | 'won_proposals',
+    filters: GeneralConversionReportFilter = {}
+  ): Promise<GeneralConversionReportDetailResponse> {
+    const response = await api.get<GeneralConversionReportDetailResponse>('/reports/general-conversion/details', {
+      type,
+      start_date: filters.startDate,
+      end_date: filters.endDate,
+      consultant_id: filters.consultantId,
+      funnel_id: filters.funnelId,
+    });
+
+    return response;
+  },
+
+  /**
    * Gera relatório mensal
    */
   async getMonthlyReport(year: number, month: number): Promise<MonthlyReport> {
@@ -297,8 +517,8 @@ export const reportsService = {
   /**
    * Gera relatório personalizado
    */
-  async getCustomReport(filters: ReportFilter): Promise<any> {
-    const response = await api.post('/financial/reports/custom', filters);
+  async getCustomReport(filters: ReportFilter): Promise<unknown> {
+    const response = await api.post<unknown>('/financial/reports/custom', filters);
     return response.data;
   },
 

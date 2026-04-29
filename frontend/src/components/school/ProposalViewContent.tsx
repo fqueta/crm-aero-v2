@@ -393,6 +393,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                     clientName={clientName || undefined}
                     status={proposalStatus}
                     meta={meta}
+                    proposalAmountLabel={totalMasked || 'R$ 0,00'}
                   />
 
                   <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">

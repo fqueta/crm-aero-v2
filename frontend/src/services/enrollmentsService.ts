@@ -2,6 +2,8 @@ import { PaginatedResponse, ApiResponse, ApiDeleteResponse } from '@/types/index
 import { BaseApiService } from './BaseApiService';
 import { EnrollmentRecord, CreateEnrollmentInput, UpdateEnrollmentInput, EnrollmentsListParams } from '@/types/enrollments';
 
+type EnrollmentListApiResponse = PaginatedResponse<EnrollmentRecord> | EnrollmentRecord[] | Record<string, unknown>;
+
 /**
  * EnrollmentsService
  * pt-BR: Serviço para gerenciar matrículas (`/matriculas`).
@@ -23,7 +25,7 @@ class EnrollmentsService extends BaseApiService {
      */
     // Default to 'mat' but allow callers to override with a provided `situacao`
     const mergedParams = { situacao: 'mat', ...(params || {}) } as EnrollmentsListParams & { situacao?: string };
-    const response = await this.get<any>('/matriculas', mergedParams);
+    const response = await this.get<EnrollmentListApiResponse>('/matriculas', mergedParams);
     return this.normalizePaginatedResponse<EnrollmentRecord>(response);
   }
 
@@ -83,6 +85,10 @@ class EnrollmentsService extends BaseApiService {
     id: string,
     payload: {
       status: 'a' | 'g' | 'p';
+      gain_date?: string;
+      negotiated_amount?: string;
+      paid_amount?: string;
+      gain_observation?: string;
       loss_date?: string;
       loss_reason?: string;
       loss_observation?: string;
@@ -96,7 +102,7 @@ class EnrollmentsService extends BaseApiService {
    * pt-BR: Simula o custo de combustível baseado nos módulos.
    * en-US: Simulates fuel cost based on modules.
    */
-  async simulateFuel(payload: { modulos: any[] }): Promise<{
+  async simulateFuel(payload: { modulos: Array<Record<string, unknown>> }): Promise<{
     exec: boolean;
     valor: number;
     valor_litro: number | null;

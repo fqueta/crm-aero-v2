@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\Qlib;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Database\Seeders\Tenant\AvisoInformacoesImportantesSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -46,6 +47,7 @@ class DatabaseSeeder extends Seeder
                     TipoConteudoSeeder::class,
                     ContratosSeeder::class,
                     ComponentesFundosPropostaSeeder::class,
+                    AvisoInformacoesImportantesSeeder::class,
                     // QoptionSeeder::class,
             ];
 
@@ -68,6 +70,7 @@ class DatabaseSeeder extends Seeder
                     ContratosSeeder::class,
                     TipoConteudoSeeder::class,
                     ComponentesFundosPropostaSeeder::class,
+                    AvisoInformacoesImportantesSeeder::class,
             ];
 
         }

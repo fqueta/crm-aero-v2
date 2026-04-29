@@ -126,7 +126,7 @@
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
         .chip { background: var(--chip); border: 1px solid var(--border); border-radius: 16px; padding: 4px 8px; font-size: 11px; }
         .section-title { font-size: 14px; font-weight: 700; margin: 16px 0 8px; }
-        .content-html { font-size: 12px; line-height: 1.55; }
+        .content-html { font-size: 10px; line-height: 1.55; }
         .check { color: #10b981; font-weight: 700; }
         .footer { margin-top: 18px; font-size: 11px; color: var(--muted); }
         /* PT: Botão de chamada para ação na capa | EN: Cover CTA button */
@@ -251,8 +251,13 @@
         /* Overrides: fine-tune cover centering and link clickability for PDF */
         .cover-content {
             /* Function-level comment: Override positioning to center between header/footer. */
-            position: absolute; left: 0; right: 0; top: 170mm; bottom: 26mm;
+            position: absolute; left: 0; right: 0; top: 145mm; bottom: 26mm;
             padding: 0 20mm; justify-content: center; align-items: center; gap: 6px;
+        }
+        .cover-content-2 {
+            /* Function-level comment: Override positioning to center between header/footer. */
+            position: absolute; left: 0; right: 0; top: 25mm; bottom: 15mm;
+            padding: 0 10mm; justify-content: center; align-items: center; gap: 6px;
         }
         .cta-button { pointer-events: auto; }
     </style>
@@ -312,7 +317,7 @@
                         @endif
                     </div>
                 @elseif($idx === 1)
-                    <div class="budget-auto-shrink" style="margin-top: 15mm; overflow: hidden;">
+                    <div class="budget-auto-shrink cover-content-2" style="margin-top: 15mm; overflow: hidden;">
                         <!-- HEADER BAR REMOVIDO -->
 
                         @php
@@ -530,33 +535,48 @@
                             </div>
                         @endif
 
-                            <div class="content-html">
-                                @php
-                                    $textoPreview = '';
-                                    if (!empty($orcArr) && isset($orcArr['parcelamento']) && is_array($orcArr['parcelamento'])) {
-                                        $textoPreview = $orcArr['parcelamento']['texto_preview_html'] ?? '';
-                                    }
-                                @endphp
-                                {!! $textoPreview !!}
-                            </div>
+                            
                             <div class="footer">Gerado em {{ $generatedAt->format('d/m/Y H:i') }}</div>
                     </div>
                 @elseif($idx === 2)
                     <!-- PT/EN: Remaining pages from controller -->
                     <div style="margin-top: 15mm; page-break-inside: avoid; break-inside: avoid;">
-                        @if(!empty($obsProposta))
-                            <div class="content-html" style="margin-bottom: 20px;">
-                                {!! $obsProposta !!}
-                            </div>
-                        @else
-                            @php
-                                // Mantém a validade do PDF alinhada ao cálculo já resolvido no controller.
-                                $diasValidade = $validadeDiasPdf;
-                            @endphp
+                        @php
+                            $diasValidade = $validadeDiasPdf;
+                        @endphp
+                        <div class="section-obs" style="margin-bottom: 10px;">
                              <p style="font-weight: 700; margin: 0 0 4px;">Observações Importantes</p>
-                             <p style="margin: 0 0 10px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::convert_number_to_words($diasValidade) }}) dias. O valor apresentado poderá ser pago:</p>
+                             @if(!empty($obsProposta))
+                                 <!-- <div class="content-html" style="margin-bottom: 10px;"> -->
+                                     {!! $obsProposta !!}
+                                 <!-- </div> -->
+                             @else
+                                 <p style="margin: 0 0 10px; font-size: 10px;">Este orçamento possui validade de {{ $diasValidade }} ({{ \App\Services\Qlib::convert_number_to_words($diasValidade) }}) dias. O valor apresentado poderá ser pago:</p>
+                                 <div class="content-html">
+                                     @php
+                                         $textoPreview = '';
+                                         if (!empty($orcArr) && isset($orcArr['parcelamento']) && is_array($orcArr['parcelamento'])) {
+                                             $textoPreview = $orcArr['parcelamento']['texto_preview_html'] ?? '';
+                                         }
+                                     @endphp
+                                     {!! $textoPreview !!}
+                                 </div>
+                             @endif
+                        </div>
+
+                        @if(!empty($aviso_importante))
+                             <div class="aviso-box" style="margin-top: 5px; margin-bottom: 20px; padding: 12px; border: 1px solid #fed7aa; background-color: #fff7ed; border-radius: 8px; font-size: 10px; color: #7c2d12; line-height: 1.4;">
+                                <div style="font-weight: 800; text-transform: uppercase; margin-bottom: 6px; font-size: 11px; color: #9a3412;">Aviso de Informações Importantes</div>
+                                {!! $aviso_importante !!}
+                             </div>
                         @endif
 
+                    </div>
+
+                @elseif($idx === 3)
+                    <!-- PT/EN: Remaining pages from controller -->
+                    <div style="margin-top: 15mm; page-break-inside: avoid; break-inside: avoid;">
+                        
                         @php
                             $orcArr = is_array($orc) ? $orc : (is_string($orc) ? (json_decode($orc, true) ?: []) : []);
                             $linhas = [];
@@ -656,9 +676,9 @@
                             $hasTitle = !empty($p['title']);
                             $hasHtml = !empty($p['html']);
                         @endphp
-                        @if($hasTitle)
+                        <!-- @if($hasTitle)
                             <h1>{{ $p['title'] }}</h1>
-                        @endif
+                        @endif -->
                         {!! $p['html'] ?? '' !!}
                         @if(!$hasTitle && !$hasHtml)
                             <div class="page-filler"></div>

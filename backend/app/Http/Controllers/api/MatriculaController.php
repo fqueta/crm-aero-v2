@@ -5,6 +5,9 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\Stage;
 use App\Models\Curso;
+use App\Models\Category;
+use App\Models\FinancialAccount;
+use App\Models\FinancialAccountPayment;
 use App\Models\Matricula;
 use App\Models\Parcelamento;
 use App\Models\Turma;
@@ -22,6 +25,7 @@ use App\Jobs\GeraPdfPropostasPnlJob;
 use App\Jobs\GeraPdfcontratosPnlJob;
 use App\Jobs\SendPeriodosZapsingJob;
 use App\Models\EventLog;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
@@ -155,6 +159,166 @@ class MatriculaController extends Controller
         });
         return response()->json($items);
     }
+
+    /**
+     * Retorna um relatório geral com conversão mensal e tempo até ganho.
+     */
+    public function generalConversionReport(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+        // if (!$this->permissionService->isHasPermission('view')) {
+        //     return response()->json(['error' => 'Acesso negado'], 403);
+        // }
+
+        $validator = Validator::make($request->all(), [
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'consultant_id' => 'nullable|uuid',
+            'funnel_id' => 'nullable',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Dados de validação inválidos',
+                'errors' => $validator->errors(),
+                'status' => 422,
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+        $consultantId = !empty($validated['consultant_id']) ? (string) $validated['consultant_id'] : null;
+        $funnelId = !empty($validated['funnel_id']) ? (string) $validated['funnel_id'] : null;
+        $startDate = !empty($validated['start_date'])
+            ? Carbon::parse($validated['start_date'])->startOfDay()
+            : now()->copy()->subMonths(5)->startOfMonth();
+        $endDate = !empty($validated['end_date'])
+            ? Carbon::parse($validated['end_date'])->endOfDay()
+            : now()->copy()->endOfDay();
+
+        $leadCount = $this->getLeadCountForPeriod($startDate, $endDate, $consultantId, $funnelId);
+        $monthlyLeadCounts = $this->getLeadCountsByMonth($startDate, $endDate, $consultantId, $funnelId);
+        $conversions = $this->getConversionsForPeriod($startDate, $endDate, $consultantId, $funnelId);
+
+        $periodSummary = $this->buildGeneralConversionSummary($leadCount, $conversions);
+        $monthlyConversion = $this->buildMonthlyConversionSeries($startDate, $endDate, $monthlyLeadCounts, $conversions);
+        $conversionTimeBuckets = $this->buildConversionTimeBuckets($conversions);
+
+        $currentMonthStart = now()->copy()->startOfMonth();
+        $currentMonthEnd = now()->copy()->endOfMonth();
+        $currentMonthLeadCount = $this->getLeadCountForPeriod($currentMonthStart, $currentMonthEnd, $consultantId, $funnelId);
+        $currentMonthConversions = $this->getConversionsForPeriod($currentMonthStart, $currentMonthEnd, $consultantId, $funnelId);
+        $currentMonthSummary = $this->buildGeneralConversionSummary($currentMonthLeadCount, $currentMonthConversions);
+        $consultantBreakdown = $this->buildConsultantBreakdown($conversions, $startDate, $endDate, $consultantId, $funnelId);
+
+        $recentConversions = $conversions
+            ->sortByDesc('gain_date')
+            ->take(10)
+            ->values()
+            ->map(function ($item) {
+                return [
+                    'leadId' => (string) $item->lead_id,
+                    'leadName' => $item->lead_name,
+                    'matriculaId' => (string) $item->matricula_id,
+                    'consultantName' => $item->consultant_name,
+                    'leadCreatedAt' => $item->lead_created_date,
+                    'gainDate' => $item->gain_date,
+                    'conversionDays' => (int) $item->conversion_days,
+                    'negotiatedAmount' => round((float) ($item->negotiated_amount ?? 0), 2),
+                ];
+            });
+
+        return response()->json([
+            'filters' => [
+                'startDate' => $startDate->toDateString(),
+                'endDate' => $endDate->toDateString(),
+                'consultantId' => $consultantId,
+                'funnelId' => $funnelId,
+            ],
+            'currentMonth' => [
+                'label' => now()->format('m/Y'),
+                'summary' => $currentMonthSummary,
+            ],
+            'periodSummary' => $periodSummary,
+            'monthlyConversion' => $monthlyConversion,
+            'conversionTimeBuckets' => $conversionTimeBuckets,
+            'consultantBreakdown' => $consultantBreakdown,
+            'recentConversions' => $recentConversions,
+        ]);
+    }
+
+    /**
+     * Retorna a lista detalhada que compõe os cards do relatório geral.
+     */
+    public function generalConversionReportDetails(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'consultant_id' => 'nullable|uuid',
+            'funnel_id' => 'nullable',
+            'type' => 'required|in:leads,unique_converted_leads,won_proposals',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Dados de validação inválidos',
+                'errors' => $validator->errors(),
+                'status' => 422,
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+        $consultantId = !empty($validated['consultant_id']) ? (string) $validated['consultant_id'] : null;
+        $funnelId = !empty($validated['funnel_id']) ? (string) $validated['funnel_id'] : null;
+        $type = (string) $validated['type'];
+        $startDate = !empty($validated['start_date'])
+            ? Carbon::parse($validated['start_date'])->startOfDay()
+            : now()->copy()->subMonths(5)->startOfMonth();
+        $endDate = !empty($validated['end_date'])
+            ? Carbon::parse($validated['end_date'])->endOfDay()
+            : now()->copy()->endOfDay();
+
+        if ($type === 'leads') {
+            $items = $this->getLeadDetailsForPeriod($startDate, $endDate, $consultantId, $funnelId);
+
+            return response()->json([
+                'type' => $type,
+                'title' => 'Leads no período',
+                'total' => count($items),
+                'items' => $items,
+            ]);
+        }
+
+        $conversions = $this->getConversionsForPeriod($startDate, $endDate, $consultantId, $funnelId);
+
+        if ($type === 'unique_converted_leads') {
+            $items = $this->getUniqueConvertedLeadDetails($conversions);
+
+            return response()->json([
+                'type' => $type,
+                'title' => 'Leads únicos convertidos',
+                'total' => count($items),
+                'items' => $items,
+            ]);
+        }
+
+        $items = $this->getWonProposalDetails($conversions);
+
+        return response()->json([
+            'type' => $type,
+            'title' => 'Propostas ganhas',
+            'total' => count($items),
+            'items' => $items,
+        ]);
+    }
     /**
      * Metodos para o mapeamento de campos de entrada
      */
@@ -169,6 +333,398 @@ class MatriculaController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * Retorna a query base de leads ativos do CRM.
+     */
+    private function buildLeadReportBaseQuery(?string $consultantId = null, ?string $funnelId = null)
+    {
+        $query = DB::table('users')
+            ->where(function ($query) {
+                $query->whereNull('users.deletado')->orWhere('users.deletado', '!=', 's');
+            })
+            ->where(function ($query) {
+                $query->whereNull('users.excluido')->orWhere('users.excluido', '!=', 's');
+            })
+            ->where(function ($query) {
+                $query->whereExists(function ($subQuery) {
+                    $subQuery->select(DB::raw(1))
+                        ->from('matriculas')
+                        ->whereColumn('matriculas.id_cliente', 'users.id');
+                })
+                ->orWhereRaw("JSON_EXTRACT(users.config, '$.stage_id') IS NOT NULL")
+                ->orWhereRaw("JSON_EXTRACT(users.preferencias, '$.pipeline.stage_id') IS NOT NULL");
+            });
+
+        if ($consultantId || $funnelId) {
+            $query->whereExists(function ($subQuery) use ($consultantId, $funnelId) {
+                $subQuery->select(DB::raw(1))
+                    ->from('matriculas')
+                    ->whereColumn('matriculas.id_cliente', 'users.id');
+
+                if ($consultantId) {
+                    $subQuery->where('matriculas.id_consultor', $consultantId);
+                }
+
+                if ($funnelId) {
+                    $subQuery->where('matriculas.funnel_id', $funnelId);
+                }
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * Retorna a query base de conversões (propostas ganhas) com data de ganho resolvida.
+     */
+    private function buildConvertedLeadReportBaseQuery(?string $consultantId = null, ?string $funnelId = null)
+    {
+        $gainMetaSubquery = DB::table('matriculameta')
+            ->select('matricula_id', DB::raw('MAX(meta_value) as gain_date'))
+            ->where('meta_key', 'data_ganho')
+            ->groupBy('matricula_id');
+
+        $financialGainSubquery = DB::table('financial_accounts')
+            ->selectRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(config, '$.matricula_id')) AS UNSIGNED) as matricula_id")
+            ->selectRaw("MAX(JSON_UNQUOTE(JSON_EXTRACT(config, '$.gain_date'))) as gain_date")
+            ->where('type', 'receivable')
+            ->where('config->source', 'proposal_gain')
+            ->groupBy(DB::raw("CAST(JSON_UNQUOTE(JSON_EXTRACT(config, '$.matricula_id')) AS UNSIGNED)"));
+
+        $query = DB::table('matriculas')
+            ->join('users', 'users.id', '=', 'matriculas.id_cliente')
+            ->leftJoin('users as consultants', 'consultants.id', '=', 'matriculas.id_consultor')
+            ->leftJoinSub($gainMetaSubquery, 'gain_meta', function ($join) {
+                $join->on('gain_meta.matricula_id', '=', 'matriculas.id');
+            })
+            ->leftJoinSub($financialGainSubquery, 'financial_gain', function ($join) {
+                $join->on('financial_gain.matricula_id', '=', 'matriculas.id');
+            })
+            ->where('matriculas.status', 'g')
+            ->where(function ($query) {
+                $query->whereNull('users.deletado')->orWhere('users.deletado', '!=', 's');
+            })
+            ->where(function ($query) {
+                $query->whereNull('users.excluido')->orWhere('users.excluido', '!=', 's');
+            })
+            ->where(function ($query) {
+                $query->whereNull('matriculas.deletado')->orWhere('matriculas.deletado', '!=', 's');
+            })
+            ->where(function ($query) {
+                $query->whereNull('matriculas.excluido')->orWhere('matriculas.excluido', '!=', 's');
+            })
+            ->whereRaw("COALESCE(gain_meta.gain_date, financial_gain.gain_date) IS NOT NULL")
+            ->whereRaw("STR_TO_DATE(COALESCE(gain_meta.gain_date, financial_gain.gain_date), '%Y-%m-%d') >= DATE(users.created_at)");
+
+        if ($consultantId) {
+            $query->where('matriculas.id_consultor', $consultantId);
+        }
+
+        if ($funnelId) {
+            $query->where('matriculas.funnel_id', $funnelId);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Conta leads criados dentro do período informado.
+     */
+    private function getLeadCountForPeriod(Carbon $startDate, Carbon $endDate, ?string $consultantId = null, ?string $funnelId = null): int
+    {
+        return (int) $this->buildLeadReportBaseQuery($consultantId, $funnelId)
+            ->whereBetween('users.created_at', [$startDate, $endDate])
+            ->count();
+    }
+
+    /**
+     * Retorna a quantidade de leads por mês dentro do período.
+     */
+    private function getLeadCountsByMonth(Carbon $startDate, Carbon $endDate, ?string $consultantId = null, ?string $funnelId = null): array
+    {
+        return $this->buildLeadReportBaseQuery($consultantId, $funnelId)
+            ->whereBetween('users.created_at', [$startDate, $endDate])
+            ->selectRaw("DATE_FORMAT(users.created_at, '%Y-%m') as month_key, COUNT(*) as total")
+            ->groupBy('month_key')
+            ->pluck('total', 'month_key')
+            ->map(fn ($total) => (int) $total)
+            ->all();
+    }
+
+    /**
+     * Lista conversões concluídas no período com seus dias de conversão.
+     */
+    private function getConversionsForPeriod(Carbon $startDate, Carbon $endDate, ?string $consultantId = null, ?string $funnelId = null)
+    {
+        return $this->buildConvertedLeadReportBaseQuery($consultantId, $funnelId)
+            ->whereRaw(
+                "STR_TO_DATE(COALESCE(gain_meta.gain_date, financial_gain.gain_date), '%Y-%m-%d') BETWEEN ? AND ?",
+                [$startDate->toDateString(), $endDate->toDateString()]
+            )
+            ->selectRaw('matriculas.id as matricula_id')
+            ->selectRaw('users.id as lead_id')
+            ->selectRaw('users.name as lead_name')
+            ->selectRaw('matriculas.id_consultor as consultant_id')
+            ->selectRaw('consultants.name as consultant_name')
+            ->selectRaw('DATE(users.created_at) as lead_created_date')
+            ->selectRaw("COALESCE(gain_meta.gain_date, financial_gain.gain_date) as gain_date")
+            ->selectRaw('matriculas.total as negotiated_amount')
+            ->selectRaw("GREATEST(0, TIMESTAMPDIFF(DAY, DATE(users.created_at), STR_TO_DATE(COALESCE(gain_meta.gain_date, financial_gain.gain_date), '%Y-%m-%d'))) as conversion_days")
+            ->orderByRaw("STR_TO_DATE(COALESCE(gain_meta.gain_date, financial_gain.gain_date), '%Y-%m-%d') desc")
+            ->get();
+    }
+
+    /**
+     * Lista os leads captados no período filtrado.
+     */
+    private function getLeadDetailsForPeriod(Carbon $startDate, Carbon $endDate, ?string $consultantId = null, ?string $funnelId = null): array
+    {
+        return $this->buildLeadReportBaseQuery($consultantId, $funnelId)
+            ->whereBetween('users.created_at', [$startDate, $endDate])
+            ->selectRaw('users.id as lead_id')
+            ->selectRaw('users.name as lead_name')
+            ->selectRaw('DATE(users.created_at) as lead_created_at')
+            ->orderBy('users.created_at', 'desc')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'leadId' => (string) $item->lead_id,
+                    'leadName' => (string) $item->lead_name,
+                    'leadCreatedAt' => (string) $item->lead_created_at,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Lista os leads únicos convertidos com seus principais dados de conversão.
+     */
+    private function getUniqueConvertedLeadDetails($conversions): array
+    {
+        $grouped = $conversions->groupBy('lead_id');
+        $uniqueLeadConversions = $this->getUniqueLeadConversions($conversions)->keyBy('lead_id');
+
+        return $uniqueLeadConversions
+            ->map(function ($item, $leadId) use ($grouped) {
+                $leadConversions = $grouped->get($leadId, collect());
+
+                return [
+                    'leadId' => (string) $item->lead_id,
+                    'leadName' => (string) $item->lead_name,
+                    'leadCreatedAt' => (string) $item->lead_created_date,
+                    'gainDate' => (string) $item->gain_date,
+                    'conversionDays' => (int) $item->conversion_days,
+                    'consultantName' => $item->consultant_name ? (string) $item->consultant_name : null,
+                    'proposalsWonCount' => (int) $leadConversions->count(),
+                ];
+            })
+            ->sortByDesc('gainDate')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Lista todas as propostas ganhas do período filtrado.
+     */
+    private function getWonProposalDetails($conversions): array
+    {
+        return $conversions
+            ->sortByDesc('gain_date')
+            ->values()
+            ->map(function ($item) {
+                return [
+                    'leadId' => (string) $item->lead_id,
+                    'leadName' => (string) $item->lead_name,
+                    'matriculaId' => (string) $item->matricula_id,
+                    'leadCreatedAt' => (string) $item->lead_created_date,
+                    'gainDate' => (string) $item->gain_date,
+                    'conversionDays' => (int) $item->conversion_days,
+                    'consultantName' => $item->consultant_name ? (string) $item->consultant_name : null,
+                    'negotiatedAmount' => round((float) ($item->negotiated_amount ?? 0), 2),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * Consolida o desempenho por consultor no período.
+     */
+    private function buildConsultantBreakdown($conversions, Carbon $startDate, Carbon $endDate, ?string $consultantId = null, ?string $funnelId = null): array
+    {
+        $groupedByConsultant = $conversions->groupBy(function ($item) {
+            return $item->consultant_name ?: 'Sem consultor';
+        });
+
+        return $groupedByConsultant
+            ->map(function ($items, $consultantName) use ($startDate, $endDate, $consultantId, $funnelId) {
+                $firstItem = $items->first();
+                $currentConsultantId = $firstItem->consultant_id ?? null;
+                $leadCount = $this->getLeadCountForPeriod(
+                    $startDate,
+                    $endDate,
+                    $currentConsultantId ? (string) $currentConsultantId : $consultantId,
+                    $funnelId
+                );
+                $uniqueLeadConversions = $this->getUniqueLeadConversions($items);
+
+                return [
+                    'consultantId' => $currentConsultantId ? (string) $currentConsultantId : null,
+                    'consultantName' => (string) $consultantName,
+                    'leadsCount' => $leadCount,
+                    'uniqueConvertedLeadsCount' => (int) $uniqueLeadConversions->count(),
+                    'proposalsWonCount' => (int) $items->count(),
+                    'conversionRate' => $leadCount > 0
+                        ? round(($uniqueLeadConversions->count() / $leadCount) * 100, 2)
+                        : 0,
+                    'averageConversionDays' => $uniqueLeadConversions->count() > 0
+                        ? round((float) $uniqueLeadConversions->avg(fn ($item) => (int) $item->conversion_days), 1)
+                        : 0,
+                ];
+            })
+            ->sortByDesc('uniqueConvertedLeadsCount')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Consolida os indicadores principais de um período.
+     */
+    private function buildGeneralConversionSummary(int $leadCount, $conversions): array
+    {
+        $proposalWinsCount = (int) $conversions->count();
+        $uniqueLeadConversions = $this->getUniqueLeadConversions($conversions);
+        $uniqueConvertedLeadsCount = (int) $uniqueLeadConversions->count();
+        $days = $uniqueLeadConversions
+            ->pluck('conversion_days')
+            ->map(fn ($value) => (int) $value)
+            ->sort()
+            ->values();
+
+        $averageDays = $days->count() > 0 ? round((float) $days->avg(), 1) : 0;
+        $medianDays = 0;
+
+        if ($days->count() > 0) {
+            $middle = intdiv($days->count(), 2);
+            $medianDays = $days->count() % 2 === 0
+                ? round((((int) $days[$middle - 1]) + ((int) $days[$middle])) / 2, 1)
+                : (int) $days[$middle];
+        }
+
+        return [
+            'leadsCount' => $leadCount,
+            'conversionsCount' => $proposalWinsCount,
+            'proposalsWonCount' => $proposalWinsCount,
+            'uniqueConvertedLeadsCount' => $uniqueConvertedLeadsCount,
+            'conversionRate' => $leadCount > 0 ? round(($uniqueConvertedLeadsCount / $leadCount) * 100, 2) : 0,
+            'proposalWinRate' => $leadCount > 0 ? round(($proposalWinsCount / $leadCount) * 100, 2) : 0,
+            'averageConversionDays' => $averageDays,
+            'medianConversionDays' => $medianDays,
+            'fastestConversionDays' => $days->count() > 0 ? (int) $days->first() : null,
+            'slowestConversionDays' => $days->count() > 0 ? (int) $days->last() : null,
+        ];
+    }
+
+    /**
+     * Monta a série mensal de leads e conversões.
+     */
+    private function buildMonthlyConversionSeries(Carbon $startDate, Carbon $endDate, array $leadCountsByMonth, $conversions): array
+    {
+        $conversionGroups = $conversions->groupBy(function ($item) {
+            return substr((string) $item->gain_date, 0, 7);
+        });
+
+        $series = [];
+        $cursor = $startDate->copy()->startOfMonth();
+        $endMonth = $endDate->copy()->startOfMonth();
+
+        while ($cursor->lte($endMonth)) {
+            $monthKey = $cursor->format('Y-m');
+            $monthConversions = $conversionGroups->get($monthKey, collect());
+            $uniqueMonthConversions = $this->getUniqueLeadConversions($monthConversions);
+            $leads = (int) ($leadCountsByMonth[$monthKey] ?? 0);
+            $proposalWinsCount = (int) $monthConversions->count();
+            $uniqueConvertedLeadsCount = (int) $uniqueMonthConversions->count();
+            $averageDays = $uniqueConvertedLeadsCount > 0
+                ? round((float) $uniqueMonthConversions->avg(fn ($item) => (int) $item->conversion_days), 1)
+                : 0;
+
+            $series[] = [
+                'month' => $monthKey,
+                'label' => $cursor->format('m/Y'),
+                'leads' => $leads,
+                'conversions' => $proposalWinsCount,
+                'proposalsWon' => $proposalWinsCount,
+                'uniqueConvertedLeads' => $uniqueConvertedLeadsCount,
+                'conversionRate' => $leads > 0 ? round(($uniqueConvertedLeadsCount / $leads) * 100, 2) : 0,
+                'proposalWinRate' => $leads > 0 ? round(($proposalWinsCount / $leads) * 100, 2) : 0,
+                'averageConversionDays' => $averageDays,
+            ];
+
+            $cursor->addMonth();
+        }
+
+        return $series;
+    }
+
+    /**
+     * Agrupa as conversões em faixas de dias.
+     */
+    private function buildConversionTimeBuckets($conversions): array
+    {
+        $uniqueLeadConversions = $this->getUniqueLeadConversions($conversions);
+        $buckets = [
+            '0-7 dias' => ['min' => 0, 'max' => 7, 'count' => 0],
+            '8-15 dias' => ['min' => 8, 'max' => 15, 'count' => 0],
+            '16-30 dias' => ['min' => 16, 'max' => 30, 'count' => 0],
+            '31-60 dias' => ['min' => 31, 'max' => 60, 'count' => 0],
+            '61-90 dias' => ['min' => 61, 'max' => 90, 'count' => 0],
+            '90+ dias' => ['min' => 91, 'max' => null, 'count' => 0],
+        ];
+
+        foreach ($uniqueLeadConversions as $conversion) {
+            $days = (int) $conversion->conversion_days;
+
+            foreach ($buckets as $label => $bucket) {
+                $max = $bucket['max'];
+                if ($days >= $bucket['min'] && ($max === null || $days <= $max)) {
+                    $buckets[$label]['count']++;
+                    break;
+                }
+            }
+        }
+
+        return collect($buckets)->map(function ($bucket, $label) {
+            return [
+                'bucket' => $label,
+                'count' => (int) $bucket['count'],
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Deduplica conversões por lead preservando a primeira conversão do período.
+     */
+    private function getUniqueLeadConversions($conversions)
+    {
+        return $conversions
+            ->groupBy('lead_id')
+            ->map(function ($items) {
+                return $items
+                    ->sortBy(function ($item) {
+                        return sprintf(
+                            '%s-%05d-%010d',
+                            (string) ($item->gain_date ?? ''),
+                            (int) ($item->conversion_days ?? 0),
+                            (int) ($item->matricula_id ?? 0)
+                        );
+                    })
+                    ->first();
+            })
+            ->filter()
+            ->values();
     }
     /**
      * Mapeia campos de saída: 'stage_id' -> 'etapa'
@@ -295,6 +851,216 @@ class MatriculaController extends Controller
     }
 
     /**
+     * findFinancialIncomeCategoryId
+     * pt-BR: Busca uma categoria financeira de receita para usar em lancamentos automaticos.
+     * en-US: Finds an income financial category to use in automated postings.
+     */
+    private function findFinancialIncomeCategoryId(): ?int
+    {
+        $category = Category::query()
+            ->where('entidade', 'financeiro')
+            ->where('config->type', 'income')
+            ->orderBy('id')
+            ->first();
+
+        return $category?->id ? (int) $category->id : null;
+    }
+
+    /**
+     * syncFinancialGainReceivable
+     * pt-BR: Cria ou atualiza a conta principal do ganho e registra a entrada inicial como pagamento parcial.
+     * en-US: Creates or updates the main receivable account for a won proposal and records the initial payment entry.
+     */
+    private function syncFinancialGainReceivable(
+        Matricula $matricula,
+        ?string $gainDate,
+        ?string $negotiatedAmount,
+        ?string $initialPaidAmount,
+        ?string $gainObservation
+    ): ?FinancialAccount
+    {
+        $amount = (float) ($negotiatedAmount ?? 0);
+        if ($amount <= 0 || empty($gainDate)) {
+            return null;
+        }
+
+        $financialAccountId = Qlib::get_matriculameta($matricula->id, 'financial_gain_account_id');
+        $financialAccount = null;
+
+        if ($financialAccountId && is_numeric($financialAccountId)) {
+            $financialAccount = FinancialAccount::find((int) $financialAccountId);
+        }
+
+        if (!$financialAccount) {
+            $financialAccount = FinancialAccount::query()
+                ->where('type', 'receivable')
+                ->where('config->source', 'proposal_gain')
+                ->where('config->matricula_id', (int) $matricula->id)
+                ->first();
+        }
+
+        $description = 'Crediario da proposta ganha #' . $matricula->id;
+        if (!empty($matricula->cliente?->name)) {
+            $description .= ' - ' . $matricula->cliente->name;
+        }
+
+        $notesParts = array_filter([
+            'Lançamento automático gerado ao marcar a proposta como ganho.',
+            $gainObservation ?: null,
+        ]);
+
+        $payload = [
+            'amount' => $amount,
+            'type' => 'receivable',
+            'customer_name' => $matricula->cliente?->name,
+            'client_id' => $matricula->id_cliente,
+            'description' => $description,
+            'notes' => implode("\n\n", $notesParts),
+            'category_id' => $this->findFinancialIncomeCategoryId(),
+            'due_date' => $gainDate,
+            'payment_method' => 'other',
+            'status' => 'pending',
+            'payment_date' => null,
+            'paid_amount' => 0,
+            'installments' => 1,
+            'contract_number' => $this->numero_contrato($matricula->id) ?: null,
+            'token' => $financialAccount?->token ?: Qlib::token(),
+            'excluido' => false,
+            'deletado' => false,
+            'config' => [
+                'source' => 'proposal_gain',
+                'matricula_id' => (int) $matricula->id,
+                'matricula_status' => 'g',
+                'gain_date' => $gainDate,
+                'negotiated_amount' => $amount,
+                'gain_observation' => $gainObservation,
+            ],
+        ];
+
+        if ($financialAccount) {
+            $financialAccount->fill($payload);
+            $financialAccount->save();
+        } else {
+            $financialAccount = FinancialAccount::create($payload);
+        }
+
+        $entryAmount = max(0, (float) ($initialPaidAmount ?? 0));
+        $financialAccount->load('payments');
+        $initialPayment = $financialAccount->payments->first(function (FinancialAccountPayment $payment) {
+            return ($payment->config['source'] ?? null) === 'proposal_gain_initial';
+        });
+
+        if ($entryAmount > 0) {
+            $paymentPayload = [
+                'amount' => min($entryAmount, $amount),
+                'payment_date' => $gainDate,
+                'payment_method' => 'other',
+                'notes' => $gainObservation,
+                'created_by' => (string) optional(request()->user())->id,
+                'token' => $initialPayment?->token ?: Qlib::token(),
+                'config' => [
+                    'source' => 'proposal_gain_initial',
+                    'matricula_id' => (int) $matricula->id,
+                ],
+            ];
+
+            if ($initialPayment) {
+                $initialPayment->fill($paymentPayload);
+                $initialPayment->save();
+            } else {
+                $financialAccount->payments()->create($paymentPayload);
+            }
+        } elseif ($initialPayment) {
+            $initialPayment->delete();
+        }
+
+        $financialAccount->unsetRelation('payments');
+        $financialAccount->load('payments');
+
+        $totalPaid = round((float) $financialAccount->payments->sum(fn (FinancialAccountPayment $payment) => (float) $payment->amount), 2);
+        $latestPayment = $financialAccount->payments->sortByDesc(function (FinancialAccountPayment $payment) {
+            return ($payment->payment_date?->format('Y-m-d') ?? '') . '-' . $payment->id;
+        })->first();
+        $remainingAmount = max(0, $amount - $totalPaid);
+
+        $financialAccount->paid_amount = $totalPaid;
+        $financialAccount->payment_date = $latestPayment?->payment_date;
+        $financialAccount->payment_method = $latestPayment?->payment_method ?? 'other';
+        $financialAccount->status = $totalPaid <= 0 ? 'pending' : ($remainingAmount <= 0 ? 'paid' : 'partial');
+        $financialAccount->save();
+
+        Qlib::update_matriculameta($matricula->id, 'financial_gain_account_id', (string) $financialAccount->id);
+        $this->syncMatriculaFinancialGainMeta($matricula->id, $gainDate, $gainObservation, $financialAccount->fresh('payments'));
+
+        return $financialAccount->fresh('payments');
+    }
+
+    /**
+     * syncMatriculaFinancialGainMeta
+     * pt-BR: Atualiza os metadados da matricula com o resumo financeiro do ganho.
+     * en-US: Updates enrollment meta with the financial summary of the won proposal.
+     */
+    private function syncMatriculaFinancialGainMeta(int|string $matriculaId, ?string $gainDate, ?string $gainObservation, FinancialAccount $financialAccount): void
+    {
+        $paymentsPayload = $financialAccount->payments->map(function (FinancialAccountPayment $payment) {
+            return [
+                'id' => $payment->id,
+                'amount' => (float) $payment->amount,
+                'payment_date' => optional($payment->payment_date)->format('Y-m-d'),
+                'payment_method' => $payment->payment_method,
+                'notes' => $payment->notes,
+            ];
+        })->values()->all();
+
+        $firstPaymentAmount = count($paymentsPayload) > 0 ? (string) ($paymentsPayload[0]['amount'] ?? 0) : '0';
+
+        $this->persistMatriculaMeta($matriculaId, [
+            'data_ganho' => $gainDate,
+            'financial_gain_account_id' => (string) $financialAccount->id,
+            'valor_negociado_ganho' => (string) $financialAccount->amount,
+            'valor_entrada_ganho' => $firstPaymentAmount,
+            'valor_pago' => (string) ($financialAccount->paid_amount ?? 0),
+            'valor_recebido_ganho' => (string) ($financialAccount->paid_amount ?? 0),
+            'saldo_ganho' => (string) $financialAccount->getRemainingAmountAttribute(),
+            'financeiro_status_ganho' => (string) $financialAccount->status,
+            'observacao_ganho' => $gainObservation,
+            'pagamentos_ganho' => json_encode($paymentsPayload),
+        ]);
+    }
+
+    /**
+     * Reconciles proposal gain financial meta with the real receivable account before returning enrollment data.
+     */
+    private function reconcileFinancialGainMeta(Matricula $matricula, array $meta): array
+    {
+        $financialAccountId = $meta['financial_gain_account_id'] ?? null;
+        $financialAccount = null;
+
+        if ($financialAccountId && is_numeric($financialAccountId)) {
+            $financialAccount = FinancialAccount::with('payments')->find((int) $financialAccountId);
+        }
+
+        if (!$financialAccount) {
+            $financialAccount = FinancialAccount::with('payments')
+                ->where('type', 'receivable')
+                ->where('config->source', 'proposal_gain')
+                ->where('config->matricula_id', (int) $matricula->id)
+                ->first();
+        }
+
+        if (!$financialAccount) {
+            return $meta;
+        }
+
+        $gainDate = isset($meta['data_ganho']) ? (string) $meta['data_ganho'] : ($financialAccount->config['gain_date'] ?? null);
+        $gainObservation = isset($meta['observacao_ganho']) ? (string) $meta['observacao_ganho'] : ($financialAccount->config['gain_observation'] ?? null);
+
+        $this->syncMatriculaFinancialGainMeta($matricula->id, $gainDate, $gainObservation, $financialAccount);
+
+        return $this->getAllMatriculaMeta($matricula->id);
+    }
+
+    /**
      * Valida dados do cadastro de matrícula (store/update base).
      * Validate enrollment payload (store/update base).
      */
@@ -403,7 +1169,7 @@ class MatriculaController extends Controller
                 $data['id_responsavel'] = null;
             }
         }
-        
+
         // Normalizar id_turma: '0' ou vazio -> null
         if (array_key_exists('id_turma', $data)) {
             $vt = trim((string)$data['id_turma']);
@@ -411,7 +1177,7 @@ class MatriculaController extends Controller
                 $data['id_turma'] = null;
             }
         }
-        
+
         // Garantir string aparada para id_cliente
         if (array_key_exists('id_cliente', $data)) {
             $data['id_cliente'] = trim((string)$data['id_cliente']);
@@ -574,7 +1340,7 @@ class MatriculaController extends Controller
         // Nó de cliente estruturado
         $data['cliente'] = $matricula->cliente ? $this->mapClientNodeOutput($matricula->cliente) : null;
         $data['responsavel'] = $matricula->responsavel ? $this->mapClientNodeOutput($matricula->responsavel) : null;
-        $data['meta'] = $this->getAllMatriculaMeta($matricula['id']);
+        $data['meta'] = $this->reconcileFinancialGainMeta($matricula, $this->getAllMatriculaMeta($matricula['id']));
         $data['consultor'] = $this->mapClientNodeOutput(User::find($matricula['id_consultor']));
         // Parcelamentos via relação Eloquent para manter consistência com sync()
         // Parcelamentos já carregados via relação
@@ -1875,6 +2641,10 @@ class MatriculaController extends Controller
 
         $validator = Validator::make($request->all(), [
             'status' => ['required', 'string', Rule::in(['a', 'g', 'p'])],
+            'gain_date' => ['nullable', 'date'],
+            'negotiated_amount' => ['nullable', 'numeric'],
+            'paid_amount' => ['nullable', 'numeric'],
+            'gain_observation' => ['nullable', 'string'],
             'loss_date' => ['nullable', 'date'],
             'loss_reason' => ['nullable', 'string', 'max:255'],
             'loss_observation' => ['nullable', 'string'],
@@ -1889,9 +2659,41 @@ class MatriculaController extends Controller
         $validated = $validator->validated();
         $oldStatus = (string) ($matricula->status ?? 'a');
         $newStatus = (string) $validated['status'];
+        $gainDate = isset($validated['gain_date']) ? (string) $validated['gain_date'] : null;
+        $negotiatedAmount = isset($validated['negotiated_amount'])
+            ? (string) $validated['negotiated_amount']
+            : (isset($validated['paid_amount']) ? (string) $validated['paid_amount'] : null);
+        $paidAmount = isset($validated['paid_amount']) ? (string) $validated['paid_amount'] : '0';
+        $gainObservation = isset($validated['gain_observation']) ? trim((string) $validated['gain_observation']) : null;
         $lossDate = isset($validated['loss_date']) ? (string) $validated['loss_date'] : null;
         $lossReason = isset($validated['loss_reason']) ? trim((string) $validated['loss_reason']) : null;
         $lossObservation = isset($validated['loss_observation']) ? trim((string) $validated['loss_observation']) : null;
+        $matriculadoSituacaoId = 19;
+
+        if ($newStatus === 'g') {
+            $gainValidator = Validator::make($request->all(), [
+                'gain_date' => ['required', 'date'],
+                'negotiated_amount' => ['required', 'numeric', 'gt:0'],
+                'paid_amount' => ['nullable', 'numeric', 'min:0'],
+                'gain_observation' => ['nullable', 'string'],
+            ]);
+
+            if ($gainValidator->fails()) {
+                return response()->json([
+                    'message' => 'Erro de validação',
+                    'errors' => $gainValidator->errors(),
+                ], 422);
+            }
+
+            if ((float) $paidAmount > (float) $negotiatedAmount) {
+                return response()->json([
+                    'message' => 'Erro de validação',
+                    'errors' => [
+                        'paid_amount' => ['A entrada inicial nao pode ser maior que o valor negociado'],
+                    ],
+                ], 422);
+            }
+        }
 
         if ($newStatus === 'p') {
             $lossValidator = Validator::make($request->all(), [
@@ -1908,10 +2710,22 @@ class MatriculaController extends Controller
             }
         }
 
+        $shouldSaveMatricula = false;
         if ($oldStatus !== $newStatus) {
             $matricula->status = $newStatus;
-            $matricula->save();
+            $shouldSaveMatricula = true;
+        }
 
+        if ($newStatus === 'g' && (int) $matricula->situacao_id !== $matriculadoSituacaoId) {
+            $matricula->situacao_id = $matriculadoSituacaoId;
+            $shouldSaveMatricula = true;
+        }
+
+        if ($shouldSaveMatricula) {
+            $matricula->save();
+        }
+
+        if ($oldStatus !== $newStatus) {
             try {
                 $payload = [
                     'from_status' => $oldStatus,
@@ -1919,6 +2733,15 @@ class MatriculaController extends Controller
                     'to_status' => $newStatus,
                     'to_status_label' => $this->getMatriculaStatusLabel($newStatus),
                 ];
+
+                if ($newStatus === 'g') {
+                    $payload['gain_date'] = $gainDate;
+                    $payload['negotiated_amount'] = $negotiatedAmount;
+                    $payload['paid_amount'] = $paidAmount;
+                    $payload['gain_observation'] = $gainObservation;
+                    $payload['situacao_id'] = $matriculadoSituacaoId;
+                    $payload['situacao_label'] = 'Matriculado';
+                }
 
                 if ($newStatus === 'p') {
                     $payload['loss_date'] = $lossDate;
@@ -1936,6 +2759,44 @@ class MatriculaController extends Controller
                     'ip_address' => $request->ip(),
                 ]);
             } catch (\Throwable $e) {}
+        }
+
+        if ($newStatus === 'g') {
+            try {
+                $financialAccount = $this->syncFinancialGainReceivable(
+                    $matricula->fresh(['cliente']),
+                    $gainDate,
+                    $negotiatedAmount,
+                    $paidAmount,
+                    $gainObservation
+                );
+
+                if ($financialAccount) {
+                    EventLog::create([
+                        'entity_type' => 'matricula',
+                        'entity_id' => (string) $matricula->id,
+                        'action' => 'financial_receivable_synced',
+                        'description' => 'Conta a receber paga lançada no financeiro para a proposta ganha',
+                        'payload' => [
+                            'financial_account_id' => $financialAccount->id,
+                            'amount' => $financialAccount->amount,
+                            'negotiated_amount' => $financialAccount->amount,
+                            'paid_amount' => $financialAccount->paid_amount,
+                            'remaining_amount' => $financialAccount->getRemainingAmountAttribute(),
+                            'payment_date' => $financialAccount->payment_date,
+                            'status' => $financialAccount->status,
+                            'type' => $financialAccount->type,
+                        ],
+                        'actor_id' => (string) $user->id,
+                        'ip_address' => $request->ip(),
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::error('Erro ao sincronizar financeiro da proposta ganha', [
+                    'matricula_id' => $matricula->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         if ($newStatus === 'p') {
