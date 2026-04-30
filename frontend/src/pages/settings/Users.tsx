@@ -53,10 +53,15 @@ export default function Users() {
   const filteredUsers = useMemo(() => {
     if (!search.trim()) return users;
     const searchLower = search.toLowerCase();
-    return users.filter(user => 
-      user.name.toLowerCase().includes(searchLower) ||
-      user.email.toLowerCase().includes(searchLower)
-    );
+    return users.filter((user) => {
+      const normalizedName = String(user.name ?? '').toLowerCase();
+      const normalizedEmail = String(user.email ?? '').toLowerCase();
+
+      return (
+        normalizedName.includes(searchLower) ||
+        normalizedEmail.includes(searchLower)
+      );
+    });
   }, [users, search]);
 
   const handleDelete = async () => {
@@ -187,7 +192,7 @@ export default function Users() {
                         {user.name}
                       </TableCell>
                       <TableCell>
-                        {user.email}
+                        {user.email || '-'}
                       </TableCell>
                       <TableCell>
                         {permissions.find(p => String(p.id) === String(user.permission_id))?.name || user.permission_id}

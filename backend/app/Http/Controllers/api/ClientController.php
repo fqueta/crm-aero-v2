@@ -205,15 +205,23 @@ class ClientController extends Controller
         }
 
         // Enriquecer autor_name quando possível
-        if (isset($data['autor']) && !empty($data['autor']) && is_numeric($data['autor'])) {
+        $autorLookupId = null;
+        if (isset($data['autor']) && !empty($data['autor'])) {
+            $autorLookupId = $data['autor'];
+        } elseif (isset($data['config']) && is_array($data['config']) && !empty($data['config']['autor_uuid'])) {
+            $autorLookupId = $data['config']['autor_uuid'];
+        }
+
+        if (!empty($autorLookupId)) {
             $autorUser = null;
             try {
-                $autorUser = User::find($data['autor']);
+                $autorUser = User::find($autorLookupId);
             } catch (\Exception $e) {
                 $autorUser = null;
             }
             if ($autorUser) {
                 $data['autor_name'] = $autorUser->name ?? null;
+                $data['autor_uuid'] = (string) ($autorUser->id ?? $autorLookupId);
             }
         }
         // Garantir chaves esperadas mesmo que nulas
@@ -334,19 +342,69 @@ class ClientController extends Controller
     }
 
     /**
+     * Normaliza o celular aceitando prefixo `+` e removendo qualquer caractere não numérico.
+     * EN: Normalizes phone input accepting a leading `+` and stripping any non-digit character.
+     */
+    private function normalizeCellphoneInput($value): ?string
+    {
+        $normalized = $this->normalizeOptionalString($value);
+
+        if ($normalized === null) {
+            return null;
+        }
+
+        $digitsOnly = preg_replace('/\D/', '', $normalized);
+        return $digitsOnly !== '' ? $digitsOnly : null;
+    }
+
+    /**
+     * Retorna as regras de validação do celular já sanitizado para apenas dígitos.
+     * EN: Returns validation rules for sanitized phone values containing digits only.
+     */
+    private function getCellphoneValidationRules(?string $ignoreUserId = null): array
+    {
+        $rules = ['nullable', 'string', 'regex:/^\d{10,15}$/'];
+
+        if ($ignoreUserId !== null) {
+            $rules[] = Rule::unique('users', 'celular')->ignore($ignoreUserId);
+            return $rules;
+        }
+
+        $rules[] = 'unique:users,celular';
+        return $rules;
+    }
+
+    /**
+     * Garante defaults mínimos de pipeline para novos clientes quando o payload não informar funil/etapa.
+     * EN: Ensures minimal pipeline defaults for new clients when stage/funnel are missing in the payload.
+     */
+    private function applyDefaultClientPipelineConfig(array $config): array
+    {
+        if (!isset($config['stage_id']) || $config['stage_id'] === null || $config['stage_id'] === '') {
+            $config['stage_id'] = 1;
+        }
+
+        if (!isset($config['funnelId']) || $config['funnelId'] === null || $config['funnelId'] === '') {
+            $config['funnelId'] = 1;
+        }
+
+        return $config;
+    }
+
+    /**
      * Sincroniza o celular principal recebido em `config.celular` com a coluna raiz `celular`.
      * EN: Sync the primary phone received in `config.celular` with the root `celular` column.
      */
     private function syncRootCellphoneFromConfig(Request $request): void
     {
-        $rootCellphone = $this->normalizeOptionalString($request->get('celular'));
+        $rootCellphone = $this->normalizeCellphoneInput($request->get('celular'));
         $config = $request->input('config');
 
         if ($rootCellphone !== null || !is_array($config)) {
             return;
         }
 
-        $configCellphone = $this->normalizeOptionalString($config['celular'] ?? null);
+        $configCellphone = $this->normalizeCellphoneInput($config['celular'] ?? null);
         if ($configCellphone !== null) {
             $request->merge([
                 'celular' => $configCellphone,
@@ -404,7 +462,7 @@ class ClientController extends Controller
         //remover a mascara do celular
         if ($request->filled('celular')) {
             $request->merge([
-                'celular' => preg_replace('/\D/', '', $request->celular),
+                'celular' => $this->normalizeCellphoneInput($request->input('celular')),
             ]);
         }
         // Normalizar campos opcionais para null quando vazios (evita unique com "")
@@ -412,7 +470,7 @@ class ClientController extends Controller
             'email'   => $this->normalizeOptionalString($request->get('email')),
             'cpf'     => $this->normalizeOptionalString($request->get('cpf')),
             'cnpj'    => $this->normalizeOptionalString($request->get('cnpj')),
-            'celular' => $this->normalizeOptionalString($request->get('celular')),
+            'celular' => $this->normalizeCellphoneInput($request->get('celular')),
         ]);
         // Verificar se o CPF ou CNPJ já existe na lixeira
         if ($request->filled('cpf') || $request->filled('cnpj')) {
@@ -445,7 +503,7 @@ class ClientController extends Controller
             'cpf'           => 'nullable|string|max:20|unique:users,cpf',
             'cnpj'          => 'nullable|string|max:20|unique:users,cnpj',
             'email'         => 'nullable|email|unique:users,email',
-            'celular'         => 'nullable|celular|unique:users,celular',
+            'celular'         => $this->getCellphoneValidationRules(),
             'password'      => 'nullable|string|min:6',
             'genero'        => ['required', Rule::in(['ni','m','f'])],
             'config'        => 'array',
@@ -478,6 +536,14 @@ class ClientController extends Controller
         $validated['tipo_pessoa'] = isset($validated['tipo_pessoa']) ? $validated['tipo_pessoa'] : 'pf';
         // $validated['permission_id'] = $this->cliente_permission_id; // Força sempre grupo cliente
         $validated['config'] = isset($validated['config']) ? $this->sanitizeInput($validated['config']) : [];
+        if (is_array($validated['config'])) {
+            $validated['config'] = $this->applyDefaultClientPipelineConfig($validated['config']);
+            if (empty($validated['config']['autor_uuid'])) {
+                $validated['config']['autor_uuid'] = (string) $user->id;
+            }
+        }
+
+        $validated['autor'] = !empty($validated['autor']) ? (string) $validated['autor'] : (string) $user->id;
 
         if (is_array($validated['config'])) {
             $validated['config'] = json_encode($validated['config']);
@@ -565,7 +631,7 @@ class ClientController extends Controller
         // Remover máscara do celular para manter a coluna raiz consistente.
         if ($request->filled('celular')) {
             $request->merge([
-                'celular' => preg_replace('/\D/', '', (string) $request->input('celular')),
+                'celular' => $this->normalizeCellphoneInput($request->input('celular')),
             ]);
         }
 
@@ -574,7 +640,7 @@ class ClientController extends Controller
             'email'   => $this->normalizeOptionalString($request->get('email')),
             'cpf'     => $this->normalizeOptionalString($request->get('cpf')),
             'cnpj'    => $this->normalizeOptionalString($request->get('cnpj')),
-            'celular' => $this->normalizeOptionalString($request->get('celular')),
+            'celular' => $this->normalizeCellphoneInput($request->get('celular')),
         ]);
 
         $validator = Validator::make($request->all(), [
@@ -898,14 +964,14 @@ class ClientController extends Controller
 
         // Remover máscara do celular
         if ($request->filled('celular')) {
-            $request->merge(['celular' => preg_replace('/\D/', '', $request->celular)]);
+            $request->merge(['celular' => $this->normalizeCellphoneInput($request->input('celular'))]);
         }
         // Normalizar campos opcionais para null quando vazios
         $request->merge([
             'email'   => $this->normalizeOptionalString($request->get('email')),
             'cpf'     => $this->normalizeOptionalString($request->get('cpf')),
             'cnpj'    => $this->normalizeOptionalString($request->get('cnpj')),
-            'celular' => $this->normalizeOptionalString($request->get('celular')),
+            'celular' => $this->normalizeCellphoneInput($request->get('celular')),
         ]);
 
         $request->merge([
@@ -920,7 +986,7 @@ class ClientController extends Controller
             'cpf'           => 'nullable|string|max:20|unique:users,cpf',
             'cnpj'          => 'nullable|string|max:20|unique:users,cnpj',
             'email'         => 'nullable|email|unique:users,email',
-            'celular'       => 'nullable|celular|unique:users,celular',
+            'celular'       => $this->getCellphoneValidationRules(),
             'password'      => 'nullable|string|min:6',
             'genero'        => ['required', Rule::in(['ni','m','f'])],
             'config'        => 'array',
