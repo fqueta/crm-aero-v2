@@ -409,6 +409,27 @@ export default function ClientView() {
     navigate(`/${link_admin}/sales/proposals/create${q}`, { state: { from: location } });
   };
 
+  const matriculasCount = Array.isArray(enrollmentsMatResp?.data)
+    ? enrollmentsMatResp.data.length
+    : Array.isArray((enrollmentsMatResp as any)?.items)
+      ? (enrollmentsMatResp as any).items.length
+      : 0;
+  const propostasCount = Array.isArray(enrollmentsPropResp?.data)
+    ? enrollmentsPropResp.data.length
+    : Array.isArray((enrollmentsPropResp as any)?.items)
+      ? (enrollmentsPropResp as any).items.length
+      : 0;
+  const statusLabel = client?.status === 'actived'
+    ? 'Ativo'
+    : client?.status === 'inactived'
+      ? 'Inativo'
+      : 'Pré-cadastro';
+  const statusVariant = client?.status === 'actived'
+    ? 'default'
+    : client?.status === 'inactived'
+      ? 'destructive'
+      : 'secondary';
+
   /**
    * goToProposalView
    * pt-BR: Abre a visualização da proposta/matrícula pelo ID do registro.
@@ -626,16 +647,61 @@ export default function ClientView() {
             <Edit className="mr-2 h-4 w-4" />
             Editar
           </Button>
-          <Badge variant={
-            client.status === 'actived' ? 'default' : 
-            client.status === 'inactived' ? 'destructive' : 
-            'secondary'
-          }>
-            {client.status === 'actived' ? 'Ativo' : 
-             client.status === 'inactived' ? 'Inativo' : 
-             'Pré-cadastro'}
+          <Badge variant={statusVariant}>
+            {statusLabel}
           </Badge>
         </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</p>
+                <div className="text-lg font-semibold">{statusLabel}</div>
+              </div>
+              <User className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Funil Atual</p>
+                <div className="text-lg font-semibold">{funnelName}</div>
+              </div>
+              <Briefcase className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Etapa Atual</p>
+                <div className="text-lg font-semibold">{stageName}</div>
+              </div>
+              <Calendar className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Propostas</p>
+                <div className="text-lg font-semibold">{propostasCount}</div>
+                <p className="text-xs text-muted-foreground">{matriculasCount} matrículas</p>
+              </div>
+              <FileText className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -730,8 +796,35 @@ export default function ClientView() {
           </CardContent>
         </Card>
 
-        {/* Event Logs do Cliente */}
-        <ClientEventLogsCard clientId={client.id} />
+        {/* Informações do Sistema */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Calendar className="mr-2 h-5 w-5" />
+              Informações do Sistema
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {client.created_at && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Data de Cadastro</label>
+                <p className="text-sm">{formatDate(client.created_at)}</p>
+              </div>
+            )}
+
+            {client.updated_at && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Última Atualização</label>
+                <p className="text-sm">{formatDate(client.updated_at)}</p>
+              </div>
+            )}
+
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">ID do Cliente</label>
+              <p className="text-sm font-mono">{client.id}</p>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* (removido) Matrículas e Propostas: movido para full-width acima de Informações do Sistema */}
 
@@ -752,12 +845,12 @@ export default function ClientView() {
               </p>
             </div>
 
-            {client.config?.celular && (
+            {(client.celular || client.config?.celular) && (
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Celular</label>
                 <p className="text-sm flex items-center">
                   <Phone className="mr-2 h-4 w-4" />
-                  {formatPhone(client.config.celular)}
+                  {formatPhone(client.celular || client.config?.celular || '')}
                 </p>
               </div>
             )}
@@ -1185,41 +1278,12 @@ export default function ClientView() {
     </CardContent>
       </Card>
 
-      {/* Informações do Sistema */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center">
-            <Calendar className="mr-2 h-5 w-5" />
-            Informações do Sistema
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {client.created_at && (
-            <div>
-              <label className="text-sm font-medium text-muted-foreground">Data de Cadastro</label>
-              <p className="text-sm">{formatDate(client.created_at)}</p>
-            </div>
-          )}
-
-          {client.updated_at && (
-            <div>
-              <label className="text-sm font-medium text-muted-foreground">Última Atualização</label>
-              <p className="text-sm">{formatDate(client.updated_at)}</p>
-            </div>
-          )}
-
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">ID do Cliente</label>
-            <p className="text-sm font-mono">{client.id}</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="mt-6">
+        <ClientEventLogsCard clientId={client.id} />
+      </div>
     </div>
   );
 }
-
-
-
 
 
 

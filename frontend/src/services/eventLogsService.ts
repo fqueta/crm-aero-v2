@@ -22,6 +22,7 @@ export interface EventLogRecord {
 export interface EventLogsListParams {
   page?: number;
   per_page?: number;
+  client_id?: string;
   entity_type?: string;
   entity_id?: string;
   action?: string;

@@ -85,7 +85,7 @@ class FinancialCategoriesSeeder extends Seeder
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
-                
+
                 // Criar a categoria usando a conexão tenant
                 Category::create($mappedData);
 

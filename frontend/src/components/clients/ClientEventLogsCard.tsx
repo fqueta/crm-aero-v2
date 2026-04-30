@@ -26,6 +26,21 @@ interface ClientEventLogsCardProps {
   clientId: string;
 }
 
+type ClientTimelineLog = {
+  id: number | string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  description?: string | null;
+  payload?: Record<string, unknown> | null;
+  actor_id?: string | null;
+  actor?: {
+    id?: string;
+    name?: string;
+  } | null;
+  created_at: string;
+};
+
 const getActionConfig = (action: string) => {
   switch (action) {
     case 'stage_changed':
@@ -43,6 +58,110 @@ const getActionConfig = (action: string) => {
   }
 };
 
+const getEntityConfig = (entityType: string) => {
+  switch (entityType) {
+    case 'matricula':
+      return { label: 'Proposta', className: 'bg-emerald-500/10 text-emerald-700' };
+    case 'client_attendance':
+      return { label: 'Atendimento', className: 'bg-violet-500/10 text-violet-700' };
+    case 'user':
+      return { label: 'Cliente', className: 'bg-sky-500/10 text-sky-700' };
+    default:
+      return { label: entityType, className: 'bg-muted text-muted-foreground' };
+  }
+};
+
+/**
+ * Traduz a ação técnica para um rótulo mais amigável na jornada do lead.
+ */
+const getJourneyActionLabel = (log: ClientTimelineLog) => {
+  if (log.entity_type === 'matricula' && log.action === 'created') {
+    return 'Proposta Criada';
+  }
+  if (log.entity_type === 'matricula' && log.action === 'status_changed') {
+    return 'Status da Proposta';
+  }
+  if (log.entity_type === 'matricula' && log.action === 'financial_receivable_synced') {
+    return 'Financeiro Gerado';
+  }
+  if (log.entity_type === 'client_attendance' && log.action === 'created') {
+    return 'Atendimento Registrado';
+  }
+  if (log.entity_type === 'user' && log.action === 'stage_changed') {
+    return 'Movimento no Pipeline';
+  }
+  return getActionConfig(log.action).label;
+};
+
+/**
+ * Resume o evento com texto comercial para facilitar a leitura da jornada.
+ */
+const getJourneyDescription = (log: ClientTimelineLog) => {
+  const payload = log.payload || {};
+  const matriculaId = payload.matricula_id || log.entity_id;
+
+  if (log.entity_type === 'matricula' && log.action === 'created') {
+    return `Proposta #${matriculaId} criada para o cliente.`;
+  }
+  if (log.entity_type === 'matricula' && log.action === 'status_changed') {
+    const newStatus = payload.new_status || payload.status;
+    return newStatus
+      ? `Status da proposta atualizado para ${String(newStatus)}.`
+      : 'Status da proposta atualizado.';
+  }
+  if (log.entity_type === 'matricula' && log.action === 'financial_receivable_synced') {
+    return 'Proposta ganhou vínculo financeiro e gerou contas a receber.';
+  }
+  if (log.entity_type === 'matricula' && log.action === 'proposta_generated') {
+    return `Documento da proposta #${matriculaId} gerado.`;
+  }
+  if (log.entity_type === 'matricula' && log.action === 'zapsign_send_request') {
+    return 'Proposta enviada para assinatura.';
+  }
+  if (log.entity_type === 'matricula' && log.action === 'zapsign_send_response') {
+    return 'Retorno do envio para assinatura registrado.';
+  }
+  if (log.entity_type === 'matricula' && log.action === 'financial_payment_received') {
+    return 'Pagamento recebido para a proposta.';
+  }
+  if (log.entity_type === 'client_attendance' && log.action === 'created') {
+    const source = payload.source;
+    if (source === 'proposal_created') {
+      return 'Atendimento automático registrado na criação da proposta.';
+    }
+    return 'Atendimento do cliente registrado.';
+  }
+  if (log.entity_type === 'user' && log.action === 'stage_changed') {
+    return log.description || 'Cliente movimentado no pipeline.';
+  }
+
+  return log.description || 'Evento registrado na jornada do lead.';
+};
+
+/**
+ * Gera um detalhe secundário curto para complementar a leitura do evento.
+ */
+const getJourneyMeta = (log: ClientTimelineLog) => {
+  const payload = log.payload || {};
+
+  if (log.entity_type === 'matricula') {
+    const matriculaId = payload.matricula_id || log.entity_id;
+    return `Proposta #${String(matriculaId)}`;
+  }
+
+  if (log.entity_type === 'client_attendance' && payload.channel) {
+    return `Canal: ${String(payload.channel)}`;
+  }
+
+  if (log.action === 'stage_changed' && (payload.from_stage_id || payload.to_stage_id)) {
+    const fromStage = payload.from_stage_id ?? '-';
+    const toStage = payload.to_stage_id ?? '-';
+    return `Etapa ${String(fromStage)} -> ${String(toStage)}`;
+  }
+
+  return null;
+};
+
 /**
  * ClientEventLogsCard
  * pt-BR: Card para exibir Event Logs do cadastro de cliente (tabela users) com visual aprimorado (Timeline).
@@ -51,11 +170,10 @@ const getActionConfig = (action: string) => {
 export default function ClientEventLogsCard({ clientId }: ClientEventLogsCardProps) {
   const { data, isLoading, isFetching } = useEventLogsList({
     per_page: 50, // Increased to show more history
-    entity_type: 'user',
-    entity_id: String(clientId),
+    client_id: String(clientId),
   });
 
-  const logs = (data?.data || (data as any)?.items || []) as any[];
+  const logs = (data?.data || (data as any)?.items || []) as ClientTimelineLog[];
 
   // Group logs by Date
   const groupedLogs = useMemo(() => {
@@ -98,8 +216,8 @@ export default function ClientEventLogsCard({ clientId }: ClientEventLogsCardPro
       <CardHeader className="px-0 pt-0 pb-6">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <CardTitle className="text-xl">Event Logs do Cliente</CardTitle>
-            <CardDescription>Registro de alterações e eventos do cliente</CardDescription>
+            <CardTitle className="text-xl">Jornada do Lead</CardTitle>
+            <CardDescription>Registro da proposta, atendimentos e movimentos do cliente</CardDescription>
           </div>
           <Badge variant="outline" className="h-7">
             {logs.length} eventos
@@ -121,6 +239,10 @@ export default function ClientEventLogsCard({ clientId }: ClientEventLogsCardPro
                 <div className="ml-2 space-y-6 border-l-2 border-muted pl-6 pb-2">
                   {dayLogs.map((log) => {
                     const config = getActionConfig(log.action);
+                    const entityConfig = getEntityConfig(log.entity_type);
+                    const actionLabel = getJourneyActionLabel(log);
+                    const description = getJourneyDescription(log);
+                    const meta = getJourneyMeta(log);
                     const ActionIcon = config.icon;
                     const time = new Date(log.created_at).toLocaleTimeString('pt-BR', {
                       hour: '2-digit',
@@ -143,16 +265,24 @@ export default function ClientEventLogsCard({ clientId }: ClientEventLogsCardPro
                             <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                               {time}
                             </span>
+                            <Badge variant="outline" className={cn("text-xs font-medium", entityConfig.className)}>
+                              {entityConfig.label}
+                            </Badge>
                             <Badge variant="secondary" className={cn("text-xs font-medium hover:bg-secondary", config.color, config.bg)}>
                               <ActionIcon className="w-3 h-3 mr-1" />
-                              {config.label}
+                              {actionLabel}
                             </Badge>
                           </div>
                           
                           <div className="mt-1 p-3 rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md">
                             <p className="font-medium text-sm text-foreground">
-                              {log.description || 'Sem descrição'}
+                              {description}
                             </p>
+                            {meta && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {meta}
+                              </p>
+                            )}
                             
                             {log.actor_id && (
                               <div className="mt-3 flex items-center gap-2 pt-2 border-t text-xs text-muted-foreground">
@@ -180,4 +310,3 @@ export default function ClientEventLogsCard({ clientId }: ClientEventLogsCardPro
     </Card>
   );
 }
-

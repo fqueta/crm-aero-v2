@@ -99,7 +99,7 @@ class ServiceUnitController extends Controller
 
         return response()->json($serviceUnits);
     }
-    
+
     /**
      * Mapeia os dados da unidade de serviço para o formato do frontend
      */
@@ -114,7 +114,7 @@ class ServiceUnitController extends Controller
             'updated_at' => $serviceUnit->updated_at,
         ];
     }
-    
+
     /**
      * Criar uma nova unidade de serviço
      */

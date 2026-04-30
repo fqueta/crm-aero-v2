@@ -144,12 +144,14 @@ const clientSchema = z.object({
     errorMap: () => ({ message: "Selecione o status" })
   }),
   autor: z.string().optional(),
+  celular: z.string().optional().refine((val) => {
+    if (!val || val.trim() === '') return true;
+    return isValidPhone(val);
+  }, "Número de celular inválido"),
   chat_url: z.string().url("URL do chat inválida (deve começar com http:// ou https://)").or(z.literal("")).nullable().optional(),
   config: z.object({
     nome_fantasia: z.string().nullable().optional(),
-    celular: z.string().nullable().optional().refine((val) => {
-      return isValidPhone(val || "");
-    }, "Número de celular inválido"),
+    celular: z.string().nullable().optional(),
     telefone_residencial: z.string().nullable().optional().refine((val) => {
       return isValidPhone(val || "");
     }, "Número de telefone residencial inválido"),
@@ -317,10 +319,10 @@ export default function ClientEdit() {
       genero: "ni",
       status: "actived",
       autor: "",
+      celular: "",
       chat_url: "",
       config: {
         nome_fantasia: "",
-        celular: "",
         telefone_residencial: "",
         rg: "",
         nascimento: "",
@@ -360,10 +362,10 @@ export default function ClientEdit() {
         genero: client.genero,
         status: client.status,
         autor: client.autor || "",
+        celular: client.celular || client.config?.celular || "",
         chat_url: (client as any).chat_url || "",
         config: {
           nome_fantasia: client.config?.nome_fantasia || "",
-          celular: client.config?.celular || "",
           telefone_residencial: client.config?.telefone_residencial || "",
           rg: client.config?.rg || "",
           nascimento: client.config?.nascimento || "",
@@ -417,6 +419,7 @@ export default function ClientEdit() {
       genero: data.genero,
       status: data.status,
       autor: data.autor,
+      celular: data.celular,
       chat_url: data.chat_url,
       config: data.config,
     };

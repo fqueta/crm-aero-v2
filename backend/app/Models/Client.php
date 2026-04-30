@@ -32,6 +32,7 @@ class Client extends User
         'email',
         'password',
         'status',
+        'celular',
         'genero',
         'verificado',
         'permission_id',

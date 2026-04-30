@@ -130,7 +130,7 @@ export function ClientForm({
     
     // Mapeamento de campos para seções
     // Mapping fields to sections
-    if (cfgErrors?.celular || cfgErrors?.telefone_residencial) newSections.add('contatos');
+    if ((errors as any)?.celular || cfgErrors?.celular || cfgErrors?.telefone_residencial) newSections.add('contatos');
     if (cfgErrors?.nascimento || cfgErrors?.escolaridade || cfgErrors?.profissao || cfgErrors?.rg) newSections.add('pessoais');
     if (cfgErrors?.tipo_pj || cfgErrors?.nome_fantasia) newSections.add('empresa');
     if (cfgErrors?.cep || cfgErrors?.endereco || cfgErrors?.numero || cfgErrors?.complemento || cfgErrors?.bairro || cfgErrors?.cidade || cfgErrors?.uf) newSections.add('endereco');
@@ -723,7 +723,7 @@ export function ClientForm({
                   {/* en-US: Applies DDI-aware mask using phoneApplyMask */}
                   <FormField
                     control={form.control}
-                    name="config.celular"
+                    name="celular"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm font-medium text-gray-700">Celular</FormLabel>
@@ -740,7 +740,7 @@ export function ClientForm({
                       </FormItem>
                     )}
                   />
-                  {form.watch('config.celular') && form.watch('config.celular').replace(/\D/g, '').length >= 10 && (
+                  {form.watch('celular') && form.watch('celular').replace(/\D/g, '').length >= 10 && (
                     <div className="absolute right-3 top-9 flex items-center pointer-events-none">
                       <CheckCircle className="h-4 w-4 text-green-600" />
                     </div>

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ClientAttendance;
 use App\Models\EventLog;
+use App\Models\Matricula;
 use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -29,6 +31,41 @@ class EventLogController extends Controller
 
         $perPage = (int)($request->input('per_page', 10));
         $query = EventLog::query()->with('actor')->orderBy('created_at', 'desc');
+
+        if ($request->filled('client_id')) {
+            $clientId = (string) $request->input('client_id');
+            $proposalIds = Matricula::query()
+                ->where('id_cliente', $clientId)
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+            $attendanceIds = ClientAttendance::query()
+                ->where('client_id', $clientId)
+                ->pluck('id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+
+            $query->where(function ($scopedQuery) use ($clientId, $proposalIds, $attendanceIds) {
+                $scopedQuery->where(function ($userQuery) use ($clientId) {
+                    $userQuery->where('entity_type', 'user')
+                        ->where('entity_id', $clientId);
+                });
+
+                if (!empty($proposalIds)) {
+                    $scopedQuery->orWhere(function ($proposalQuery) use ($proposalIds) {
+                        $proposalQuery->where('entity_type', 'matricula')
+                            ->whereIn('entity_id', $proposalIds);
+                    });
+                }
+
+                if (!empty($attendanceIds)) {
+                    $scopedQuery->orWhere(function ($attendanceQuery) use ($attendanceIds) {
+                        $attendanceQuery->where('entity_type', 'client_attendance')
+                            ->whereIn('entity_id', $attendanceIds);
+                    });
+                }
+            });
+        }
 
         if ($request->filled('entity_type')) {
             $query->where('entity_type', $request->input('entity_type'));

@@ -59,6 +59,7 @@ export interface ClientRecord {
   tipo_pessoa: "pf" | "pj";
   email: string;
   name: string;
+  celular?: string | null;
   cpf: string | null;
   cnpj: string | null;
   razao: string | null;
@@ -88,6 +89,7 @@ export interface ClientRecord {
 export interface CreateClientInput {
   tipo_pessoa: "pf" | "pj";
   email: string;
+  celular?: string;
   /**
    * pt-BR: Telefone principal do cliente (opcional)
    * en-US: Primary phone of the client (optional)
@@ -112,6 +114,7 @@ export interface CreateClientInput {
 export interface UpdateClientInput {
   tipo_pessoa?: "pf" | "pj";
   email?: string;
+  celular?: string;
   name?: string;
   cpf?: string;
   cnpj?: string;

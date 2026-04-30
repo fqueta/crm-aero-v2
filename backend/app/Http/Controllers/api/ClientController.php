@@ -352,7 +352,7 @@ class ClientController extends Controller
         if ($normalized === null) {
             return null;
         }
-
+        //deve remover o + tambem se houver
         $digitsOnly = preg_replace('/\D/', '', $normalized);
         return $digitsOnly !== '' ? $digitsOnly : null;
     }
@@ -375,17 +375,13 @@ class ClientController extends Controller
     }
 
     /**
-     * Garante defaults mínimos de pipeline para novos clientes quando o payload não informar funil/etapa.
-     * EN: Ensures minimal pipeline defaults for new clients when stage/funnel are missing in the payload.
+     * Sanitiza a configuração do cliente sem forçar defaults de pipeline.
+     * EN: Sanitizes client config without forcing pipeline defaults.
      */
     private function applyDefaultClientPipelineConfig(array $config): array
     {
-        if (!isset($config['stage_id']) || $config['stage_id'] === null || $config['stage_id'] === '') {
-            $config['stage_id'] = 1;
-        }
-
-        if (!isset($config['funnelId']) || $config['funnelId'] === null || $config['funnelId'] === '') {
-            $config['funnelId'] = 1;
+        if (array_key_exists('celular', $config)) {
+            $config['celular'] = $this->normalizeCellphoneInput($config['celular']);
         }
 
         return $config;
@@ -406,8 +402,10 @@ class ClientController extends Controller
 
         $configCellphone = $this->normalizeCellphoneInput($config['celular'] ?? null);
         if ($configCellphone !== null) {
+            $config['celular'] = $configCellphone;
             $request->merge([
                 'celular' => $configCellphone,
+                'config' => $config,
             ]);
         }
     }
@@ -472,6 +470,21 @@ class ClientController extends Controller
             'cnpj'    => $this->normalizeOptionalString($request->get('cnpj')),
             'celular' => $this->normalizeCellphoneInput($request->get('celular')),
         ]);
+
+        // Verificar se já existe cliente ativo com o mesmo celular informado
+        if ($request->filled('celular')) {
+            $existingActiveClient = Client::query()
+                ->where('celular', $request->celular)
+                ->first();
+
+            if ($existingActiveClient) {
+                return response()->json([
+                    'message' => 'Este cadastro já está em nossa base de dados.',
+                    'errors'  => ['celular' => ['Cadastro com este celular já existe']],
+                ], 422);
+            }
+        }
+
         // Verificar se o CPF ou CNPJ já existe na lixeira
         if ($request->filled('cpf') || $request->filled('cnpj')) {
             $existingUser = Client::withoutGlobalScope('client')

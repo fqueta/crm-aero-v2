@@ -12,6 +12,7 @@ use App\Models\Matricula;
 use App\Models\Parcelamento;
 use App\Models\Turma;
 use App\Models\User;
+use App\Models\ClientAttendance;
 use App\Services\PermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -1198,6 +1199,79 @@ class MatriculaController extends Controller
     }
 
     /**
+     * Garante pipeline inicial no cadastro do cliente quando a proposta for criada
+     * e o cliente ainda não tiver `funnelId` definido.
+     * EN: Ensure initial client pipeline when creating a proposal and the client
+     * still has no `funnelId` set.
+     */
+    private function ensureClientDefaultPipelineForProposal(string $clientId, string $actorId, string $ip): void
+    {
+        $client = User::find($clientId);
+        if (!$client) {
+            return;
+        }
+
+        $config = is_array($client->config)
+            ? $client->config
+            : (is_string($client->config) ? (json_decode($client->config, true) ?? []) : []);
+
+        $currentFunnelId = $config['funnelId'] ?? null;
+        $hasFunnelId = !is_null($currentFunnelId) && trim((string) $currentFunnelId) !== '';
+
+        if ($hasFunnelId) {
+            return;
+        }
+
+        $this->applyUserStage(
+            $client,
+            1,
+            $actorId,
+            $ip,
+            'Etapa inicial do cliente definida automaticamente na criação da proposta'
+        );
+    }
+
+    /**
+     * Cria um atendimento automático para registrar a abertura da proposta do cliente.
+     * EN: Creates an automatic attendance entry to register proposal creation for the client.
+     */
+    private function createProposalClientAttendance(string $clientId, Matricula $matricula, User $actor, string $ip): void
+    {
+        $client = User::find($clientId);
+        if (!$client) {
+            return;
+        }
+
+        $attendance = ClientAttendance::create([
+            'client_id' => $client->id,
+            'attended_by' => $actor->id,
+            'channel' => 'proposal',
+            'observation' => 'Atendimento automatico gerado na criacao da proposta',
+            'metadata' => [
+                'source' => 'proposal_created',
+                'matricula_id' => (int) $matricula->id,
+                'funnel_id' => $matricula->funnel_id,
+                'stage_id' => $matricula->stage_id,
+            ],
+        ]);
+
+        EventLog::create([
+            'entity_type' => 'client_attendance',
+            'entity_id' => (string) $attendance->id,
+            'action' => 'created',
+            'description' => 'Atendimento automatico gerado na criacao da proposta',
+            'payload' => [
+                'client_id' => (string) $client->id,
+                'matricula_id' => (int) $matricula->id,
+                'channel' => 'proposal',
+                'source' => 'proposal_created',
+            ],
+            'actor_id' => (string) $actor->id,
+            'ip_address' => $ip,
+        ]);
+    }
+
+    /**
      * Cria uma nova matrícula.
      * Create a new enrollment.
      */
@@ -1244,6 +1318,16 @@ class MatriculaController extends Controller
 
         $matricula->fill($validated);
         $matricula->save();
+
+        if (!empty($validated['id_cliente'])) {
+            $this->ensureClientDefaultPipelineForProposal((string) $validated['id_cliente'], (string) $user->id, $request->ip());
+        }
+
+        try {
+            if (!empty($validated['id_cliente'])) {
+                $this->createProposalClientAttendance((string) $validated['id_cliente'], $matricula, $user, $request->ip());
+            }
+        } catch (\Throwable $e) {}
 
         try {
             EventLog::create([
@@ -3178,6 +3262,11 @@ class MatriculaController extends Controller
         $cfg = is_array($user->config) ? $user->config : (is_string($user->config) ? (json_decode($user->config, true) ?? []) : []);
         $oldStageId = (int)($cfg['stage_id'] ?? 0);
         $cfg['stage_id'] = $newStageId;
+        $preferences = is_array($user->preferencias) ? $user->preferencias : (is_string($user->preferencias) ? (json_decode($user->preferencias, true) ?? []) : []);
+        if (!isset($preferences['pipeline']) || !is_array($preferences['pipeline'])) {
+            $preferences['pipeline'] = [];
+        }
+        $preferences['pipeline']['stage_id'] = $newStageId;
         $stage = null;
         try {
             $stage = Stage::select(['id','funnel_id'])->find($newStageId);
@@ -3188,6 +3277,7 @@ class MatriculaController extends Controller
             $cfg['funnelId'] = $stage->funnel_id;
         }
         $user->config = $cfg;
+        $user->preferencias = $preferences;
         $user->save();
         try {
             EventLog::create([
