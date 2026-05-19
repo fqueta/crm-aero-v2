@@ -16,6 +16,14 @@ import { useQuery } from '@tanstack/react-query';
 import { aircraftSettingsService } from '@/services/aircraftSettingsService';
 import { periodsService } from '@/services/periodsService';
 import { CoursePayload, CourseRecord, CourseModule } from '@/types/courses';
+import {
+  PUBLIC_PROPOSAL_QUESTIONS,
+  PUBLIC_PROPOSAL_QUESTION_KEYS,
+  PUBLIC_PROPOSAL_SECTIONS,
+  getDefaultPublicProposalQuestions,
+  getDefaultPublicProposalRequiredQuestions,
+  getDefaultPublicProposalSections,
+} from '@/lib/publicProposalQuestions';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -237,6 +245,18 @@ export function CourseForm({
         pagina_venda: z.object({ link: z.coerce.string().optional(), label: z.coerce.string().optional() }).optional(),
         adc: z.object({ recheck: z.any().optional(), recorrente: z.any().optional(), cor: z.coerce.string().optional() }).optional(),
         ead: z.object({ id_eadcontrol: z.coerce.string().optional() }).optional(),
+        public_signature_questions: z.array(z.string()).optional(),
+        public_approval_questions: z.array(z.string()).optional(),
+        public_signature_required_questions: z.array(z.string()).optional(),
+        public_approval_required_questions: z.array(z.string()).optional(),
+        public_signature_sections: z.object({
+          status: z.boolean().optional(),
+          info: z.boolean().optional(),
+        }).optional(),
+        public_approval_sections: z.object({
+          status: z.boolean().optional(),
+          info: z.boolean().optional(),
+        }).optional(),
     }).optional(),
   });
 
@@ -266,6 +286,12 @@ export function CourseForm({
         pagina_venda: { link: '', label: '' },
         adc: { recheck: 'n', recorrente: 'n', cor: 'FFFFFF' },
         ead: { id_eadcontrol: '' },
+        public_signature_questions: getDefaultPublicProposalQuestions('signature', '2'),
+        public_approval_questions: getDefaultPublicProposalQuestions('approval', '2'),
+        public_signature_required_questions: getDefaultPublicProposalRequiredQuestions('signature', '2'),
+        public_approval_required_questions: getDefaultPublicProposalRequiredQuestions('approval', '2'),
+        public_signature_sections: getDefaultPublicProposalSections('signature', '2'),
+        public_approval_sections: getDefaultPublicProposalSections('approval', '2'),
       },
       inscricao: '0,00',
       valor: '0,00',
@@ -302,6 +328,86 @@ export function CourseForm({
       const oldIndex = fields.findIndex((item) => item.id === active.id);
       const newIndex = fields.findIndex((item) => item.id === over.id);
       move(oldIndex, newIndex);
+    }
+  }
+
+  /**
+   * togglePublicQuestionVisibility
+   * pt-BR: Liga/desliga a exibição de uma pergunta pública em cada etapa.
+   * en-US: Toggles the visibility of a public question for each step.
+   */
+  function togglePublicQuestionVisibility(stage: 'signature' | 'approval', key: string, checked: boolean) {
+    const fieldName = stage === 'signature'
+      ? 'config.public_signature_questions'
+      : 'config.public_approval_questions';
+    const requiredFieldName = stage === 'signature'
+      ? 'config.public_signature_required_questions'
+      : 'config.public_approval_required_questions';
+    const current = form.getValues(fieldName) ?? [];
+    const sanitized = current.filter((item) => PUBLIC_PROPOSAL_QUESTION_KEYS.includes(item as any));
+    const next = checked
+      ? Array.from(new Set([...sanitized, key]))
+      : sanitized.filter((item) => item !== key);
+
+    form.setValue(fieldName, next, { shouldDirty: true, shouldValidate: true });
+    if (!checked) {
+      const currentRequired = form.getValues(requiredFieldName) ?? [];
+      form.setValue(
+        requiredFieldName,
+        currentRequired.filter((item) => item !== key),
+        { shouldDirty: true, shouldValidate: true }
+      );
+    }
+
+    if (checked) {
+      const question = PUBLIC_PROPOSAL_QUESTIONS.find((item) => item.key === key);
+      if (question) {
+        togglePublicSectionVisibility(stage, question.section, true);
+      }
+    }
+  }
+
+  /**
+   * togglePublicSectionVisibility
+   * pt-BR: Liga/desliga a exibição de uma seção pública em cada etapa.
+   * en-US: Toggles the visibility of a public section for each step.
+   */
+  function togglePublicSectionVisibility(
+    stage: 'signature' | 'approval',
+    section: 'status' | 'info',
+    checked: boolean
+  ) {
+    const fieldName = stage === 'signature'
+      ? 'config.public_signature_sections'
+      : 'config.public_approval_sections';
+    const current = form.getValues(fieldName)
+      ?? getDefaultPublicProposalSections(stage, form.getValues('tipo'));
+
+    form.setValue(
+      fieldName,
+      { ...current, [section]: checked },
+      { shouldDirty: true, shouldValidate: true }
+    );
+  }
+
+  /**
+   * togglePublicQuestionRequired
+   * pt-BR: Define se uma pergunta visível deve ser opcional ou obrigatória.
+   * en-US: Sets whether a visible question should be optional or required.
+   */
+  function togglePublicQuestionRequired(stage: 'signature' | 'approval', key: string, checked: boolean) {
+    const fieldName = stage === 'signature'
+      ? 'config.public_signature_required_questions'
+      : 'config.public_approval_required_questions';
+    const current = form.getValues(fieldName) ?? [];
+    const sanitized = current.filter((item) => PUBLIC_PROPOSAL_QUESTION_KEYS.includes(item as any));
+    const next = checked
+      ? Array.from(new Set([...sanitized, key]))
+      : sanitized.filter((item) => item !== key);
+
+    form.setValue(fieldName, next, { shouldDirty: true, shouldValidate: true });
+    if (checked) {
+      togglePublicQuestionVisibility(stage, key, true);
     }
   }
 
@@ -402,6 +508,12 @@ export function CourseForm({
         pagina_venda: c.config?.pagina_venda ?? { link: '', label: '' },
         adc: c.config?.adc ?? { recheck: 'n', recorrente: 'n', cor: 'FFFFFF' },
         ead: c.config?.ead ?? { id_eadcontrol: '' },
+        public_signature_questions: c.config?.public_signature_questions ?? getDefaultPublicProposalQuestions('signature', c.tipo),
+        public_approval_questions: c.config?.public_approval_questions ?? getDefaultPublicProposalQuestions('approval', c.tipo),
+        public_signature_required_questions: c.config?.public_signature_required_questions ?? getDefaultPublicProposalRequiredQuestions('signature', c.tipo),
+        public_approval_required_questions: c.config?.public_approval_required_questions ?? getDefaultPublicProposalRequiredQuestions('approval', c.tipo),
+        public_signature_sections: c.config?.public_signature_sections ?? getDefaultPublicProposalSections('signature', c.tipo),
+        public_approval_sections: c.config?.public_approval_sections ?? getDefaultPublicProposalSections('approval', c.tipo),
       },
       aeronaves: c.aeronaves ?? [],
       modulos: c.modulos ?? [],
@@ -420,6 +532,15 @@ export function CourseForm({
       form.setValue('titulo', nome, { shouldValidate: false });
     }
   }, [form.watch('nome')]);
+
+  const publicSignatureQuestions = form.watch('config.public_signature_questions') ?? [];
+  const publicApprovalQuestions = form.watch('config.public_approval_questions') ?? [];
+  const publicSignatureRequiredQuestions = form.watch('config.public_signature_required_questions') ?? [];
+  const publicApprovalRequiredQuestions = form.watch('config.public_approval_required_questions') ?? [];
+  const publicSignatureSections = form.watch('config.public_signature_sections')
+    ?? getDefaultPublicProposalSections('signature', form.watch('tipo'));
+  const publicApprovalSections = form.watch('config.public_approval_sections')
+    ?? getDefaultPublicProposalSections('approval', form.watch('tipo'));
 
   // Aeronaves para seleção
   const aircraftsQuery = useQuery({
@@ -780,6 +901,113 @@ export function CourseForm({
                   </Select>
                 </div>
                 <div className="space-y-2"><Label>Comissão</Label><Input placeholder="3,00" {...form.register('config.comissao')} /></div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Seções e Perguntas Públicas</CardTitle>
+                <CardDescription>
+                  Defina quais seções e perguntas aparecem no fluxo público de assinatura: etapa 1 de conferência e etapa 2 de aprovação.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-12 gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="col-span-8">Seção</div>
+                    <div className="col-span-2 text-center">Assinatura 1</div>
+                    <div className="col-span-2 text-center">Assinatura 2</div>
+                  </div>
+
+                  {PUBLIC_PROPOSAL_SECTIONS.map((section) => (
+                    <div
+                      key={section.key}
+                      className="grid grid-cols-12 gap-2 items-center rounded-lg border px-3 py-3"
+                    >
+                      <div className="col-span-12 md:col-span-8">
+                        <div className="text-sm font-medium">{section.label}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Controla a exibição do título e do grupo de perguntas desta seção.
+                        </div>
+                      </div>
+                      <div className="col-span-6 md:col-span-2 flex items-center justify-center">
+                        <Checkbox
+                          checked={Boolean(publicSignatureSections[section.key])}
+                          onCheckedChange={(checked) => togglePublicSectionVisibility('signature', section.key, Boolean(checked))}
+                        />
+                      </div>
+                      <div className="col-span-6 md:col-span-2 flex items-center justify-center">
+                        <Checkbox
+                          checked={Boolean(publicApprovalSections[section.key])}
+                          onCheckedChange={(checked) => togglePublicSectionVisibility('approval', section.key, Boolean(checked))}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Separator />
+
+                <div className="grid grid-cols-12 gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="col-span-8">Pergunta</div>
+                  <div className="col-span-2 text-center">Assinatura 1</div>
+                  <div className="col-span-2 text-center">Assinatura 2</div>
+                </div>
+
+                <div className="space-y-2">
+                  {PUBLIC_PROPOSAL_QUESTIONS.map((question) => {
+                    const signatureChecked = publicSignatureQuestions.includes(question.key);
+                    const approvalChecked = publicApprovalQuestions.includes(question.key);
+                    const signatureRequired = publicSignatureRequiredQuestions.includes(question.key);
+                    const approvalRequired = publicApprovalRequiredQuestions.includes(question.key);
+
+                    return (
+                      <div
+                        key={question.key}
+                        className="grid grid-cols-12 gap-2 items-center rounded-lg border px-3 py-3"
+                      >
+                        <div className="col-span-12 md:col-span-8">
+                          <div className="text-sm font-medium">{question.label}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {question.section === 'status' ? 'Situação atual' : 'Informações passadas'}
+                          </div>
+                        </div>
+                        <div className="col-span-6 md:col-span-2 flex flex-col items-center justify-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={signatureChecked}
+                              onCheckedChange={(checked) => togglePublicQuestionVisibility('signature', question.key, Boolean(checked))}
+                            />
+                            <span className="text-xs text-muted-foreground">Exibir</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={signatureRequired}
+                              onCheckedChange={(checked) => togglePublicQuestionRequired('signature', question.key, Boolean(checked))}
+                            />
+                            <span className="text-xs text-muted-foreground">Obrig.</span>
+                          </div>
+                        </div>
+                        <div className="col-span-6 md:col-span-2 flex flex-col items-center justify-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={approvalChecked}
+                              onCheckedChange={(checked) => togglePublicQuestionVisibility('approval', question.key, Boolean(checked))}
+                            />
+                            <span className="text-xs text-muted-foreground">Exibir</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={approvalRequired}
+                              onCheckedChange={(checked) => togglePublicQuestionRequired('approval', question.key, Boolean(checked))}
+                            />
+                            <span className="text-xs text-muted-foreground">Obrig.</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
 

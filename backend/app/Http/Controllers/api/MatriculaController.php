@@ -817,10 +817,67 @@ class MatriculaController extends Controller
             return;
         }
         foreach ($meta as $metaKey => $metaValue) {
-            if ($metaKey !== null && $metaKey !== '' && $metaValue !== null && $metaValue !== '') {
+            if ($metaKey === null || $metaKey === '' || $metaValue === null) {
+                continue;
+            }
+
+            if (is_bool($metaValue)) {
+                Qlib::update_matriculameta($matriculaId, $metaKey, $metaValue ? '1' : '0');
+                continue;
+            }
+
+            if (is_array($metaValue)) {
+                Qlib::update_matriculameta($matriculaId, $metaKey, json_encode($metaValue, JSON_UNESCAPED_UNICODE));
+                continue;
+            }
+
+            if ($metaValue !== '') {
                 Qlib::update_matriculameta($matriculaId, $metaKey, (string) $metaValue);
             }
         }
+    }
+
+    /**
+     * extractPublicAdministrationMeta
+     * PT-BR: Extrai apenas os campos operacionais enviados no formulário público,
+     *        preservando valores falsos explícitos sem sobrescrever campos ausentes.
+     * EN: Extracts only operational fields sent by the public form, preserving
+     *      explicit false values without overwriting absent fields.
+     */
+    private function extractPublicAdministrationMeta(Request $request): array
+    {
+        $booleanFields = [
+            'foi_transferido',
+            'cma_em_dia',
+            'possui_banca',
+            'aluno_ciente_taxa_manutencao_alojamento',
+            'aluno_ciente_hora_seca',
+            'aluno_ciente_headset',
+            'aluno_ciente_prazo_estimado',
+            'aluno_ciente_limite_c150',
+            'aluno_ciente_documentacao_ground_school',
+            'aluno_ciente_uniforme',
+        ];
+
+        $stringFields = [
+            'classe_cma',
+        ];
+
+        $meta = [];
+
+        foreach ($booleanFields as $field) {
+            if ($request->exists($field)) {
+                $meta[$field] = $request->boolean($field);
+            }
+        }
+
+        foreach ($stringFields as $field) {
+            if ($request->exists($field)) {
+                $meta[$field] = $request->input($field);
+            }
+        }
+
+        return $meta;
     }
 
     /**
@@ -1400,7 +1457,7 @@ class MatriculaController extends Controller
 
         // Consulta principal usando relacionamentos Eloquent e eager loading
         $matricula = Matricula::with([
-                'curso:id,nome,tipo',
+                'curso:id,nome,tipo,config',
                 'turma:id,nome',
                 'cliente:id,name,email,cpf,celular,config,preferencias,ativo,permission_id,created_at,updated_at,autor',
                 'funnel:id,name',
@@ -1434,7 +1491,447 @@ class MatriculaController extends Controller
         $link = '/aluno/matricula/'.$matricula['id_cliente'].'_'.Qlib::zerofill($matricula['id'],5).'/1';
         $data['link_orcamento'] = Qlib::qoption('front_url') . $link;
         $data['link_assinatura'] = Qlib::qoption('front_url') . str_replace('matricula','assinatura',$link);
+        $data['administration_text'] = $this->buildAdministrationText($data);
+        $data['administration_text_available'] = !empty($data['administration_text']);
         return $data;
+    }
+
+    /**
+     * buildAdministrationText
+     * PT-BR: Gera o texto operacional de administração para propostas já matriculadas
+     *        em cursos do tipo 2, usando dados da matrícula, cliente e metacampos.
+     * EN: Builds the administration operational text for already enrolled proposals
+     *      in course type 2, using enrollment, client and meta fields.
+     */
+    private function buildAdministrationText(array $data): ?string
+    {
+        if ((string) ($data['curso_tipo'] ?? '') !== '2' || (string) ($data['status'] ?? '') !== 'g') {
+            return null;
+        }
+
+        $client = is_array($data['cliente'] ?? null) ? $data['cliente'] : [];
+        $clientConfig = is_array($client['config'] ?? null) ? $client['config'] : [];
+        $meta = is_array($data['meta'] ?? null) ? $data['meta'] : [];
+        $proposalMeta = is_array($meta['proposta'] ?? null) ? $meta['proposta'] : [];
+
+        $nomeCompleto = $this->formatAdministrationTextValue($client['name'] ?? $data['cliente_nome'] ?? '');
+        $email = $this->formatAdministrationTextValue($client['email'] ?? '');
+        $telefone = $this->formatAdministrationTextValue($client['celular'] ?? $clientConfig['celular'] ?? '');
+        $cpf = $this->formatAdministrationTextValue($client['cpf'] ?? '');
+        $cursoNome = $this->formatAdministrationTextValue($data['curso_nome'] ?? '');
+        $turmaNome = $this->formatAdministrationTextValue($data['turma_nome'] ?? '');
+        $valorProposta = $this->formatAdministrationMoney($data['total'] ?? null);
+        $dataVenda = $this->formatAdministrationDate($meta['data_ganho'] ?? $data['data'] ?? null);
+        $quantidadeHoras = $this->resolveAdministrationHours($data);
+        $formaPagamento = $this->formatAdministrationTextValue($proposalMeta['forma_pagamento'] ?? '');
+        $leadProspectado = $this->formatAdministrationTextValue($proposalMeta['lead_prospectado'] ?? '');
+        $vendedor = $this->formatAdministrationTextValue($data['consultor']['name'] ?? $data['autor_name'] ?? '');
+        $parcelamentos = is_array($data['parcelamentos'] ?? null) ? $data['parcelamentos'] : [];
+        $linkGuru = $this->formatAdministrationTextValue(
+            $meta['link_guru']
+                ?? $proposalMeta['link_guru']
+                ?? $clientConfig['link_guru']
+                ?? ''
+        );
+        $resumoFinanceiro = [
+            ' Status financeiro: ' . $this->formatAdministrationFinancialStatus($meta['financeiro_status_ganho'] ?? ''),
+            ' Valor negociado: ' . $this->formatAdministrationMoney($meta['valor_negociado_ganho'] ?? $data['total'] ?? null),
+            ' Valor de entrada: ' . $this->formatAdministrationMoney($meta['valor_entrada_ganho'] ?? ''),
+            ' Valor recebido: ' . $this->formatAdministrationMoney($meta['valor_recebido_ganho'] ?? ($meta['valor_pago'] ?? '')),
+            ' Saldo em aberto: ' . $this->formatAdministrationMoney($meta['saldo_ganho'] ?? ''),
+            ' Parcelamento(s): ' . $this->formatAdministrationTextValue($this->resolveAdministrationInstallmentsSummary($parcelamentos, $proposalMeta)),
+        ];
+
+        $foiTransferido = $this->formatAdministrationBoolean(
+            $this->resolveAdministrationField(
+                [$meta, $clientConfig],
+                ['foi_transferido', 'transferido']
+            )
+        );
+        $cmaEmDia = $this->formatAdministrationBoolean(
+            $this->resolveAdministrationField(
+                [$meta, $clientConfig],
+                ['cma_em_dia', 'cma_dia']
+            )
+        );
+        $classeCma = $this->formatAdministrationTextValue(
+            $this->resolveAdministrationField(
+                [$meta, $clientConfig],
+                ['classe_cma', 'cma_classe']
+            )
+        );
+        $possuiBanca = $this->formatAdministrationBoolean(
+            $this->resolveAdministrationField(
+                [$meta, $clientConfig],
+                ['possui_banca', 'possue_banca', 'banca']
+            )
+        );
+
+        $informacoesPassadas = [
+            'Aluno ciente da taxa de manutenção do alojamento.' => ['aluno_ciente_taxa_manutencao_alojamento', 'ciente_taxa_manutencao_alojamento', 'taxa_manutencao_alojamento'],
+            'Aluno ciente da hora seca.' => ['aluno_ciente_hora_seca', 'ciente_hora_seca', 'hora_seca'],
+            'Aluno ciente que tem que trazer seu próprio headset.' => ['aluno_ciente_headset', 'ciente_headset', 'headset'],
+            'Aluno ciente que o prazo informado para conclusão do curso é um estimado, podendo sofrer variações de acordo com o próprio desempenho do aluno, condições meteorológicas e necessidades de manutenções preventivas e corretivas.' => ['aluno_ciente_prazo_estimado', 'ciente_prazo_estimado', 'prazo_estimado'],
+            'Aluno ciente que para voar no C150/C152 deverá ter no máximo 1,90 de altura e 100kg.' => ['aluno_ciente_limite_c150', 'ciente_limite_c150', 'limite_c150'],
+            'Aluno ciente e concorda que para início do Ground School e das horas de voo estão condicionados à entrega prévia de todos os documentos pessoais exigidos pela instituição. Para alunos transferidos, será obrigatória, além da documentação de praxe, a apresentação da carta de transferência e dos documentos de títulos correspondentes. O não cumprimento desta exigência impedirá o início das atividades acadêmicas e práticas até que a documentação seja devidamente regularizada.' => ['aluno_ciente_documentacao_ground_school', 'ciente_documentacao_ground_school', 'documentacao_ground_school'],
+            'Aluno ciente que é obrigatório o uso de uniforme para realizar as horas práticas de voo (Link para adquirir o uniforme: https://www.reserva.ink/acjf/collections/uniformes).' => ['aluno_ciente_uniforme', 'ciente_uniforme', 'uniforme'],
+        ];
+
+        $lines = [
+            'Informações da proposta',
+            ' -------- ',
+            ' Nome completo: ' . $nomeCompleto,
+            ' Curso adquirido: ' . $cursoNome,
+            ' Quantidade de horas: ' . $quantidadeHoras,
+            ' Turma: ' . $turmaNome,
+            ' Valor da proposta: ' . $valorProposta,
+            ' Link da proposta: ' . $this->formatAdministrationTextValue($data['link_orcamento'] ?? ''),
+            ' ID cliente: ' . $this->formatAdministrationTextValue($data['id_cliente'] ?? ''),
+            ' ID matrícula: ' . $this->formatAdministrationTextValue($data['id'] ?? ''),
+            ' Forma de pagamento: ' . $formaPagamento,
+            ' Lead prospectado por SDR: ' . $leadProspectado,
+            ' Vendedor: ' . $vendedor,
+            ' Data da venda: ' . $dataVenda,
+            ' Link do guru: ' . $linkGuru,
+            ' ',
+            ' Resumo financeiro ',
+            ' -------- ',
+            ...$resumoFinanceiro,
+            ' ',
+            ' -------- ',
+            ' Nome completo: ' . $nomeCompleto,
+            ' Email: ' . $email,
+            ' País de origem: ' . $this->formatAdministrationTextValue($clientConfig['pais_origem'] ?? 'Brasil'),
+            ' Telefone: ' . $telefone,
+            ' Data de nascimento: ' . $this->formatAdministrationDate($clientConfig['nascimento'] ?? $client['nascimento'] ?? null),
+            ' CPF: ' . $cpf,
+            ' CANAC: ' . $this->formatAdministrationTextValue($clientConfig['canac'] ?? ''),
+            ' RG: ' . $this->formatAdministrationTextValue($clientConfig['identidade'] ?? $clientConfig['rg'] ?? ''),
+            ' CEP: ' . $this->formatAdministrationTextValue($clientConfig['cep'] ?? ''),
+            ' Endereço: ' . $this->formatAdministrationTextValue($clientConfig['endereco'] ?? ''),
+            ' Numero: ' . $this->formatAdministrationTextValue($clientConfig['numero'] ?? ''),
+            ' Complemento: ' . $this->formatAdministrationTextValue($clientConfig['complemento'] ?? ''),
+            ' Bairro: ' . $this->formatAdministrationTextValue($clientConfig['bairro'] ?? ''),
+            ' Cidade: ' . $this->formatAdministrationTextValue($clientConfig['cidade'] ?? ''),
+            ' Estado: ' . $this->formatAdministrationTextValue($clientConfig['estado'] ?? ''),
+            ' nacionalidade: ' . $this->formatAdministrationTextValue($clientConfig['nacionalidade'] ?? ''),
+            ' profissao: ' . $this->formatAdministrationTextValue($clientConfig['profissao'] ?? ''),
+            ' Sexo: ' . $this->formatAdministrationTextValue($clientConfig['sexo'] ?? $client['genero'] ?? ''),
+            ' Altura: ' . $this->formatAdministrationHeight($clientConfig['altura'] ?? ''),
+            ' Peso: ' . $this->formatAdministrationWeight($clientConfig['peso'] ?? ''),
+            ' ',
+            ' Situação atual ',
+            ' -------- ',
+            ' Foi transferido: ' . $foiTransferido,
+            ' CMA em dia: ' . $cmaEmDia,
+            ' Classe do CMA: ' . $classeCma,
+            ' Possue banca: ' . $possuiBanca,
+            ' ',
+            ' Informações passadas ',
+            ' -------- ',
+        ];
+
+        foreach ($informacoesPassadas as $label => $keys) {
+            $lines[] = ' ' . $label . ' ' . $this->formatAdministrationBoolean(
+                $this->resolveAdministrationField([$meta, $clientConfig], $keys)
+            );
+            $lines[] = ' ';
+        }
+
+        $lines[] = ' Altura: ' . $this->formatAdministrationHeight($clientConfig['altura'] ?? '');
+        $lines[] = ' Peso: ' . $this->formatAdministrationWeight($clientConfig['peso'] ?? '');
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * formatAdministrationFinancialStatus
+     * PT-BR: Traduz o status financeiro interno para um rótulo legível no texto administrativo.
+     * EN: Translates the internal financial status into a readable label for the administration text.
+     */
+    private function formatAdministrationFinancialStatus(mixed $value): string
+    {
+        $normalized = strtolower(trim((string) $value));
+
+        return match ($normalized) {
+            'paid' => 'Pago',
+            'partial' => 'Parcial',
+            'pending' => 'Pendente',
+            'overdue' => 'Vencido',
+            'cancelled', 'canceled' => 'Cancelado',
+            default => $this->formatAdministrationTextValue($value),
+        };
+    }
+
+    /**
+     * resolveAdministrationInstallmentsSummary
+     * PT-BR: Monta um resumo legível dos parcelamentos vinculados ao curso/proposta.
+     * EN: Builds a readable summary of installments linked to the course/proposal.
+     */
+    private function resolveAdministrationInstallmentsSummary(array $parcelamentos, array $proposalMeta = []): string
+    {
+        $labels = [];
+
+        foreach ($parcelamentos as $parcelamento) {
+            if (!is_array($parcelamento)) {
+                continue;
+            }
+
+            $label = trim((string) (
+                $parcelamento['nome']
+                ?? $parcelamento['title']
+                ?? $parcelamento['titulo']
+                ?? $parcelamento['descricao']
+                ?? $parcelamento['description']
+                ?? ''
+            ));
+
+            if ($label !== '') {
+                $labels[] = $label;
+            }
+        }
+
+        if (count($labels) > 0) {
+            return implode(' | ', array_values(array_unique($labels)));
+        }
+
+        $fallbackKeys = [
+            'parcelamento',
+            'parcelamentos',
+            'parcelamento_nome',
+            'parcelamento_descricao',
+        ];
+
+        foreach ($fallbackKeys as $key) {
+            $value = $proposalMeta[$key] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                return trim($value);
+            }
+            if (is_array($value)) {
+                $flat = array_values(array_filter(array_map(function ($item) {
+                    if (is_scalar($item)) {
+                        return trim((string) $item);
+                    }
+
+                    return '';
+                }, $value)));
+
+                if (count($flat) > 0) {
+                    return implode(' | ', $flat);
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * resolveAdministrationField
+     * PT-BR: Procura a primeira chave preenchida em uma lista de fontes de dados.
+     * EN: Looks up the first filled key across a list of data sources.
+     */
+    private function resolveAdministrationField(array $sources, array $keys): mixed
+    {
+        foreach ($sources as $source) {
+            if (!is_array($source)) {
+                continue;
+            }
+            foreach ($keys as $key) {
+                if (array_key_exists($key, $source) && $source[$key] !== null && $source[$key] !== '') {
+                    return $source[$key];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * resolveAdministrationHours
+     * PT-BR: Resolve a quantidade de horas exibida no texto administrativo a partir
+     *        do orçamento, módulo selecionado ou duração do curso.
+     * EN: Resolves the hours quantity shown in the administration text from the
+     *      budget, selected module or course duration.
+     */
+    private function resolveAdministrationHours(array $data): string
+    {
+        $orc = is_array($data['orc'] ?? null) ? $data['orc'] : [];
+        $modules = is_array($orc['modulos'] ?? null) ? $orc['modulos'] : [];
+        $module = is_array($modules[0] ?? null) ? $modules[0] : [];
+
+        $totalCredits = 0.0;
+        foreach ($modules as $currentModule) {
+            if (!is_array($currentModule)) {
+                continue;
+            }
+
+            $stage = strtolower(trim((string) ($currentModule['etapa'] ?? '')));
+            $normalizedStage = str_replace([' ', '_'], '', $stage);
+            if ($normalizedStage === 'etapa1') {
+                continue;
+            }
+
+            $credits = $currentModule['limite'] ?? null;
+            if ($credits !== null && $credits !== '' && is_numeric($credits)) {
+                $totalCredits += (float) $credits;
+            }
+        }
+
+        if ($totalCredits > 0) {
+            return ((int) $totalCredits == $totalCredits)
+                ? (string) ((int) $totalCredits)
+                : (string) $totalCredits;
+        }
+
+        $candidates = [
+            $module['limite_pratico'] ?? null,
+            $module['h_praticas'] ?? null,
+            $module['limite'] ?? null,
+            $module['h_teoricas'] ?? null,
+            $data['curso']['duracao'] ?? null,
+            $data['curso']['carga_horaria'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if ($candidate === null || $candidate === '') {
+                continue;
+            }
+
+            if (is_numeric($candidate)) {
+                $numericCandidate = (float) $candidate;
+
+                return ((int) $numericCandidate == $numericCandidate)
+                    ? (string) ((int) $numericCandidate)
+                    : (string) $numericCandidate;
+            }
+
+            return trim((string) $candidate);
+        }
+
+        return '';
+    }
+
+    /**
+     * formatAdministrationMoney
+     * PT-BR: Formata um valor monetário em BRL para o texto administrativo.
+     * EN: Formats a monetary amount in BRL for the administration text.
+     */
+    private function formatAdministrationMoney(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        if (is_numeric($value)) {
+            return Qlib::valor_moeda((float) $value, 'R$');
+        }
+
+        return trim((string) $value);
+    }
+
+    /**
+     * formatAdministrationDate
+     * PT-BR: Normaliza datas para o padrão dd/mm/aaaa no texto administrativo.
+     * EN: Normalizes dates to dd/mm/yyyy for the administration text.
+     */
+    private function formatAdministrationDate(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        try {
+            return Carbon::parse((string) $value)->format('d/m/Y');
+        } catch (\Throwable $e) {
+            return Qlib::dataExibe((string) $value) ?: trim((string) $value);
+        }
+    }
+
+    /**
+     * formatAdministrationBoolean
+     * PT-BR: Converte diferentes representações lógicas para "Sim" ou "Não".
+     * EN: Converts multiple boolean-like representations into "Sim" or "Não".
+     */
+    private function formatAdministrationBoolean(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Sim' : 'Não';
+        }
+
+        $normalized = strtolower(trim((string) $value));
+        if (in_array($normalized, ['1', 's', 'sim', 'true', 'yes', 'y', 'on'], true)) {
+            return 'Sim';
+        }
+
+        if (in_array($normalized, ['0', 'n', 'nao', 'não', 'false', 'no', 'off'], true)) {
+            return 'Não';
+        }
+
+        return trim((string) $value);
+    }
+
+    /**
+     * formatAdministrationHeight
+     * PT-BR: Exibe a altura em centímetros, aceitando entradas em metros ou cm.
+     * EN: Displays height in centimeters, accepting meter or cm inputs.
+     */
+    private function formatAdministrationHeight(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        $number = (float) str_replace(',', '.', preg_replace('/[^\d\.,]/', '', (string) $value));
+        if ($number <= 0) {
+            return trim((string) $value);
+        }
+
+        if ($number < 3) {
+            $number *= 100;
+        }
+
+        return (string) round($number);
+    }
+
+    /**
+     * formatAdministrationWeight
+     * PT-BR: Exibe o peso com a menor transformação possível para manter leitura natural.
+     * EN: Displays weight with minimal transformation to keep natural readability.
+     */
+    private function formatAdministrationWeight(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        $number = (float) str_replace(',', '.', preg_replace('/[^\d\.,]/', '', (string) $value));
+        if ($number <= 0) {
+            return trim((string) $value);
+        }
+
+        return (string) ((int) $number == $number ? (int) $number : $number);
+    }
+
+    /**
+     * formatAdministrationTextValue
+     * PT-BR: Normaliza valores textuais simples para evitar `null` e espaços extras.
+     * EN: Normalizes simple textual values to avoid `null` and extra spaces.
+     */
+    private function formatAdministrationTextValue(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Sim' : 'Não';
+        }
+
+        return trim((string) $value);
     }
     /**
      * Metodo para exibir o numero do contrato
@@ -1804,6 +2301,17 @@ class MatriculaController extends Controller
                 'canac' => 'nullable|string',
                 'identidade' => 'required|string',
                 'pais_origem' => 'required|string',
+                'foi_transferido' => 'nullable|boolean',
+                'cma_em_dia' => 'nullable|boolean',
+                'classe_cma' => 'nullable|string|max:50',
+                'possui_banca' => 'nullable|boolean',
+                'aluno_ciente_taxa_manutencao_alojamento' => 'nullable|boolean',
+                'aluno_ciente_hora_seca' => 'nullable|boolean',
+                'aluno_ciente_headset' => 'nullable|boolean',
+                'aluno_ciente_prazo_estimado' => 'nullable|boolean',
+                'aluno_ciente_limite_c150' => 'nullable|boolean',
+                'aluno_ciente_documentacao_ground_school' => 'nullable|boolean',
+                'aluno_ciente_uniforme' => 'nullable|boolean',
             ];
 
             $validator = Validator::make($request->all(), $rules);
@@ -1899,6 +2407,9 @@ class MatriculaController extends Controller
                 $matConfig['step1_at'] = now()->toDateTimeString();
                 $matricula->config = $matConfig;
                 $matricula->save();
+
+                $this->persistMatriculaMeta($matricula->id, $this->extractPublicAdministrationMeta($request));
+
                 $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('sign'), (string)$client_id, $request->ip(), 'Etapa alterada via publicSign');
                 $clientUser = User::find($client_id);
                 if ($clientUser) {
@@ -2567,6 +3078,20 @@ class MatriculaController extends Controller
     public function publicApprove(Request $request, $client_id, $matricula_id)
     {
         try {
+            $request->validate([
+                'foi_transferido' => 'nullable|boolean',
+                'cma_em_dia' => 'nullable|boolean',
+                'classe_cma' => 'nullable|string|max:50',
+                'possui_banca' => 'nullable|boolean',
+                'aluno_ciente_taxa_manutencao_alojamento' => 'nullable|boolean',
+                'aluno_ciente_hora_seca' => 'nullable|boolean',
+                'aluno_ciente_headset' => 'nullable|boolean',
+                'aluno_ciente_prazo_estimado' => 'nullable|boolean',
+                'aluno_ciente_limite_c150' => 'nullable|boolean',
+                'aluno_ciente_documentacao_ground_school' => 'nullable|boolean',
+                'aluno_ciente_uniforme' => 'nullable|boolean',
+            ]);
+
             $matricula = \App\Models\Matricula::findOrFail($matricula_id);
 
             // Validate Step 1 completion
@@ -2591,6 +3116,7 @@ class MatriculaController extends Controller
             $matricula->config = $config;
 
             $matricula->save();
+            $this->persistMatriculaMeta($matricula->id, $this->extractPublicAdministrationMeta($request));
 
             //mudança de etapa da matricula
             $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('approve'), (string)$client_id, $request->ip(), 'Etapa alterada via publicApprove');

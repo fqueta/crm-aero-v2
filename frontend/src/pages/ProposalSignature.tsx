@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Loader2, Check, ArrowRight, X, CheckCircle, Clock, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
@@ -27,6 +28,14 @@ import {
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  getStudentFacingQuestionLabel,
+  PUBLIC_PROPOSAL_QUESTIONS,
+  PublicProposalQuestionKey,
+  resolvePublicProposalQuestions,
+  resolvePublicProposalRequiredQuestions,
+  resolvePublicProposalSections,
+} from '@/lib/publicProposalQuestions';
 
 const formSchema = z.object({
   name: z.string().min(2, 'Nome é obrigatório'),
@@ -48,10 +57,63 @@ const formSchema = z.object({
   profissao: z.string().min(1, 'Profissão é obrigatória'),
   sexo: z.string().min(1, 'Sexo é obrigatório'),
   altura: z.string().min(1, 'Altura é obrigatória').refine((val) => !isNaN(Number(val)) && Number(val) > 0, 'Altura inválida'),
-  peso: z.string().min(1, 'Peso é obrigatório').refine((val) => !isNaN(Number(val)) && Number(val) > 0, 'Peso inválido')
+  peso: z.string().min(1, 'Peso é obrigatório').refine((val) => !isNaN(Number(val)) && Number(val) > 0, 'Peso inválido'),
+  foi_transferido: z.boolean().optional(),
+  cma_em_dia: z.boolean().optional(),
+  classe_cma: z.string().optional(),
+  possui_banca: z.boolean().optional(),
+  aluno_ciente_taxa_manutencao_alojamento: z.boolean().optional(),
+  aluno_ciente_hora_seca: z.boolean().optional(),
+  aluno_ciente_headset: z.boolean().optional(),
+  aluno_ciente_prazo_estimado: z.boolean().optional(),
+  aluno_ciente_limite_c150: z.boolean().optional(),
+  aluno_ciente_documentacao_ground_school: z.boolean().optional(),
+  aluno_ciente_uniforme: z.boolean().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
+
+/**
+ * normalizeMetaBoolean
+ * pt-BR: Converte valores vindos da API/meta em booleano para hidratar checkboxes.
+ * en-US: Converts API/meta values into booleans to hydrate checkboxes.
+ */
+function normalizeMetaBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return ['1', 'true', 'sim', 's', 'yes', 'on'].includes(normalized);
+}
+
+/**
+ * validateRequiredPublicQuestions
+ * pt-BR: Valida as perguntas obrigatórias configuradas no curso antes do envio.
+ * en-US: Validates required course-configured questions before submit.
+ */
+function validateRequiredPublicQuestions(
+  requiredKeys: PublicProposalQuestionKey[],
+  values: FormData
+): Array<{ key: PublicProposalQuestionKey; message: string }> {
+  const errors: Array<{ key: PublicProposalQuestionKey; message: string }> = [];
+
+  requiredKeys.forEach((key) => {
+    const definition = PUBLIC_PROPOSAL_QUESTIONS.find((question) => question.key === key);
+    if (!definition) return;
+
+    const rawValue = values[key];
+    if (definition.kind === 'select') {
+      if (!String(rawValue ?? '').trim()) {
+        errors.push({ key, message: 'Seleção obrigatória.' });
+      }
+      return;
+    }
+
+    if (Boolean(rawValue) !== true) {
+      errors.push({ key, message: 'Confirmação obrigatória.' });
+    }
+  });
+
+  return errors;
+}
 
 export default function ProposalSignature() {
   const { compositeId } = useParams<{ compositeId: string }>();
@@ -87,7 +149,18 @@ export default function ProposalSignature() {
       profissao: '',
       sexo: '',
       altura: '',
-      peso: ''
+      peso: '',
+      foi_transferido: false,
+      cma_em_dia: false,
+      classe_cma: '',
+      possui_banca: false,
+      aluno_ciente_taxa_manutencao_alojamento: false,
+      aluno_ciente_hora_seca: false,
+      aluno_ciente_headset: false,
+      aluno_ciente_prazo_estimado: false,
+      aluno_ciente_limite_c150: false,
+      aluno_ciente_documentacao_ground_school: false,
+      aluno_ciente_uniforme: false,
     }
   });
 
@@ -141,6 +214,7 @@ export default function ProposalSignature() {
         
         // Populate form with existing client data
         if (data.cliente) {
+          const meta = (data as any)?.meta || {};
           form.reset({
             name: data.cliente.name || '',
             email: data.cliente.email || '',
@@ -170,6 +244,17 @@ export default function ProposalSignature() {
             canac: data.cliente.config?.canac || '',
             altura: data.cliente.config?.altura ? String(data.cliente.config.altura) : '',
             peso: data.cliente.config?.peso ? String(data.cliente.config.peso) : '',
+            foi_transferido: normalizeMetaBoolean(meta?.foi_transferido),
+            cma_em_dia: normalizeMetaBoolean(meta?.cma_em_dia),
+            classe_cma: String(meta?.classe_cma || ''),
+            possui_banca: normalizeMetaBoolean(meta?.possui_banca),
+            aluno_ciente_taxa_manutencao_alojamento: normalizeMetaBoolean(meta?.aluno_ciente_taxa_manutencao_alojamento),
+            aluno_ciente_hora_seca: normalizeMetaBoolean(meta?.aluno_ciente_hora_seca),
+            aluno_ciente_headset: normalizeMetaBoolean(meta?.aluno_ciente_headset),
+            aluno_ciente_prazo_estimado: normalizeMetaBoolean(meta?.aluno_ciente_prazo_estimado),
+            aluno_ciente_limite_c150: normalizeMetaBoolean(meta?.aluno_ciente_limite_c150),
+            aluno_ciente_documentacao_ground_school: normalizeMetaBoolean(meta?.aluno_ciente_documentacao_ground_school),
+            aluno_ciente_uniforme: normalizeMetaBoolean(meta?.aluno_ciente_uniforme),
             sexo: (() => {
               const val = data.cliente.sexo || data.cliente.genero || data.cliente.config?.sexo || '';
               if (['m', 'masculino'].includes(val.toLowerCase())) return 'M';
@@ -210,6 +295,22 @@ export default function ProposalSignature() {
 
     try {
       setLoading(true);
+      const requiredErrors = validateRequiredPublicQuestions(signatureRequiredQuestions, data);
+      if (requiredErrors.length > 0) {
+        requiredErrors.forEach((error) => {
+          form.setError(error.key, { type: 'manual', message: error.message });
+        });
+        toast.error('Preencha as perguntas obrigatórias.');
+        return;
+      }
+      signatureRequiredQuestions.forEach((key) => form.clearErrors(key));
+      const publicQuestionPayload = signatureVisibleQuestions.reduce<Partial<SignProposalData>>((acc, key) => {
+        const value = data[key];
+        if (typeof value !== 'undefined') {
+          (acc as any)[key] = value;
+        }
+        return acc;
+      }, {});
       const cleanData: SignProposalData = {
         ...data,
         name: data.name,
@@ -220,6 +321,7 @@ export default function ProposalSignature() {
         cep: data.cep?.replace(/\D/g, '') || undefined,
         altura: data.altura ? Number(data.altura) : undefined,
         peso: data.peso ? Number(data.peso) : undefined,
+        ...publicQuestionPayload,
       } as SignProposalData;
 
         const response = await proposalService.signProposal(clientId!, matriculaId!, cleanData);
@@ -264,6 +366,28 @@ export default function ProposalSignature() {
       setLoading(false);
     }
   }
+
+  const signatureVisibleQuestions = useMemo<PublicProposalQuestionKey[]>(
+    () => resolvePublicProposalQuestions((proposal as any)?.curso?.config, 'signature', (proposal as any)?.curso_tipo),
+    [proposal]
+  );
+  const signatureRequiredQuestions = useMemo<PublicProposalQuestionKey[]>(
+    () => resolvePublicProposalRequiredQuestions((proposal as any)?.curso?.config, 'signature', (proposal as any)?.curso_tipo),
+    [proposal]
+  );
+  const signatureVisibleSections = useMemo(
+    () => resolvePublicProposalSections((proposal as any)?.curso?.config, 'signature', (proposal as any)?.curso_tipo),
+    [proposal]
+  );
+  const visibleQuestionDefinitions = useMemo(
+    () => PUBLIC_PROPOSAL_QUESTIONS.filter((question) => signatureVisibleQuestions.includes(question.key)),
+    [signatureVisibleQuestions]
+  );
+  const statusQuestions = visibleQuestionDefinitions.filter((question) => question.section === 'status');
+  const infoQuestions = visibleQuestionDefinitions.filter((question) => question.section === 'info');
+  const showStatusSection = signatureVisibleSections.status && statusQuestions.length > 0;
+  const showInfoSection = signatureVisibleSections.info && infoQuestions.length > 0;
+  const showAdministrativeQuestions = showStatusSection || showInfoSection;
 
   if (loading) {
     return (
@@ -737,6 +861,90 @@ export default function ProposalSignature() {
                       />
                      </div>
                   </div>
+
+                  {showAdministrativeQuestions && (
+                    <>
+                      <Separator />
+
+                      {showStatusSection && (
+                        <div className="space-y-4">
+                          <h3 className="font-medium text-lg">Situação Atual</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {statusQuestions.map((question) => (
+                              <FormField
+                                key={question.key}
+                                control={form.control}
+                                name={question.key}
+                                render={({ field }) => (
+                                  question.kind === 'select' ? (
+                                    <FormItem>
+                                      <FormLabel>
+                                        {getStudentFacingQuestionLabel(question.label, question.section)}{signatureRequiredQuestions.includes(question.key) ? ' *' : ''}
+                                      </FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Selecione" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {question.options?.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                              {option.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  ) : (
+                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                      <FormControl>
+                                        <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
+                                      </FormControl>
+                                      <div className="space-y-1 leading-none">
+                                        <FormLabel>{getStudentFacingQuestionLabel(question.label, question.section)}{signatureRequiredQuestions.includes(question.key) ? ' *' : ''}</FormLabel>
+                                        <FormMessage />
+                                      </div>
+                                    </FormItem>
+                                  )
+                                )}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {showInfoSection && (
+                        <>
+                          {showStatusSection && <Separator />}
+                          <div className="space-y-4">
+                            <h3 className="font-medium text-lg">Informações Passadas</h3>
+                            <div className="space-y-3">
+                              {infoQuestions.map((question) => (
+                                <FormField
+                                  key={question.key}
+                                  control={form.control}
+                                  name={question.key}
+                                  render={({ field }) => (
+                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                      <FormControl>
+                                        <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
+                                      </FormControl>
+                                      <div className="space-y-1 leading-none">
+                                        <FormLabel>{getStudentFacingQuestionLabel(question.label, question.section)}{signatureRequiredQuestions.includes(question.key) ? ' *' : ''}</FormLabel>
+                                        <FormMessage />
+                                      </div>
+                                    </FormItem>
+                                  )}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
 
                 </CardContent>
                 <CardFooter className="flex justify-between border-t p-6">

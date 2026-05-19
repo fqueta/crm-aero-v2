@@ -47,6 +47,24 @@ export interface CourseEADConfig {
   id_eadcontrol: string;
 }
 
+export type PublicProposalQuestionKey =
+  | 'foi_transferido'
+  | 'cma_em_dia'
+  | 'classe_cma'
+  | 'possui_banca'
+  | 'aluno_ciente_taxa_manutencao_alojamento'
+  | 'aluno_ciente_hora_seca'
+  | 'aluno_ciente_headset'
+  | 'aluno_ciente_prazo_estimado'
+  | 'aluno_ciente_limite_c150'
+  | 'aluno_ciente_documentacao_ground_school'
+  | 'aluno_ciente_uniforme';
+
+export interface PublicProposalSectionConfig {
+  status: boolean;
+  info: boolean;
+}
+
 /**
  * Configurações diversas do curso (config)
  */
@@ -63,6 +81,12 @@ export interface CourseConfig {
   pagina_venda: CourseSalePage;
   adc: CourseADCConfig;
   ead: CourseEADConfig;
+  public_signature_questions?: PublicProposalQuestionKey[];
+  public_approval_questions?: PublicProposalQuestionKey[];
+  public_signature_required_questions?: PublicProposalQuestionKey[];
+  public_approval_required_questions?: PublicProposalQuestionKey[];
+  public_signature_sections?: PublicProposalSectionConfig;
+  public_approval_sections?: PublicProposalSectionConfig;
 }
 
 /**

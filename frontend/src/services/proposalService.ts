@@ -52,6 +52,17 @@ export interface SignProposalData {
   sexo?: string;
   altura?: number;
   peso?: number;
+  foi_transferido?: boolean;
+  cma_em_dia?: boolean;
+  classe_cma?: string;
+  possui_banca?: boolean;
+  aluno_ciente_taxa_manutencao_alojamento?: boolean;
+  aluno_ciente_hora_seca?: boolean;
+  aluno_ciente_headset?: boolean;
+  aluno_ciente_prazo_estimado?: boolean;
+  aluno_ciente_limite_c150?: boolean;
+  aluno_ciente_documentacao_ground_school?: boolean;
+  aluno_ciente_uniforme?: boolean;
 }
 
 class ProposalService extends BaseApiService {
@@ -63,8 +74,8 @@ class ProposalService extends BaseApiService {
     return this.post(`/proposal/${clientId}/${matriculaId}/sign`, data);
   }
 
-  async approveProposal(clientId: string, matriculaId: string) {
-    return this.post(`/proposal/${clientId}/${matriculaId}/approve`, {});
+  async approveProposal(clientId: string, matriculaId: string, data: Partial<SignProposalData> = {}) {
+    return this.post(`/proposal/${clientId}/${matriculaId}/approve`, data);
   }
 
   async getContractsHtml(clientId: string, matriculaId: string) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,6 +12,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { proposalService } from "@/services/proposalService";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  getStudentFacingQuestionLabel,
+  PUBLIC_PROPOSAL_QUESTIONS,
+  PublicProposalQuestionKey,
+  resolvePublicProposalQuestions,
+  resolvePublicProposalRequiredQuestions,
+  resolvePublicProposalSections,
+} from "@/lib/publicProposalQuestions";
 
 import { cpfApplyMask } from "@/lib/masks/cpf-apply-mask";
 import { phoneApplyMask } from "@/lib/masks/phone-apply-mask";
@@ -39,10 +48,62 @@ const formatDate = (dateString?: string) => {
 };
 
 const formSchema = z.object({
-  // regrasGerais: z.boolean().refine(val => val === true, "Você deve concordar com as Regras Gerais."),
+  foi_transferido: z.boolean().optional(),
+  cma_em_dia: z.boolean().optional(),
+  classe_cma: z.string().optional(),
+  possui_banca: z.boolean().optional(),
+  aluno_ciente_taxa_manutencao_alojamento: z.boolean().optional(),
+  aluno_ciente_hora_seca: z.boolean().optional(),
+  aluno_ciente_headset: z.boolean().optional(),
+  aluno_ciente_prazo_estimado: z.boolean().optional(),
+  aluno_ciente_limite_c150: z.boolean().optional(),
+  aluno_ciente_documentacao_ground_school: z.boolean().optional(),
+  aluno_ciente_uniforme: z.boolean().optional(),
 });
 
 type ApprovalFormData = z.infer<typeof formSchema>;
+
+/**
+ * normalizeMetaBoolean
+ * pt-BR: Converte valores vindos do backend para booleanos compatíveis com checkboxes.
+ * en-US: Converts backend values into booleans compatible with checkboxes.
+ */
+function normalizeMetaBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return ['1', 'true', 'sim', 's', 'yes', 'on'].includes(normalized);
+}
+
+/**
+ * validateRequiredApprovalQuestions
+ * pt-BR: Valida perguntas obrigatórias da etapa pública de aprovação.
+ * en-US: Validates required questions for the public approval step.
+ */
+function validateRequiredApprovalQuestions(
+  requiredKeys: PublicProposalQuestionKey[],
+  values: ApprovalFormData
+): Array<{ key: PublicProposalQuestionKey; message: string }> {
+  const errors: Array<{ key: PublicProposalQuestionKey; message: string }> = [];
+
+  requiredKeys.forEach((key) => {
+    const definition = PUBLIC_PROPOSAL_QUESTIONS.find((question) => question.key === key);
+    if (!definition) return;
+
+    const rawValue = values[key];
+    if (definition.kind === 'select') {
+      if (!String(rawValue ?? '').trim()) {
+        errors.push({ key, message: 'Seleção obrigatória.' });
+      }
+      return;
+    }
+
+    if (Boolean(rawValue) !== true) {
+      errors.push({ key, message: 'Confirmação obrigatória.' });
+    }
+  });
+
+  return errors;
+}
 
 export default function ProposalApproval() {
   const { compositeId } = useParams<{ compositeId: string }>();
@@ -57,7 +118,17 @@ export default function ProposalApproval() {
   const form = useForm<ApprovalFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      // regrasGerais: false,
+      foi_transferido: false,
+      cma_em_dia: false,
+      classe_cma: '',
+      possui_banca: false,
+      aluno_ciente_taxa_manutencao_alojamento: false,
+      aluno_ciente_hora_seca: false,
+      aluno_ciente_headset: false,
+      aluno_ciente_prazo_estimado: false,
+      aluno_ciente_limite_c150: false,
+      aluno_ciente_documentacao_ground_school: false,
+      aluno_ciente_uniforme: false,
     },
   });
 
@@ -79,6 +150,20 @@ export default function ProposalApproval() {
         ]);
         
         setProposal(data);
+        const meta = (data as any)?.meta || {};
+        form.reset({
+          foi_transferido: normalizeMetaBoolean(meta?.foi_transferido),
+          cma_em_dia: normalizeMetaBoolean(meta?.cma_em_dia),
+          classe_cma: String(meta?.classe_cma || ''),
+          possui_banca: normalizeMetaBoolean(meta?.possui_banca),
+          aluno_ciente_taxa_manutencao_alojamento: normalizeMetaBoolean(meta?.aluno_ciente_taxa_manutencao_alojamento),
+          aluno_ciente_hora_seca: normalizeMetaBoolean(meta?.aluno_ciente_hora_seca),
+          aluno_ciente_headset: normalizeMetaBoolean(meta?.aluno_ciente_headset),
+          aluno_ciente_prazo_estimado: normalizeMetaBoolean(meta?.aluno_ciente_prazo_estimado),
+          aluno_ciente_limite_c150: normalizeMetaBoolean(meta?.aluno_ciente_limite_c150),
+          aluno_ciente_documentacao_ground_school: normalizeMetaBoolean(meta?.aluno_ciente_documentacao_ground_school),
+          aluno_ciente_uniforme: normalizeMetaBoolean(meta?.aluno_ciente_uniforme),
+        });
         if (Array.isArray(contractsData)) {
             setContracts(contractsData);
         } else {
@@ -105,14 +190,27 @@ export default function ProposalApproval() {
       }
     }
     loadData();
-  }, [id_cliente, id_matricula, navigate]);
+  }, [form, id_cliente, id_matricula, navigate]);
 
   const onSubmit = async (data: ApprovalFormData) => {
     if (!id_cliente || !id_matricula) return;
     
     setSubmitting(true);
     try {
-        const resp: any = await proposalService.approveProposal(id_cliente, id_matricula);
+        const requiredErrors = validateRequiredApprovalQuestions(approvalRequiredQuestions, data);
+        if (requiredErrors.length > 0) {
+          requiredErrors.forEach((error) => {
+            form.setError(error.key, { type: 'manual', message: error.message });
+          });
+          toast.error('Preencha as perguntas obrigatórias.');
+          return;
+        }
+        approvalRequiredQuestions.forEach((key) => form.clearErrors(key));
+        const payload = approvalVisibleQuestions.reduce<Partial<ApprovalFormData>>((acc, key) => {
+          acc[key] = data[key];
+          return acc;
+        }, {});
+        const resp: any = await proposalService.approveProposal(id_cliente, id_matricula, payload);
         if (resp?.redirect) {
           window.location.href = resp.redirect;
           return;
@@ -130,6 +228,29 @@ export default function ProposalApproval() {
         setSubmitting(false);
     }
   };
+
+  const step2Done = proposal?.config?.step2_done;
+  const approvalVisibleQuestions = useMemo<PublicProposalQuestionKey[]>(
+    () => resolvePublicProposalQuestions((proposal as any)?.curso?.config, 'approval', (proposal as any)?.curso_tipo),
+    [proposal]
+  );
+  const approvalRequiredQuestions = useMemo<PublicProposalQuestionKey[]>(
+    () => resolvePublicProposalRequiredQuestions((proposal as any)?.curso?.config, 'approval', (proposal as any)?.curso_tipo),
+    [proposal]
+  );
+  const approvalVisibleSections = useMemo(
+    () => resolvePublicProposalSections((proposal as any)?.curso?.config, 'approval', (proposal as any)?.curso_tipo),
+    [proposal]
+  );
+  const visibleQuestionDefinitions = useMemo(
+    () => PUBLIC_PROPOSAL_QUESTIONS.filter((question) => approvalVisibleQuestions.includes(question.key)),
+    [approvalVisibleQuestions]
+  );
+  const statusQuestions = visibleQuestionDefinitions.filter((question) => question.section === 'status');
+  const infoQuestions = visibleQuestionDefinitions.filter((question) => question.section === 'info');
+  const showStatusSection = approvalVisibleSections.status && statusQuestions.length > 0;
+  const showInfoSection = approvalVisibleSections.info && infoQuestions.length > 0;
+  const showApprovalQuestions = showStatusSection || showInfoSection;
 
   if (loading) {
     return (
@@ -150,9 +271,6 @@ export default function ProposalApproval() {
       </div>
     );
   }
-  
-  const step2Done = proposal.config?.step2_done;
-
   if (step2Done) {
       return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -394,6 +512,94 @@ export default function ProposalApproval() {
             <div className="mt-8">
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                        {showApprovalQuestions && (
+                          <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
+                            <div className="bg-slate-50/50 p-6 border-b border-slate-100">
+                              <h2 className="text-lg font-semibold text-slate-900">Confirmações Adicionais</h2>
+                              <p className="text-sm text-slate-500">
+                                Responda às perguntas configuradas para concluir a aprovação da proposta.
+                              </p>
+                            </div>
+                            <CardContent className="p-6 md:p-8 space-y-8">
+                              {showStatusSection && (
+                                <div className="space-y-4">
+                                  <h3 className="font-medium text-lg">Situação Atual</h3>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {statusQuestions.map((question) => (
+                                      <FormField
+                                        key={question.key}
+                                        control={form.control}
+                                        name={question.key}
+                                        render={({ field }) => (
+                                          question.kind === 'select' ? (
+                                            <FormItem>
+                                              <FormLabel>
+                                                {getStudentFacingQuestionLabel(question.label, question.section)}{approvalRequiredQuestions.includes(question.key) ? ' *' : ''}
+                                              </FormLabel>
+                                              <Select onValueChange={field.onChange} value={field.value || ""}>
+                                                <FormControl>
+                                                  <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione" />
+                                                  </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                  {question.options?.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                      {option.label}
+                                                    </SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                              <FormMessage />
+                                            </FormItem>
+                                          ) : (
+                                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                              <FormControl>
+                                                <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
+                                              </FormControl>
+                                              <div className="space-y-1 leading-none">
+                                                <FormLabel>{getStudentFacingQuestionLabel(question.label, question.section)}{approvalRequiredQuestions.includes(question.key) ? ' *' : ''}</FormLabel>
+                                                <FormMessage />
+                                              </div>
+                                            </FormItem>
+                                          )
+                                        )}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {showInfoSection && (
+                                <div className="space-y-4">
+                                  {showStatusSection && <div className="border-t border-slate-100 pt-8" />}
+                                  <h3 className="font-medium text-lg">Informações Passadas</h3>
+                                  <div className="space-y-3">
+                                    {infoQuestions.map((question) => (
+                                      <FormField
+                                        key={question.key}
+                                        control={form.control}
+                                        name={question.key}
+                                        render={({ field }) => (
+                                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                            <FormControl>
+                                              <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
+                                            </FormControl>
+                                            <div className="space-y-1 leading-none">
+                                              <FormLabel>{getStudentFacingQuestionLabel(question.label, question.section)}{approvalRequiredQuestions.includes(question.key) ? ' *' : ''}</FormLabel>
+                                              <FormMessage />
+                                            </div>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        )}
+
                         <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-4 pt-4">
                             <Button type="button" variant="ghost" 
                                 onClick={() => navigate(`/aluno/matricula/${compositeId}/1`)}
