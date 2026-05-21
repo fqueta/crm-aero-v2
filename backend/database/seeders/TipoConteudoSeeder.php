@@ -26,8 +26,15 @@ class TipoConteudoSeeder extends Seeder
             20 => 'Tags',
         ];
 
+        // Remove todos os registros existentes deste post_type
+        DB::table('posts')
+            ->where('post_type', 'tipo_conteudo')
+            ->delete();
+
+        // Insere cada tipo com ID explícito
         foreach ($tipos as $id => $nome) {
-            $values = [
+            DB::table('posts')->insert([
+                'ID' => $id,
                 'post_author' => 0,
                 'post_title' => $nome,
                 'post_name' => Str::slug($nome),
@@ -38,16 +45,9 @@ class TipoConteudoSeeder extends Seeder
                 'ping_status' => 'closed',
                 'guid' => (string)$id,
                 'comment_count' => 0,
+                'created_at' => now(),
                 'updated_at' => now(),
-            ];
-
-            if (DB::table('posts')->where('ID', $id)->exists()) {
-                DB::table('posts')->where('ID', $id)->update($values);
-            } else {
-                $values['ID'] = $id;
-                $values['created_at'] = now();
-                DB::table('posts')->insert($values);
-            }
+            ]);
         }
     }
 }

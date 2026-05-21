@@ -196,24 +196,52 @@ export default function CourseModulesSelector({
     return groups;
   }, [course]);
 
-  // Helper local para obter valor da hora respeitando a moeda selecionada (Padronizado BRL/USD)
-  const getAircraftRate = (aircraft: any, targetCurrency: CurrencyType = currency) => {
+  /**
+   * getAircraftRate
+   * pt-BR: Obtém o valor da hora da aeronave de acordo com os pacotes configurados (preço escalonado).
+   *        Seleciona o pacote com o maior `limite` que seja <= ao número de créditos/horas informado.
+   *        Se nenhum pacote atender ou créditos = 0, usa o primeiro pacote como fallback.
+   * en-US: Gets the aircraft hourly rate based on configured packages (tiered pricing).
+   *        Selects the package with the highest `limite` that is <= the specified credits/hours.
+   *        Falls back to the first package if no packages match or credits = 0.
+   */
+  const getAircraftRate = (aircraft: any, targetCurrency: CurrencyType = currency, credits: number = 0) => {
     if (!aircraft?.pacotes) return 0;
     try {
       const pacotes = typeof aircraft.pacotes === 'string' ? JSON.parse(aircraft.pacotes) : aircraft.pacotes;
-      const pacotesList = Array.isArray(pacotes) ? pacotes : Object.values(pacotes);
+      const pacotesList: any[] = Array.isArray(pacotes) ? pacotes : Object.values(pacotes);
       
-      const pkg = pacotesList[0] as any;
-      if (!pkg) return 0;
+      if (pacotesList.length === 0) return 0;
+
+      // pt-BR: Lógica de preço escalonado — escolhe o pacote com o maior limite <= créditos
+      // en-US: Tiered pricing logic — picks the package with the highest limit <= credits
+      let selectedPkg: any = pacotesList[0]; // Fallback para o primeiro pacote
+
+      if (credits > 0) {
+        // Filtra pacotes cujo limite seja <= créditos e pega aquele com maior limite
+        const eligible = pacotesList.filter((p: any) => {
+          const lim = Number(p?.limite ?? 0);
+          return lim <= credits;
+        });
+        
+        if (eligible.length > 0) {
+          // Ordena do maior limite para o menor e pega o primeiro
+          eligible.sort((a: any, b: any) => Number(b?.limite ?? 0) - Number(a?.limite ?? 0));
+          selectedPkg = eligible[0];
+        }
+        // Se nenhum pacote for elegível (créditos < todos os limites), usa o primeiro como fallback
+      }
+
+      if (!selectedPkg) return 0;
 
       // Busca estrita pelas chaves padronizadas
       if (targetCurrency === 'USD') {
-        const val = pkg['Hora Seca (USD)'] || pkg['hora-seca_dolar'] || pkg['hora-seca-dolar'] || pkg['usd'];
+        const val = selectedPkg['Hora Seca (USD)'] || selectedPkg['hora-seca_dolar'] || selectedPkg['hora-seca-dolar'] || selectedPkg['usd'];
         return val ? currencyRemoveMaskToNumber(String(val)) : 0;
       }
 
       // Para BRL, tenta a chave padronizada primeiro
-      const valBrl = pkg['Hora Seca (BRL)'] || pkg['hora-seca'] || pkg['brl'];
+      const valBrl = selectedPkg['Hora Seca (BRL)'] || selectedPkg['hora-seca'] || selectedPkg['brl'];
       if (valBrl) {
         return currencyRemoveMaskToNumber(String(valBrl));
       }
@@ -237,9 +265,15 @@ export default function CourseModulesSelector({
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
   };
 
-  // Helper para obter o preço final aplicado (já convertido para BRL se for USD)
-  const getAppliedRate = (aircraft: any) => {
-    const rawRate = getAircraftRate(aircraft);
+  /**
+   * getAppliedRate
+   * pt-BR: Retorna a tarifa final aplicada à proposta (convertida para BRL se necessário),
+   *        já considerando o número de créditos para o preço escalonado.
+   * en-US: Returns the final rate applied to the proposal (converted to BRL if needed),
+   *        already accounting for credit count in tiered pricing.
+   */
+  const getAppliedRate = (aircraft: any, credits: number = 0) => {
+    const rawRate = getAircraftRate(aircraft, currency, credits);
     return currency === 'USD' ? rawRate * dollarRate : rawRate;
   };
 
@@ -258,7 +292,8 @@ export default function CourseModulesSelector({
       if (!isTeoria && (field === 'credits' || field === 'aircraftId' || (field as any) === 'currency_change')) {
         const aircraft = aircrafts.find(a => String(a.id) === String(next.aircraftId));
         if (aircraft) {
-            next.price = next.credits * getAppliedRate(aircraft);
+            // pt-BR: Passa créditos para o cálculo escalonado de tarifa
+            next.price = next.credits * getAppliedRate(aircraft, next.credits);
         }
       }
       
@@ -291,7 +326,7 @@ export default function CourseModulesSelector({
               newState[idx].aircraftId = globalAircraftId;
               const aircraft = aircrafts.find(a => String(a.id) === String(globalAircraftId));
               if (aircraft) {
-                  newState[idx].price = newState[idx].credits * getAppliedRate(aircraft);
+                  newState[idx].price = newState[idx].credits * getAppliedRate(aircraft, newState[idx].credits);
               }
           }
       }
@@ -317,7 +352,7 @@ export default function CourseModulesSelector({
         if (sel.aircraftId) {
           const aircraft = aircrafts.find(a => String(a.id) === String(sel.aircraftId));
           if (aircraft) {
-            next[idx] = { ...sel, price: sel.credits * getAppliedRate(aircraft) };
+            next[idx] = { ...sel, price: sel.credits * getAppliedRate(aircraft, sel.credits) };
           }
         }
       });
@@ -354,7 +389,7 @@ export default function CourseModulesSelector({
            next[idx] = { ...next[idx], selected: true, aircraftId: id };
            const aircraft = aircrafts.find(a => String(a.id) === String(id));
            if (aircraft) {
-             next[idx].price = next[idx].credits * getAppliedRate(aircraft);
+             next[idx].price = next[idx].credits * getAppliedRate(aircraft, next[idx].credits);
            }
         }
       });
@@ -503,8 +538,9 @@ export default function CourseModulesSelector({
                 <SelectContent>
                     <SelectItem value="none">Nenhuma (limpar seleção global)</SelectItem>
                     {courseLinkedAircrafts.map(a => {
-                        const usdRate = getAircraftRate(a, 'USD');
-                        const brlRate = getAircraftRate(a, 'BRL');
+                        // pt-BR: Para o seletor global, sem contexto de créditos, usa 0 → mostra tarifa base (1º pacote)
+                        const usdRate = getAircraftRate(a, 'USD', 0);
+                        const brlRate = getAircraftRate(a, 'BRL', 0);
                         
                         const displayRate = currency === 'USD' 
                             ? `${formatValueUSD(usdRate)}/h (~ ${formatValue(usdRate * dollarRate)}/h)`
@@ -595,7 +631,7 @@ export default function CourseModulesSelector({
                                           // Se não for etapa 1, tenta recalcular baseado na aeronave se houver
                                           if (!isEtapa1 && next[index].aircraftId) {
                                               const ak = aircrafts.find(a => String(a.id) === String(next[index].aircraftId));
-                                              if (ak) defaultPrice = next[index].credits * getAppliedRate(ak);
+                                              if (ak) defaultPrice = next[index].credits * getAppliedRate(ak, next[index].credits);
                                           }
 
                                           next[index] = { ...next[index], price: defaultPrice };
@@ -669,8 +705,10 @@ export default function CourseModulesSelector({
                                   </SelectTrigger>
                                   <SelectContent className="min-w-[300px] bg-white dark:bg-slate-950 text-black dark:text-white border border-gray-200 shadow-md z-[9999]">
                                     {allowedAircrafts.map((a: any) => {
-                                      const usdRate = getAircraftRate(a, 'USD');
-                                      const brlRate = getAircraftRate(a, 'BRL');
+                                      // pt-BR: Usa os créditos atuais da linha para mostrar a tarifa correta do pacote
+                                      const creditsForRow = sel.credits;
+                                      const usdRate = getAircraftRate(a, 'USD', creditsForRow);
+                                      const brlRate = getAircraftRate(a, 'BRL', creditsForRow);
                                       const label = a.nome || a.matricula || a.post_title || `Aeronave ${a.id}`;
                                       
                                       const displayRate = currency === 'USD'
@@ -712,7 +750,8 @@ export default function CourseModulesSelector({
                                 <div className="text-[10px] text-muted-foreground text-right leading-tight opacity-70">
                                     {(() => {
                                         const ak = aircrafts.find(a => String(a.id) === String(sel.aircraftId));
-                                        const r = ak ? getAircraftRate(ak) : 0;
+                                        // pt-BR: Usa créditos da linha atual para mostrar a tarifa escalonada correta
+                                        const r = ak ? getAircraftRate(ak, currency, sel.credits) : 0;
                                         return (
                                             currency === 'USD' ? (
                                                 <>({sel.credits}h x {formatValueUSD(r)}/h x R$ {dollarRate.toFixed(2)})</>

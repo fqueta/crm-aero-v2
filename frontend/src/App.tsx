@@ -48,6 +48,9 @@ import ImportData from "./pages/settings/ImportData";
 import Login from "./pages/auth/Login";
 import Metrics from "./pages/settings/Metrics";
 import AircraftsSettings from "./pages/settings/AircraftsSettings";
+import AircraftsSettingsCreate from "./pages/settings/AircraftsSettingsCreate";
+import AircraftsSettingsEdit from "./pages/settings/AircraftsSettingsEdit";
+import AircraftsSettingsView from "./pages/settings/AircraftsSettingsView";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
@@ -66,6 +69,7 @@ import GeneralConversionReport from "./pages/reports/GeneralConversionReport";
 import WonProposalsReport from "./pages/reports/WonProposalsReport";
 import UserAccessReport from "./pages/reports/UserAccessReport";
 import PublicClientForm from "@/pages/PublicClientForm";
+import PublicTerminationRequest from "@/pages/PublicTerminationRequest";
 import ProposalSignature from "@/pages/ProposalSignature";
 import ProposalApproval from "@/pages/ProposalApproval";
 import ProposalApproved from "@/pages/ProposalApproved";
@@ -91,6 +95,7 @@ import Classes from "./pages/school/Classes";
 import ClassCreate from "./pages/school/ClassCreate";
 import ClassEdit from "./pages/school/ClassEdit";
 import Enroll from "./pages/school/Enroll";
+import Termination from "./pages/school/Termination";
 import ContractsList from "./pages/school/ContractsList";
 import ContractCreate from "./pages/school/ContractCreate";
 import ContractEdit from "./pages/school/ContractEdit";
@@ -187,6 +192,7 @@ const App = () => {
               <Route path="/aluno/assinatura/:compositeId/1" element={<ProposalSignature />} />
               <Route path="/aluno/matricula/:compositeId/2" element={<ProposalApproval />} />
               <Route path="/aluno/matricula/:compositeId/2/aprovado" element={<ProposalApproved />} />
+              <Route path="/solicitar-rescisao/:token" element={<PublicTerminationRequest />} />
               
               {/* Rotas da loja - protegidas */}
               <Route path={link_loja + "/area-cliente"} element={ 
@@ -319,6 +325,14 @@ const App = () => {
                 <AdminProtectedRoute>
                   <AppLayout>
                     <Enroll />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              {/* Escola / Rescisão de Contratos */}
+              <Route path="/admin/school/termination" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <Termination />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />
@@ -573,6 +587,27 @@ const App = () => {
                 <AdminProtectedRoute>
                   <AppLayout>
                     <AircraftsSettings />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/aircrafts/create" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <AircraftsSettingsCreate />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/aircrafts/:id/edit" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <AircraftsSettingsEdit />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/settings/aircrafts/:id/view" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <AircraftsSettingsView />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

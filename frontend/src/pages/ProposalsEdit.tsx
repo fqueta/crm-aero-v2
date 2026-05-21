@@ -1344,6 +1344,12 @@ export default function ProposalsEdit() {
      * en-US: Persist only the selected (active) line for the proposal.
      */
     const activeRow = (discountRows || [])[activeRowIndex] || null;
+    // pt-BR: Filtra linhas totalmente vazias ou sem parcela definida antes de salvar
+    const filteredRows = (discountRows || []).filter(row => {
+      return String(row.parcela || '').trim() !== '' || 
+             String(row.valor || '').trim() !== '' || 
+             String(row.desconto || '').trim() !== '';
+    });
     const parcelamentoForOrc = {
       tabela_id: values.parcelamento_id || '',
       texto_desconto: values.meta_texto_desconto || '',
@@ -1364,7 +1370,7 @@ export default function ProposalsEdit() {
        * pt-BR: Persiste todas as opções de parcelamento (as que aparecem no modal).
        * en-US: Persists all installment options (the ones that appear in the modal).
        */
-      linhas: (discountRows || []).map(row => ({
+      linhas: filteredRows.map(row => ({
         parcelas: String(row.parcela || ''),
         valor: currencyRemoveMaskToString(row.valor || '') || '',
         desconto: currencyRemoveMaskToString(row.desconto || '') || '',
@@ -2206,6 +2212,19 @@ export default function ProposalsEdit() {
                                 loading={isLoadingInstallments}
                               />
                             </div>
+                            {field.value && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 px-3 rounded-xl border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 shrink-0"
+                                onClick={() => {
+                                  field.onChange('');
+                                }}
+                                title="Limpar seleção de tabela"
+                              >
+                                Limpar
+                              </Button>
+                            )}
                             <Button
                               type="button"
                               variant="outline"
@@ -2251,57 +2270,91 @@ export default function ProposalsEdit() {
                           return (
                           <tr key={`descrow-${idx}`}>
                             <td className="p-2 border">
-                              {/**
-                               * ParcelasSelect
-                               * pt-BR: Select com opções vindo de config.parcelas da tabela selecionada.
-                               * en-US: Select options from config.parcelas of the selected installment.
-                               */}
-                              <Select
-                                value={row.parcela || ''}
-                                onValueChange={(val) => {
-                                 setDiscountRows((prev) => {
-                                   const next = [...prev];
-                                   const cfg = (installmentDetail as any)?.config || {};
-                                   const parcelasObj = cfg?.parcelas || {};
-                                   const parcelasArr: any[] = Array.isArray(parcelasObj) ? parcelasObj : Object.values(parcelasObj || {});
-                                   const chosen = parcelasArr.find((p: any) => String(p?.parcela ?? '') === String(val));
-                                    // pt-BR: Recalcula valor da parcela a partir do Total quando possível.
-                                    // en-US: Recalculate installment value from Total when possible.
-                                    const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
-                                    const parcNum = Number(val) || 0;
-                                    const fromTotal = totalNum > 0 && parcNum > 0 ? (totalNum / parcNum) : 0;
-                                    const maskedValor = fromTotal > 0
-                                      ? formatCurrencyBRL(fromTotal)
-                                      : (chosen?.valor ? currencyApplyMask(String(chosen.valor), 'pt-BR', 'BRL') : (cfg?.valor ? currencyApplyMask(String(cfg.valor), 'pt-BR', 'BRL') : ''));
-                                    const maskedDesc = chosen?.desconto ? currencyApplyMask(String(chosen.desconto), 'pt-BR', 'BRL') : '';
-                                    next[idx] = {
-                                      ...next[idx],
-                                      parcela: String(val),
-                                      valor: maskedValor,
-                                      desconto: maskedDesc,
-                                    };
-                                    return next;
-                                  });
-                                }}
-                              >
-                                <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                                <SelectContent>
-                                  {(() => {
-                                    const cfg = (installmentDetail as any)?.config || {};
-                                    const parcelasObj = cfg?.parcelas || {};
-                                    const parcelasArr: any[] = Array.isArray(parcelasObj) ? parcelasObj : Object.values(parcelasObj || {});
-                                    const opts = parcelasArr.map((p: any, i: number) => ({ key: i, value: String(p?.parcela ?? ''), label: String(p?.parcela ?? '') }));
-                                    return opts.map((opt) => (
-                                      <SelectItem key={`opt-parc-${opt.key}`} value={opt.value}>{opt.label}</SelectItem>
-                                    ));
-                                  })()}
-                                </SelectContent>
-                              </Select>
+                              {installmentDetail ? (
+                                /**
+                                 * ParcelasSelect
+                                 * pt-BR: Select com opções vindo de config.parcelas da tabela selecionada.
+                                 * en-US: Select options from config.parcelas of the selected installment.
+                                 */
+                                <Select
+                                  value={row.parcela || ''}
+                                  onValueChange={(val) => {
+                                   setDiscountRows((prev) => {
+                                     const next = [...prev];
+                                     const cfg = (installmentDetail as any)?.config || {};
+                                     const parcelasObj = cfg?.parcelas || {};
+                                     const parcelasArr: any[] = Array.isArray(parcelasObj) ? parcelasObj : Object.values(parcelasObj || {});
+                                     const chosen = parcelasArr.find((p: any) => String(p?.parcela ?? '') === String(val));
+                                      // pt-BR: Recalcula valor da parcela a partir do Total quando possível.
+                                      // en-US: Recalculate installment value from Total when possible.
+                                      const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+                                      const parcNum = Number(val) || 0;
+                                      const fromTotal = totalNum > 0 && parcNum > 0 ? (totalNum / parcNum) : 0;
+                                      const maskedValor = fromTotal > 0
+                                        ? formatCurrencyBRL(fromTotal)
+                                        : (chosen?.valor ? currencyApplyMask(String(chosen.valor), 'pt-BR', 'BRL') : (cfg?.valor ? currencyApplyMask(String(cfg.valor), 'pt-BR', 'BRL') : ''));
+                                      const maskedDesc = chosen?.desconto ? currencyApplyMask(String(chosen.desconto), 'pt-BR', 'BRL') : '';
+                                      next[idx] = {
+                                        ...next[idx],
+                                        parcela: String(val),
+                                        valor: maskedValor,
+                                        desconto: maskedDesc,
+                                      };
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                  <SelectContent>
+                                    {(() => {
+                                      const cfg = (installmentDetail as any)?.config || {};
+                                      const parcelasObj = cfg?.parcelas || {};
+                                      const parcelasArr: any[] = Array.isArray(parcelasObj) ? parcelasObj : Object.values(parcelasObj || {});
+                                      const opts = parcelasArr.map((p: any, i: number) => ({ key: i, value: String(p?.parcela ?? ''), label: String(p?.parcela ?? '') }));
+                                      return opts.map((opt) => (
+                                        <SelectItem key={`opt-parc-${opt.key}`} value={opt.value}>{opt.label}</SelectItem>
+                                      ));
+                                    })()}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                /**
+                                 * Input Manual
+                                 * pt-BR: Permite digitar qualquer número de parcelas quando não há tabela selecionada.
+                                 * en-US: Allows typing any number of installments when no table is selected.
+                                 */
+                                <Input
+                                  value={row.parcela || ''}
+                                  placeholder="Ex: 12"
+                                  className="h-9 font-medium"
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setDiscountRows((prev) => {
+                                      const next = [...prev];
+                                      // pt-BR: Recalcula valor da parcela a partir do Total quando possível.
+                                      // en-US: Recalculate installment value from Total when possible.
+                                      const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+                                      const parcNum = Number(val) || 0;
+                                      const fromTotal = totalNum > 0 && parcNum > 0 ? (totalNum / parcNum) : 0;
+                                      const maskedValor = fromTotal > 0
+                                        ? formatCurrencyBRL(fromTotal)
+                                        : next[idx]?.valor || '';
+                                      next[idx] = {
+                                        ...next[idx],
+                                        parcela: val,
+                                        valor: maskedValor,
+                                      };
+                                      return next;
+                                    });
+                                  }}
+                                />
+                              )}
                             </td>
                             <td className="p-2 border">
                               <Input
                                 value={row.valor}
                                 inputMode="numeric"
+                                className="h-9 font-mono text-xs"
                                 onChange={(e) => {
                                   const v = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
                                   setDiscountRows((prev) => prev.map((r, i) => i === idx ? { ...r, valor: v } : r));
@@ -2312,10 +2365,11 @@ export default function ProposalsEdit() {
                              <Input
                                value={row.desconto}
                                inputMode="numeric"
+                               className="h-9 font-mono text-xs"
                                onChange={(e) => {
                                  const v = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
                                  setDiscountRows((prev) => prev.map((r, i) => i === idx ? { ...r, desconto: v } : r));
-                               }}
+                                }}
                              />
                             </td>
                             <td className="p-2 border">
@@ -2324,14 +2378,29 @@ export default function ProposalsEdit() {
                                * pt-BR: Campo derivado (Valor da Parcela - Desconto), usado pelo shortcode.
                                * en-US: Derived field (Installment Value - Discount), used by the shortcode.
                                */}
-                              <Input value={activeRowResolved?.parcelaComDesconto || ''} readOnly />
+                              <Input value={activeRowResolved?.parcelaComDesconto || ''} readOnly className="h-9 font-mono text-xs bg-zinc-50 dark:bg-zinc-900/50" />
                             </td>
                           </tr>
                           );
                         })()}
                         {discountRows.length === 0 && (
                           <tr>
-                            <td colSpan={3} className="p-3 text-center text-muted-foreground">Nenhuma linha disponível — selecione uma tabela de parcelamento.</td>
+                            <td colSpan={4} className="p-6 text-center text-muted-foreground">
+                              <p className="mb-2 text-xs">Nenhuma opção de parcelamento configurada.</p>
+                              <div className="flex justify-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-lg text-xs"
+                                  onClick={() => {
+                                    setDiscountRows([{ parcela: '', valor: '', desconto: '' }]);
+                                  }}
+                                >
+                                  <Plus className="w-3 h-3 mr-1" /> Adicionar Parcela Personalizada
+                                </Button>
+                              </div>
+                            </td>
                           </tr>
                         )}
                       </tbody>

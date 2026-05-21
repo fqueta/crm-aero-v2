@@ -3108,4 +3108,13 @@ class Qlib
             }
         }
     }
+    static function get_post_id_by_slug($shortcode){
+        $post = Post::query()
+            ->where('deletado', '!=', 's')
+            ->where('post_status', '=', 'publish')
+            ->where('post_name', '=', $shortcode)
+            ->first();
+
+        return $post ? $post->ID : null;
+    }
 }

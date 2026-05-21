@@ -7,6 +7,7 @@ use App\Services\Qlib;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Database\Seeders\Tenant\AvisoInformacoesImportantesSeeder;
+use Database\Seeders\Tenant\TermoRescisaoSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -30,6 +31,7 @@ class DatabaseSeeder extends Seeder
                     MenuSeeder::class, //cadastra menus permissõs e menu_permissions
                     // PermissionSeeder::class,
                     // MenuPermissionSeeder::class,
+                    TipoConteudoSeeder::class,
                     DashboardMetricsSeeder::class,
                     CategorySeeder::class,
                     FinancialCategoriesSeeder::class,
@@ -44,10 +46,10 @@ class DatabaseSeeder extends Seeder
                     CursosSeeder::class,
                     TurmasSeeder::class,
                     PeriodosSeeder::class,
-                    TipoConteudoSeeder::class,
                     ContratosSeeder::class,
                     ComponentesFundosPropostaSeeder::class,
                     AvisoInformacoesImportantesSeeder::class,
+                    TermoRescisaoSeeder::class,
                     // QoptionSeeder::class,
             ];
 
@@ -55,6 +57,7 @@ class DatabaseSeeder extends Seeder
             $var_cal = [
                     UserSeeder::class,
                     MenuSeeder::class, //cadastra menus permissõs e menu_permissions
+                    TipoConteudoSeeder::class,
                     DashboardMetricsSeeder::class,
                     CategorySeeder::class,
                     FinancialCategoriesSeeder::class,
@@ -68,9 +71,9 @@ class DatabaseSeeder extends Seeder
                     AircraftAttendanceSeeder::class,
                     PeriodosSeeder::class,
                     ContratosSeeder::class,
-                    TipoConteudoSeeder::class,
                     ComponentesFundosPropostaSeeder::class,
                     AvisoInformacoesImportantesSeeder::class,
+                    TermoRescisaoSeeder::class,
             ];
 
         }

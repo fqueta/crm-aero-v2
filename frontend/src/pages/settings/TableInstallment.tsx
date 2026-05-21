@@ -18,7 +18,7 @@ import { InstallmentParcel, InstallmentPayload, InstallmentRecord, InstallmentTx
 import { PaginatedResponse } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { currencyApplyMask, currencyRemoveMaskToString } from '@/lib/masks/currency';
-import { Plus, Trash2, ChevronDown, ChevronUp, Layers, Table as TableIcon, Info, MessageSquare, Settings } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, Layers, Table as TableIcon, Info, MessageSquare, Settings, Pencil } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 /**
@@ -1018,37 +1018,58 @@ export default function TableInstallment() {
           <CardDescription>Parcelamentos cadastrados</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="rounded-md border bg-white dark:bg-zinc-950/50 overflow-hidden shadow-sm">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left">
-                  <th className="py-2 px-2">ID</th>
-                  <th className="py-2 px-2">Nome</th>
-                  <th className="py-2 px-2">Curso</th>
-                  <th className="py-2 px-2">Valor</th>
-                  <th className="py-2 px-2">Ativo</th>
-                  <th className="py-2 px-2 text-right">Ações</th>
+              <thead className="bg-zinc-50/80 dark:bg-zinc-900/50 border-b">
+                <tr className="text-left text-zinc-500 uppercase tracking-wider text-[10px] font-bold">
+                  <th className="py-3 px-4 font-bold">ID</th>
+                  <th className="py-3 px-4 font-bold">Nome</th>
+                  <th className="py-3 px-4 font-bold">Curso</th>
+                  <th className="py-3 px-4 font-bold">Valor Base</th>
+                  <th className="py-3 px-4 font-bold">Status</th>
+                  <th className="py-3 px-4 font-bold text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {(listQuery.data as PaginatedResponse<InstallmentRecord> | undefined)?.data?.map((it) => (
-                  <tr key={it.id} className="border-t">
-                    <td className="py-2 px-2">{it.id}</td>
-                    <td className="py-2 px-2">{it.nome}</td>
-                    <td className="py-2 px-2">{courseNameById.get(String(it.id_curso)) || String(it.id_curso) || '-'}</td>
-                    <td className="py-2 px-2">{it.valor || '-'}</td>
-                    <td className="py-2 px-2">{renderAtivoBadge(it.ativo)}</td>
-                    <td className="py-2 px-2 text-right">
-                      <div className="inline-flex gap-2 justify-end">
-                        <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => navigate(`/admin/settings/table-installment/${it.id}/edit`)}>Editar</Button>
-                        <Button variant="destructive" size="sm" className="h-7 px-2" onClick={() => handleDeleteClick(String(it.id))}>Excluir</Button>
+                  <tr key={it.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors">
+                    <td className="py-3 px-4 font-mono text-xs text-zinc-500">#{it.id}</td>
+                    <td className="py-3 px-4 font-medium">{it.nome}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{courseNameById.get(String(it.id_curso)) || String(it.id_curso) || '-'}</td>
+                    <td className="py-3 px-4">{it.valor ? <span className="font-mono text-xs font-semibold">{it.valor}</span> : '-'}</td>
+                    <td className="py-3 px-4">{renderAtivoBadge(it.ativo)}</td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="inline-flex gap-1 justify-end">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-zinc-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20" 
+                          onClick={() => navigate(`/admin/settings/table-installment/${it.id}/edit`)}
+                          title="Editar parcelamento"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20" 
+                          onClick={() => handleDeleteClick(String(it.id))}
+                          title="Excluir parcelamento"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
                 ))}
                 {((listQuery.data as PaginatedResponse<InstallmentRecord> | undefined)?.data?.length || 0) === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-muted-foreground">Nenhum registro encontrado</td>
+                    <td colSpan={6} className="py-8 text-center text-muted-foreground bg-zinc-50/30 dark:bg-zinc-900/10">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <TableIcon className="h-8 w-8 text-zinc-300 dark:text-zinc-700" />
+                        <p>Nenhum parcelamento encontrado.</p>
+                      </div>
+                    </td>
                   </tr>
                 )}
               </tbody>

@@ -29,6 +29,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\TesteController;
+use App\Http\Controllers\api\RescisaoController;
 use Illuminate\Support\Facades\Route;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
@@ -62,6 +63,10 @@ Route::name('api.')->prefix('v1')->middleware([
     Route::get('proposal/{client_id}/{matricula_id}', [\App\Http\Controllers\api\MatriculaController::class, 'publicShow']);
     Route::post('proposal/{client_id}/{matricula_id}/sign', [\App\Http\Controllers\api\MatriculaController::class, 'publicSign']);
     Route::get('proposal/{client_id}/{matricula_id}/contracts-html', [\App\Http\Controllers\api\MatriculaController::class, 'contratos_periodos_html']);
+
+    // Public route for contract termination view
+    Route::get('rescisoes/public/{token}', [\App\Http\Controllers\api\RescisaoController::class, 'publicShow']);
+    Route::post('rescisoes/public/{token}/sign', [\App\Http\Controllers\api\RescisaoController::class, 'signTermo']);
 
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
@@ -228,6 +233,7 @@ Route::name('api.')->prefix('v1')->middleware([
         Route::apiResource('matriculas', \App\Http\Controllers\api\MatriculaController::class, ['parameters' => [
             'matriculas' => 'id'
         ]]);
+        Route::apiResource('rescisoes', RescisaoController::class);
         Route::post('matriculas/simulador-combustivel', [\App\Http\Controllers\api\MatriculaController::class, 'simuladorCombustivelApi'])->name('matriculas.simulador-combustivel');
         Route::post('matriculas/{id}/gerar-contratos-responsavel', [\App\Http\Controllers\api\MatriculaController::class, 'contratos_responsavel_pdf'])->name('matriculas.gerar-contratos-responsavel');
         Route::post('matriculas/{id}/enviar-zapsign-responsavel', [\App\Http\Controllers\api\MatriculaController::class, 'enviar_zapsign_responsavel'])->name('matriculas.enviar-zapsign-responsavel');

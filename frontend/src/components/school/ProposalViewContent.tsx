@@ -294,7 +294,17 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
   const fuelExternalText = (enrollment as any)?.meta?.texto_combustivel || '';
 
-  const linkAssinatura = (enrollment as any)?.link_assinatura || '';
+  const linkAssinatura = useMemo(() => {
+    let signUrl = (enrollment as any)?.link_assinatura || '';
+    if (!signUrl) {
+      const clientId = (enrollment as any)?.id_cliente || (enrollment as any)?.client_id;
+      const id = (enrollment as any)?.id;
+      if (clientId && id) {
+        signUrl = `${window.location.origin}/aluno/assinatura/${clientId}_${id}/1`;
+      }
+    }
+    return signUrl;
+  }, [enrollment]);
 
   const parcelamento = useMemo(() => {
     return ((enrollment as any)?.orc?.parcelamento ?? null) as any;
@@ -436,6 +446,9 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                     proposalAmountLabel={totalMasked || 'R$ 0,00'}
                   />
 
+                  {/* Cards de Assinatura movidos da aba Admin */}
+                  {linkAssinatura && <SignatureLinkCard link={linkAssinatura} />}
+                  {infoResponsavel && <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />}
                </div>
             </div>
         </TabsContent>
@@ -564,9 +577,6 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                   </div>
                 </CardContent>
               </Card>
-
-              {linkAssinatura && <SignatureLinkCard link={linkAssinatura} />}
-              {infoResponsavel && <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />}
             </div>
           </div>
         </TabsContent>

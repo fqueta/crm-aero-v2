@@ -3278,7 +3278,7 @@ class MatriculaController extends Controller
         $lossDate = isset($validated['loss_date']) ? (string) $validated['loss_date'] : null;
         $lossReason = isset($validated['loss_reason']) ? trim((string) $validated['loss_reason']) : null;
         $lossObservation = isset($validated['loss_observation']) ? trim((string) $validated['loss_observation']) : null;
-        $matriculadoSituacaoId = 19;
+        $matriculadoSituacaoId = Qlib::get_post_id_by_slug('mat') ?? null;
 
         if ($newStatus === 'g') {
             $gainValidator = Validator::make($request->all(), [

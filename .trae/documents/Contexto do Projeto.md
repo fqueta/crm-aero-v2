@@ -9,6 +9,8 @@ Este repositório é um monorepo do CRM Aero com duas aplicações principais:
 
 O núcleo operacional atual do produto parece estar concentrado na SPA em `frontend/`, consumindo a API tenant-aware do Laravel.
 
+O sistema gera **propostas de orçamento** para pacotes de horas (cursos práticos) e planos de formação (formação completa de pilotos), gerenciando 4 tipos de cursos: teóricos, práticos, mistos e planos de formação.
+
 ## Stack Principal
 
 ### Backend
@@ -175,7 +177,16 @@ Controllers relacionados:
 
 ### Escola
 
-- Cursos (Curso)
+O sistema gerencia 4 tipos de cursos:
+
+1. **Cursos Teóricos** — aulas em solo, disciplinas teóricas (ex: formações teóricas, legislação, navegação)
+2. **Cursos Práticos** — horas de voo, instrução prática em aeronave
+3. **Cursos Mistos** — combinação de teoria + prática em um mesmo curso
+4. **Planos de Formação** — pacotes estruturados que agrupam múltiplos cursos (teóricos e/ou práticos) em uma jornada de formação completa (ex: PP — Piloto Privado, PC — Piloto Comercial, IFR — Voo por Instrumentos)
+
+A arquitetura usa o model `Curso` para representar todos os tipos, com um campo `tipo` (ou lógica similar) para diferenciar teórico, prático, misto ou plano de formação. Propostas de orçamento são geradas tanto para pacotes de horas (cursos práticos avulsos) quanto para planos de formação completos.
+
+- Cursos (Curso) — 4 tipos: teórico, prático, misto, plano de formação
 - Turmas (Turma)
 - Matrículas (Matricula)
 - Contratos (Post com post_type=contratos)
@@ -422,7 +433,7 @@ O backend possui:
 | `DashboardMetric` | Métricas customizadas |
 | `Post` | Conteúdo genérico (contratos, períodos, situações, páginas, componentes, uploads) |
 | **Escola** | |
-| `Curso` | Cursos |
+| `Curso` | Cursos (4 tipos: teórico, prático, misto, plano de formação) |
 | `Turma` | Turmas |
 | `Matricula` | Matrículas |
 | `Parcelamento` | Planos de parcelamento |

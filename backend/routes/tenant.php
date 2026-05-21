@@ -111,6 +111,10 @@ Route::name('api.')->prefix('api/v1')->middleware([
     Route::post('proposal/{client_id}/{matricula_id}/sign', [\App\Http\Controllers\api\MatriculaController::class, 'publicSign']);
     Route::post('proposal/{client_id}/{matricula_id}/approve', [\App\Http\Controllers\api\MatriculaController::class, 'publicApprove']);
 
+    // Public route for contract termination view
+    Route::get('rescisoes/public/{token}', [\App\Http\Controllers\api\RescisaoController::class, 'publicShow']);
+    Route::post('rescisoes/public/{token}/sign', [\App\Http\Controllers\api\RescisaoController::class, 'signTermo']);
+
     Route::fallback(function () {
         return response()->json(['message' => 'Rota não encontrada'], 404);
     });

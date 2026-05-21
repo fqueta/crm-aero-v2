@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layers, Plus, NotebookPen, MoreHorizontal, Eye, MessageSquare, FileText, BookOpen, User2, Clock, Hash, CheckCircle2, CircleDot, XCircle } from 'lucide-react';
+import { Layers, Plus, NotebookPen, MoreHorizontal, Eye, MessageSquare, FileText, BookOpen, User2, Clock, Hash, CheckCircle2, CircleDot, XCircle, ExternalLink } from 'lucide-react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -2003,6 +2003,25 @@ function EnrollmentKanbanCard({
               <DropdownMenuItem onClick={() => onUpdateStatus?.(String(enrollment.id), 'p')} className="cursor-pointer">
                 <XCircle className="mr-2 h-4 w-4 opacity-70" /> Marcar perda
               </DropdownMenuItem>
+              
+              {/* Opção de Assinatura no Dropdown */}
+              {(() => {
+                let signUrl = (enrollment as any)?.link_assinatura || '';
+                if (!signUrl) {
+                  const clientId = (enrollment as any)?.id_cliente || (enrollment as any)?.client_id;
+                  const id = (enrollment as any)?.id;
+                  if (clientId && id) {
+                    signUrl = `${window.location.origin}/aluno/assinatura/${clientId}_${id}/1`;
+                  }
+                }
+                
+                if (!signUrl) return null;
+                return (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(signUrl, '_blank'); }} className="cursor-pointer text-amber-600 focus:text-amber-700">
+                    <ExternalLink className="mr-2 h-4 w-4 opacity-70" /> Assinar
+                  </DropdownMenuItem>
+                );
+              })()}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -2038,12 +2057,35 @@ function EnrollmentKanbanCard({
         </div>
       </div>
 
-      {/* Footer: Valor com destaque */}
-      <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
-         <div className="bg-primary/5 px-2.5 py-1 rounded-lg border border-primary/10">
-            <span className="text-sm font-bold text-primary tracking-tight">{amountBRL}</span>
-         </div>
-      </div>
+      {/* Footer: Valor e link de assinatura */}
+      {(() => {
+        let signUrl = (enrollment as any)?.link_assinatura || '';
+        if (!signUrl) {
+          const clientId = (enrollment as any)?.id_cliente || (enrollment as any)?.client_id;
+          const id = (enrollment as any)?.id;
+          if (clientId && id) {
+            signUrl = `${window.location.origin}/aluno/assinatura/${clientId}_${id}/1`;
+          }
+        }
+        
+        return (
+          <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between gap-2">
+            <div className="bg-primary/5 px-2.5 py-1 rounded-lg border border-primary/10 shrink-0">
+              <span className="text-sm font-bold text-primary tracking-tight">{amountBRL}</span>
+            </div>
+            {signUrl && (
+              <button
+                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 hover:border-amber-400 transition-all shrink-0"
+                title="Abrir link de assinatura"
+                onClick={(e) => { e.stopPropagation(); window.open(signUrl, '_blank'); }}
+              >
+                <ExternalLink className="h-3 w-3" />
+                Assinar
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, Eye, RotateCcw } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Eye, RotateCcw, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ClientRecord } from '@/types/clients';
 import { useUsersList } from '@/hooks/users';
@@ -133,6 +133,9 @@ export function ClientsTable({ clients, onEdit, onDelete, isLoading, trashEnable
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate(`/admin/clients/${client.id}/edit`, { state: { from: location } })}>
                       <Pencil className="mr-2 h-4 w-4" /> Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate(`/admin/sales/proposals/create?id_cliente=${client.id}`)}>
+                      <FileText className="mr-2 h-4 w-4" /> Gerar proposta
                     </DropdownMenuItem>
                     {trashEnabled && (
                       <DropdownMenuItem 

@@ -74,15 +74,20 @@ export function Combobox({
 
   const selectedOption = options.find((option) => option.value === value)
 
+  const onSearchRef = React.useRef(onSearch)
+  React.useEffect(() => {
+    onSearchRef.current = onSearch
+  }, [onSearch])
+
   /**
    * Efeito de debounce para disparar busca remota suavemente
    * Debounced effect to trigger remote search smoothly
    */
   React.useEffect(() => {
-    if (!onSearch) return
-    const t = setTimeout(() => onSearch(searchValue), debounceMs)
+    if (!onSearchRef.current) return
+    const t = setTimeout(() => onSearchRef.current?.(searchValue), debounceMs)
     return () => clearTimeout(t)
-  }, [searchValue, onSearch, debounceMs])
+  }, [searchValue, debounceMs])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

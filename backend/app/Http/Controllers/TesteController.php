@@ -20,6 +20,8 @@ class TesteController extends Controller
         $ret = [];
         $zgc = new ZapguruController();
         $id = $request->get('id');
+        $matSituacaoIdData = Qlib::get_post_id_by_slug('mat');
+        dd($matSituacaoIdData);
         // $helper = new StringHelper();
         // $ret = $helper->formatarCpf('12345678900');
         // $ret = $helper->formatarCpf('12345678900');
