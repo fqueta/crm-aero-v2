@@ -556,6 +556,16 @@ export default function ProposalsEdit() {
    */
   const { data: situationsData, isLoading: isLoadingSituations } = useEnrollmentSituationsList({ page: 1, per_page: 200 });
 
+  /**
+   * situationsList
+   * pt-BR: Normaliza e memoiza a lista de situações de matrícula.
+   * en-US: Normalizes and memoizes enrollment situations list.
+   */
+  const situationsList = useMemo(() => {
+    const list = (situationsData as any)?.data || (situationsData as any)?.items || situationsData || [];
+    return Array.isArray(list) ? list : [];
+  }, [situationsData]);
+
   const clientsList = useMemo(() => (clientsData?.data || clientsData?.items || []), [clientsData]);
   const clientOptions = useComboboxOptions<any>(
     clientsList,
@@ -1841,20 +1851,21 @@ export default function ProposalsEdit() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Situação atual</FormLabel>
-                        <Select value={field.value || ''} onValueChange={field.onChange} disabled={isLoadingSituations}>
+                        <Select 
+                          key={isLoadingSituations ? 'loading' : `loaded-${situationsList.length}`}
+                          value={field.value || ''} 
+                          onValueChange={field.onChange} 
+                          disabled={isLoadingSituations}
+                        >
                           <SelectTrigger className="w-full h-10 rounded-xl">
                             <SelectValue placeholder="Selecione..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {Array.isArray((situationsData as any)?.data || (situationsData as any)?.items)
-                              ? (((situationsData as any).data || (situationsData as any).items).map((s: any) => (
-                                  <SelectItem key={String(s.id)} value={String(s.id)}>
-                                    {String(s.name || s.nome || `Situação ${s.id}`)}
-                                  </SelectItem>
-                                )))
-                              : (
-                                <></>
-                              )}
+                            {situationsList.map((s: any) => (
+                              <SelectItem key={String(s.id)} value={String(s.id)}>
+                                {String(s.name || s.nome || `Situação ${s.id}`)}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />

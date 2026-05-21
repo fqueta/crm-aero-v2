@@ -329,44 +329,66 @@ export default function PeriodsList() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={handleBackToPrevious}>
-            <ChevronLeft className="w-4 h-4 mr-2" />
+    <div className="space-y-6">
+      {/* Cabeçalho principal */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost" 
+            onClick={handleBackToPrevious}
+            className="h-10 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-zinc-50 transition-all duration-200"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1 text-zinc-500" />
             Voltar
           </Button>
-          <h1 className="text-xl font-semibold">Períodos</h1>
+          <div className="h-6 w-[1px] bg-zinc-200 dark:bg-zinc-800"></div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Períodos</h1>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Configure as etapas, custos, aeronaves e contratos para os cursos</p>
+          </div>
         </div>
-        <Button onClick={handleCreate}>
+        <Button 
+          onClick={handleCreate}
+          className="rounded-xl h-10 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-500/10 text-white font-medium transition-all duration-300 transform active:scale-[0.98]"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Novo período
         </Button>
       </div>
 
-      <Card className="p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <Card className="p-6 border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm rounded-2xl bg-white dark:bg-zinc-950 space-y-6">
+        {/* Barra de Filtros */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
-            <Label>Buscar</Label>
+            <Label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-zinc-400" /> Buscar por nome
+            </Label>
             <div className="flex items-center gap-2">
               <Input
                 placeholder="Nome do período"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                className="h-10 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 focus:bg-white dark:focus:bg-zinc-950 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
               />
-              <Button variant="secondary" onClick={() => refetch()}>
-                <Search className="w-4 h-4" />
+              <Button 
+                variant="secondary" 
+                onClick={() => refetch()}
+                className="h-10 px-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-850 hover:text-zinc-900 transition-all duration-200"
+              >
+                <Search className="w-4 h-4 text-zinc-500" />
               </Button>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Status</Label>
+            <Label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Status do período
+            </Label>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v)}>
-              <SelectTrigger>
+              <SelectTrigger className="h-10 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 focus:bg-white dark:focus:bg-zinc-950 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200">
                 <SelectValue placeholder="Filtro de status" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl">
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="publish">Publicado</SelectItem>
                 <SelectItem value="draft">Rascunho</SelectItem>
@@ -375,7 +397,9 @@ export default function PeriodsList() {
           </div>
 
           <div className="space-y-2">
-            <Label>Curso</Label>
+            <Label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Curso principal
+            </Label>
             <Combobox
               options={courseOptions}
               value={selectedCourseId}
@@ -383,7 +407,7 @@ export default function PeriodsList() {
                 setSelectedCourseId(val);
                 setPage(1);
               }}
-              placeholder="Curso"
+              placeholder="Selecionar curso..."
               searchPlaceholder="Pesquisar curso pelo nome..."
               emptyText={courseItems.length === 0 ? 'Nenhum curso encontrado' : 'Digite para filtrar'}
               disabled={coursesQuery.isLoading}
@@ -391,30 +415,34 @@ export default function PeriodsList() {
               onSearch={setCourseSearch}
               searchTerm={courseSearch}
               debounceMs={250}
+              className="h-10 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 text-left"
             />
           </div>
         </div>
 
+        {/* Filtros Ativos */}
         {(search || selectedCourseId || (statusFilter !== 'all')) && (
-          <div className="flex flex-wrap items-center gap-2 pt-2">
-            <span className="text-sm text-muted-foreground">Filtros ativos:</span>
+          <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-150 dark:border-zinc-900/80">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500">Filtros ativos:</span>
             {search && (
-              <Badge variant="secondary" title="Filtro de busca aplicado">{`Busca: "${search}"`}</Badge>
+              <Badge variant="secondary" className="rounded-lg px-2.5 py-0.5 border border-zinc-200 bg-white font-medium text-xs text-zinc-750 dark:text-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 shadow-sm" title="Filtro de busca aplicado">
+                {`Nome: "${search}"`}
+              </Badge>
             )}
             {statusFilter !== 'all' && (
-              <Badge variant="outline" title="Filtro de status aplicado">
+              <Badge variant="outline" className="rounded-lg px-2.5 py-0.5 border border-zinc-200 bg-white font-medium text-xs text-zinc-750 dark:text-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 shadow-sm" title="Filtro de status aplicado">
                 {`Status: ${statusFilter === 'publish' ? 'Publicado' : 'Rascunho'}`}
               </Badge>
             )}
             {selectedCourseId && (
-              <Badge variant="secondary" title="Filtro de curso aplicado">
+              <Badge variant="secondary" className="rounded-lg px-2.5 py-0.5 border border-zinc-200 bg-white font-medium text-xs text-zinc-750 dark:text-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 shadow-sm truncate max-w-[320px]" title="Filtro de curso aplicado">
                 {`Curso: ${selectedCourseLabel || selectedCourseId}`}
               </Badge>
             )}
             <Button
               variant="ghost"
               size="sm"
-              className="h-7"
+              className="h-7 text-xs font-semibold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg px-2 ml-auto"
               onClick={() => {
                 setSearch('');
                 setStatusFilter('all');
@@ -422,7 +450,6 @@ export default function PeriodsList() {
                 setCourseSearch('');
                 setPage(1);
                 refetch();
-                // Remove o id_curso da URL ao limpar filtros
                 const next = new URLSearchParams(searchParams);
                 next.delete('id_curso');
                 setSearchParams(next, { replace: true });
@@ -433,123 +460,167 @@ export default function PeriodsList() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Curso</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Horas práticas</TableHead>
-                <TableHead>Horas teóricas</TableHead>
-                <TableHead>Tipo de Módulo</TableHead>
-                <TableHead>Cursos incluídos</TableHead>
-                <TableHead>Aeronaves</TableHead>
-                <TableHead>Contratos</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-12" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading && (
-                <TableRow>
-                  <TableCell colSpan={11}>Carregando…</TableCell>
+        {/* Tabela de Resultados */}
+        <div className="overflow-hidden border border-zinc-200/80 dark:border-zinc-800 rounded-2xl shadow-sm">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-zinc-50/60 dark:bg-zinc-900/30">
+                <TableRow className="hover:bg-transparent border-zinc-200 dark:border-zinc-800">
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Nome</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Curso</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Valor</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Horas Práticas</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Horas Teóricas</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Tipo de Módulo</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Cursos Incluídos</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Aeronaves</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Contratos</TableHead>
+                  <TableHead className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground h-11">Status</TableHead>
+                  <TableHead className="w-12 h-11" />
                 </TableRow>
-              )}
-              {!isLoading && items.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={11}>Nenhum período encontrado.</TableCell>
-                </TableRow>
-              )}
-              {items.map((p: PeriodRecord) => (
-                <TableRow key={String(p.id)}>
-                  <TableCell className="font-medium">{p.nome}</TableCell>
-                  <TableCell>{p.id_curso ?? '—'}</TableCell>
-                  <TableCell>{formatValorDisplay((p as any).valor)}</TableCell>
-                  <TableCell>{p.h_praticas ?? '—'}</TableCell>
-                  <TableCell>{p.h_teoricas ?? '—'}</TableCell>
-                  <TableCell>{getModuleTypeLabel((p as any).tipo_modulo)}</TableCell>
-                  <TableCell>
-                    {Array.isArray((p as any).cursos_incluidos) && (p as any).cursos_incluidos.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {getIncludedCourseLabels(p).map((label) => (
-                          <Badge key={`${p.id}-inc-${label}`} variant="secondary" className="max-w-[160px] truncate">
-                            {label}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      '—'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {Array.isArray(p.aeronaves) && p.aeronaves.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {getAircraftLabels(p).map((label) => (
-                          <Badge key={`${p.id}-air-${label}`} variant="outline" className="max-w-[160px] truncate">
-                            {label}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      '—'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {Array.isArray(p.id_contratos) && p.id_contratos.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {getContractLabels(p).map((label) => (
-                          <Badge key={`${p.id}-${label}`} variant="secondary" className="max-w-[160px] truncate">
-                            {label}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      '—'
-                    )}
-                  </TableCell>
-                  <TableCell>{p.status === 'publish' ? 'Publicado' : 'Rascunho'}</TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleView(p.id)}>Ver detalhes</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEdit(p.id)}>Editar</DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-red-600"
-                          onClick={() => deleteMutation.mutate(String(p.id))}
-                        >
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-8 text-zinc-500">
+                      Carregando períodos...
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!isLoading && items.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-8 text-zinc-500">
+                      Nenhum período encontrado.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {items.map((p: PeriodRecord) => (
+                  <TableRow 
+                    key={String(p.id)} 
+                    className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/35 border-zinc-200 dark:border-zinc-800 transition-colors duration-150"
+                  >
+                    <TableCell className="font-semibold text-zinc-900 dark:text-zinc-150">{p.nome}</TableCell>
+                    <TableCell className="text-zinc-650 dark:text-zinc-400 font-mono text-[11px]">{p.id_curso ?? '—'}</TableCell>
+                    <TableCell className="font-semibold text-zinc-900 dark:text-zinc-100">{formatValorDisplay((p as any).valor)}</TableCell>
+                    <TableCell className="text-zinc-700 dark:text-zinc-300 font-medium">{p.h_praticas ?? '0'}</TableCell>
+                    <TableCell className="text-zinc-700 dark:text-zinc-300 font-medium">{p.h_teoricas ?? '0'}</TableCell>
+                    <TableCell className="text-zinc-600 dark:text-zinc-400 text-xs font-medium">
+                      {getModuleTypeLabel((p as any).tipo_modulo)}
+                    </TableCell>
+                    <TableCell>
+                      {Array.isArray((p as any).cursos_incluidos) && (p as any).cursos_incluidos.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+                          {getIncludedCourseLabels(p).map((label) => (
+                            <Badge 
+                              key={`${p.id}-inc-${label}`} 
+                              className="rounded-md border border-sky-100 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-950/20 dark:border-sky-900/30 dark:text-sky-400 shadow-sm truncate max-w-[160px]"
+                            >
+                              {label}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-400 dark:text-zinc-650">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {Array.isArray(p.aeronaves) && p.aeronaves.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+                          {getAircraftLabels(p).map((label) => (
+                            <Badge 
+                              key={`${p.id}-air-${label}`} 
+                              className="rounded-md border border-amber-100 bg-amber-50/50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-400 shadow-sm truncate max-w-[160px]"
+                            >
+                              {label}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-400 dark:text-zinc-650">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {Array.isArray(p.id_contratos) && p.id_contratos.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-w-[220px]">
+                          {getContractLabels(p).map((label) => (
+                            <Badge 
+                              key={`${p.id}-${label}`} 
+                              className="rounded-md border border-violet-100 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-950/20 dark:border-violet-900/30 dark:text-violet-400 shadow-sm truncate max-w-[160px]"
+                            >
+                              {label}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-400 dark:text-zinc-650">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {p.status === 'publish' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/50 dark:bg-emerald-950/25 dark:text-emerald-400 dark:border-emerald-900/50 shadow-sm">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Publicado
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800 shadow-sm">
+                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500"></span>
+                          Rascunho
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors duration-150">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="rounded-xl">
+                           <DropdownMenuLabel className="text-xs text-muted-foreground font-bold tracking-wider uppercase">Ações</DropdownMenuLabel>
+                           <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-900" />
+                           <DropdownMenuItem onClick={() => handleView(p.id)} className="text-xs py-2 cursor-pointer font-medium rounded-lg">Ver detalhes</DropdownMenuItem>
+                           <DropdownMenuItem onClick={() => handleEdit(p.id)} className="text-xs py-2 cursor-pointer font-medium rounded-lg">Editar</DropdownMenuItem>
+                           <DropdownMenuItem
+                             className="text-xs py-2 cursor-pointer text-red-650 hover:bg-red-50 focus:bg-red-50 focus:text-red-750 font-semibold rounded-lg"
+                             onClick={() => deleteMutation.mutate(String(p.id))}
+                           >
+                             Excluir
+                           </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Anterior
-          </Button>
-          <div className="px-2">Página {page} de {totalPages}</div>
-          <Button
-            variant="outline"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Próxima
-            <ChevronRight className="w-4 h-4 ml-2" />
-          </Button>
+        {/* Paginação */}
+        <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-900 pt-4 mt-2">
+          <div className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+            Página <span className="font-semibold text-zinc-700 dark:text-zinc-300">{page}</span> de <span className="font-semibold text-zinc-700 dark:text-zinc-300">{totalPages}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              disabled={page <= 1} 
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="h-9 px-3 rounded-lg border-zinc-200 dark:border-zinc-800 font-semibold text-xs transition-colors duration-150"
+            >
+              <ChevronLeft className="w-4 h-4 mr-1 text-zinc-500" />
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="h-9 px-3 rounded-lg border-zinc-200 dark:border-zinc-800 font-semibold text-xs transition-colors duration-150"
+            >
+              Próxima
+              <ChevronRight className="w-4 h-4 ml-1 text-zinc-500" />
+            </Button>
+          </div>
         </div>
       </Card>
     </div>

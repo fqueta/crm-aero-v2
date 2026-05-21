@@ -10,6 +10,7 @@ import { currencyRemoveMaskToNumber } from '@/lib/masks/currency';
 import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
+import ProposalPdfLinkCard from '@/components/school/ProposalPdfLinkCard';
 import ResponsibleInfoCard from '@/components/school/ResponsibleInfoCard';
 import ProposalAttendanceCard from '@/components/school/ProposalAttendanceCard';
 import ProposalContractsTab from './ProposalContractsTab';
@@ -129,6 +130,11 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const isInteressado = useMemo(() => {
+    const sit = String((enrollment as any)?.situacao || (enrollment as any)?.situacao_nome || (enrollment as any)?.situacao_label || '').toLowerCase().trim();
+    return sit === 'int' || sit === 'interessado' || sit.includes('interessad');
+  }, [enrollment]);
+
   const infoResponsavel = (enrollment as any)?.responsavel;
   const rawZapsignResp = (enrollment as any)?.meta?.processo_assinatura_responsavel;
   const zapsignDataResp = useMemo(() => {
@@ -148,12 +154,18 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
    */
   const getInitialTab = useMemo(() => {
     const hash = String(location.hash || '').replace('#', '');
-    if (hash === 'overview' || hash === 'admin' || hash === 'contracts' || hash === 'logs') return hash;
+    if (hash === 'overview' || hash === 'admin' || hash === 'contracts' || hash === 'logs') {
+      if (hash === 'admin' && isInteressado) return 'overview';
+      return hash;
+    }
     const qs = new URLSearchParams(location.search || '');
     const t = qs.get('tab');
-    if (t === 'overview' || t === 'admin' || t === 'contracts' || t === 'logs') return t;
+    if (t === 'overview' || t === 'admin' || t === 'contracts' || t === 'logs') {
+      if (t === 'admin' && isInteressado) return 'overview';
+      return t;
+    }
     return 'overview';
-  }, [location.hash, location.search]);
+  }, [location.hash, location.search, isInteressado]);
 
   /**
    * tab
@@ -177,6 +189,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
    * en-US: Updates tab and writes hash in the URL (#overview | #admin | #contracts).
    */
   function handleTabChange(next: string) {
+    if (next === 'admin' && isInteressado) return;
     setTab(next);
     navigate(
       { pathname: location.pathname, search: location.search, hash: `#${next}` },
@@ -367,9 +380,11 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
     <div className="space-y-6">
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-           <TabsList className="grid grid-cols-4 w-full md:w-[540px] bg-muted/50 p-1 rounded-xl print:hidden">
+           <TabsList className={`grid ${isInteressado ? 'grid-cols-3 md:w-[400px]' : 'grid-cols-4 md:w-[540px]'} w-full bg-muted/50 p-1 rounded-xl print:hidden`}>
               <TabsTrigger value="overview" asChild className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"><a href="#overview">Geral</a></TabsTrigger>
-              <TabsTrigger value="admin" asChild className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"><a href="#admin">Administração</a></TabsTrigger>
+              {!isInteressado && (
+                <TabsTrigger value="admin" asChild className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"><a href="#admin">Administração</a></TabsTrigger>
+              )}
               <TabsTrigger value="contracts" asChild className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"><a href="#contracts">Contratos</a></TabsTrigger>
               <TabsTrigger value="logs" asChild className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"><a href="#logs">Auditoria</a></TabsTrigger>
            </TabsList>
@@ -448,122 +463,112 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
                   {/* Cards de Assinatura movidos da aba Admin */}
                   {linkAssinatura && <SignatureLinkCard link={linkAssinatura} />}
+                  {meta?.proposta_pdf && <ProposalPdfLinkCard pdfUrl={meta.proposta_pdf} />}
                   {infoResponsavel && <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />}
                </div>
             </div>
         </TabsContent>
 
-        <TabsContent value="admin" className="mt-0 pt-4 animate-in fade-in slide-in-from-right-2 duration-500 outline-none">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-8 space-y-8">
-              <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">
-                <CardHeader className="pb-3 border-b border-border/40">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                        <Info className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-1">
-                        <CardTitle className="text-xs font-bold uppercase tracking-widest">Texto de Administração</CardTitle>
-                        <p className="text-xs text-muted-foreground">
-                          Revise, copie ou envie o texto pelo WhatsApp Web quando a matrícula estiver matriculada.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-lg"
-                        onClick={() => handleCopyAdministrationText(administrationText)}
-                        disabled={!showAdministrationTextCard}
-                      >
-                        <Copy className="mr-2 h-3.5 w-3.5" />
-                        Copiar
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-8 rounded-lg"
-                        disabled={!canSendAdministrationTextByWhatsApp}
-                        onClick={() => openAdministrationTextInWhatsAppWeb(administrationText)}
-                      >
-                        <MessageCircle className="mr-2 h-3.5 w-3.5" />
-                        WhatsApp Web
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-5">
-                  {!showAdministrationTextCard ? (
-                    <div className="rounded-xl border border-dashed border-border/60 bg-white px-4 py-6 text-sm text-muted-foreground">
-                      O texto de administração ainda não está disponível para esta proposta.
-                    </div>
-                  ) : (
-                    <>
-                      {!canSendAdministrationTextByWhatsApp && (
-                        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                          O envio pelo WhatsApp Web fica disponível quando a proposta estiver matriculada.
+        {!isInteressado && (
+          <TabsContent value="admin" className="mt-0 pt-4 animate-in fade-in slide-in-from-right-2 duration-500 outline-none">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              <div className="lg:col-span-8 space-y-8">
+                <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">
+                  <CardHeader className="pb-3 border-b border-border/40">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                          <Info className="h-4 w-4" />
                         </div>
-                      )}
-                      <textarea
-                        readOnly
-                        value={administrationText}
-                        className="min-h-[420px] w-full rounded-xl border border-border/50 bg-white px-3 py-3 text-xs leading-5 text-foreground shadow-sm outline-none resize-y"
-                      />
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="lg:col-span-4 space-y-6 print:hidden">
-              <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">
-                <CardHeader className="pb-3 border-b border-border/40">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                      <Info className="h-4 w-4" />
+                        <div className="space-y-1">
+                          <CardTitle className="text-xs font-bold uppercase tracking-widest">Texto de Administração</CardTitle>
+                          <p className="text-xs text-muted-foreground">
+                            Texto de administração gerado para fins operacionais e de registro.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-2 rounded-lg"
+                          onClick={() => handleCopyAdministrationText(administrationText)}
+                          disabled={!administrationText}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          Copiar
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-8 text-xs gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 shadow-sm"
+                          onClick={() => openAdministrationTextInWhatsAppWeb(administrationText)}
+                          disabled={!administrationText}
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          WhatsApp Web
+                        </Button>
+                      </div>
                     </div>
-                    <CardTitle className="text-xs font-bold uppercase tracking-widest">Resumo Operacional</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-5 space-y-6">
-                  <div className="space-y-4">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Identificação</span>
-                    <div className="space-y-3">
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    {administrationText ? (
+                      <div className="p-4 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/30 text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto">
+                        {administrationText}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        O texto de administração ainda não está disponível para esta proposta.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-4 space-y-6">
+                <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">
+                  <CardHeader className="pb-3 border-b border-border/40">
+                    <CardTitle className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-primary" /> Resumo Operacional
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6 space-y-6">
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/75 px-1">Identificação</h4>
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
-                        <div className="p-2 rounded-lg bg-zinc-100 text-zinc-500"><User className="h-4 w-4" /></div>
+                        <div className="p-2 rounded-lg bg-primary/10 text-primary"><User className="h-4 w-4" /></div>
                         <div className="flex flex-col min-w-0">
                           <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">Cliente</span>
                           <span className="text-sm font-bold leading-tight truncate">{clientName || '—'}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
-                        <div className="p-2 rounded-lg bg-zinc-100 text-zinc-500"><Mail className="h-4 w-4" /></div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">E-mail</span>
-                          <span className="text-sm font-bold leading-tight truncate">{clientEmail || '—'}</span>
+                      {clientEmail && (
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
+                          <div className="p-2 rounded-lg bg-primary/10 text-primary"><Mail className="h-4 w-4" /></div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">E-mail</span>
+                            <span className="text-sm font-bold leading-tight truncate">{clientEmail}</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
-                        <div className="p-2 rounded-lg bg-zinc-100 text-zinc-500"><Phone className="h-4 w-4" /></div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">WhatsApp</span>
-                          <span className="text-sm font-bold leading-tight truncate">{clientPhone || '—'}</span>
+                      )}
+                      {clientPhone && (
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
+                          <div className="p-2 rounded-lg bg-primary/10 text-primary"><Phone className="h-4 w-4" /></div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">WhatsApp</span>
+                            <span className="text-sm font-bold leading-tight truncate">{clientPhone}</span>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
-                  </div>
 
-                  <div className="space-y-4">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 px-1">Acadêmico</span>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/75 px-1">Acadêmico</h4>
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
                         <div className="p-2 rounded-lg bg-primary/10 text-primary"><BookOpen className="h-4 w-4" /></div>
                         <div className="flex flex-col min-w-0">
                           <span className="text-[10px] font-bold opacity-50 uppercase leading-none mb-0.5">Curso</span>
-                          <span className="text-sm font-bold leading-tight truncate">{(course as any)?.titulo || (course as any)?.nome || '—'}</span>
+                          <span className="text-sm font-bold leading-tight truncate">{(course as any)?.titulo || (course as any)?.nome || (enrollment as any)?.course_name || (enrollment as any)?.curso_nome || '—'}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-zinc-900 border border-border/40 shadow-sm">
@@ -574,12 +579,12 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                         </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
+        )}
 
         <TabsContent value="contracts" className="mt-0 pt-4 animate-in fade-in slide-in-from-right-2 duration-500 outline-none">
              {tab === 'contracts' && clientId && id ? (
