@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { currencyRemoveMaskToNumber, currencyRemoveMaskToString, currencyApplyMask } from '@/lib/masks/currency';
-import { DollarSign, Plane, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, Plane, ChevronDown, ChevronUp, RotateCcw, AlertTriangle, Settings2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -20,6 +20,10 @@ interface CourseModulesSelectorProps {
   initialSelections?: Record<number, ModuleSelection>;
   initialEtapa1Discount?: number;
   initialDollarRate?: number;
+  /** pt-BR: Overrides de tarifas de aeronaves salvos no orc_json (modo edição) */
+  initialRateOverrides?: Record<string, { brl: number; usd: number }>;
+  /** pt-BR: Moeda inicial salva na proposta (modo edição) */
+  initialCurrency?: CurrencyType;
 }
 
 interface ModuleSelection {
@@ -39,12 +43,35 @@ export default function CourseModulesSelector({
   formatCurrencyBRL,
   initialSelections: providedInitialSelections,
   initialEtapa1Discount,
-  initialDollarRate
+  initialDollarRate,
+  initialRateOverrides,
+  initialCurrency
 }: CourseModulesSelectorProps) {
   const { toast } = useToast();
-  const [currency, setCurrency] = useState<CurrencyType>('BRL');
+  const [currency, setCurrency] = useState<CurrencyType>(initialCurrency || 'BRL');
   const [dollarRate, setDollarRate] = useState<number>(initialDollarRate || 5.15);
   const [globalAircraftId, setGlobalAircraftId] = useState<string>('');
+
+  /**
+   * rateOverrides
+   * pt-BR: Mapa de aeronave_id → { brl, usd } com valores de hora personalizados para esta proposta.
+   *        Se existir override para uma aeronave, o valor personalizado sobrescreve TODOS os pacotes.
+   * en-US: Map of aircraft_id → { brl, usd } with custom hour rates for this proposal.
+   */
+  const [rateOverrides, setRateOverrides] = useState<Record<string, { brl: number; usd: number }>>(
+    initialRateOverrides || {}
+  );
+  
+  // Sincroniza estado inicial hidratado (ex: quando form.reset carrega dados do backend)
+  useEffect(() => {
+    if (initialCurrency) setCurrency(initialCurrency);
+    if (initialDollarRate) setDollarRate(initialDollarRate);
+    if (initialRateOverrides && Object.keys(initialRateOverrides).length > 0) {
+      setRateOverrides(initialRateOverrides);
+    }
+  }, [initialCurrency, initialDollarRate, initialRateOverrides]);
+
+  const [ratesCollapsed, setRatesCollapsed] = useState<boolean>(true);
   // Inicializa o estado com base nos módulos do curso
   const initialSelections = useMemo(() => {
     // Se tiver seleções iniciais fornecidas (ex: edição), usa elas como base
@@ -206,6 +233,15 @@ export default function CourseModulesSelector({
    *        Falls back to the first package if no packages match or credits = 0.
    */
   const getAircraftRate = (aircraft: any, targetCurrency: CurrencyType = currency, credits: number = 0) => {
+    if (!aircraft) return 0;
+
+    // pt-BR: Se existir override de tarifa para esta aeronave, usa o valor personalizado
+    // en-US: If there's a rate override for this aircraft, use the custom value
+    const override = rateOverrides[String(aircraft.id)];
+    if (override) {
+      return targetCurrency === 'USD' ? override.usd : override.brl;
+    }
+
     if (!aircraft?.pacotes) return 0;
     try {
       const pacotes = typeof aircraft.pacotes === 'string' ? JSON.parse(aircraft.pacotes) : aircraft.pacotes;
@@ -252,6 +288,73 @@ export default function CourseModulesSelector({
       console.error("Erro ao calcular valor da aeronave:", err);
       return 0;
     }
+  };
+
+  /**
+   * getOriginalAircraftRate
+   * pt-BR: Obtém a tarifa ORIGINAL da aeronave (sem override), para exibição comparativa.
+   * en-US: Gets the ORIGINAL aircraft rate (without override), for comparative display.
+   */
+  const getOriginalAircraftRate = (aircraft: any, targetCurrency: CurrencyType = currency) => {
+    if (!aircraft?.pacotes) return 0;
+    try {
+      const pacotes = typeof aircraft.pacotes === 'string' ? JSON.parse(aircraft.pacotes) : aircraft.pacotes;
+      const pacotesList: any[] = Array.isArray(pacotes) ? pacotes : Object.values(pacotes);
+      if (pacotesList.length === 0) return 0;
+      const firstPkg = pacotesList[0];
+      if (!firstPkg) return 0;
+
+      if (targetCurrency === 'USD') {
+        const val = firstPkg['Hora Seca (USD)'] || firstPkg['hora-seca_dolar'] || firstPkg['hora-seca-dolar'] || firstPkg['usd'];
+        return val ? currencyRemoveMaskToNumber(String(val)) : 0;
+      }
+      const valBrl = firstPkg['Hora Seca (BRL)'] || firstPkg['hora-seca'] || firstPkg['brl'];
+      if (valBrl) return currencyRemoveMaskToNumber(String(valBrl));
+      return getAircraftHourlyRateProp(aircraft);
+    } catch {
+      return 0;
+    }
+  };
+
+  /**
+   * handleRateOverrideChange
+   * pt-BR: Atualiza o override de tarifa de uma aeronave e recalcula todos os módulos afetados.
+   * en-US: Updates the rate override for an aircraft and recalculates all affected modules.
+   */
+  const handleRateOverrideChange = (aircraftId: string, field: 'brl' | 'usd', value: number) => {
+    setRateOverrides(prev => {
+      const current = prev[aircraftId] || {
+        brl: getOriginalAircraftRate(aircrafts.find(a => String(a.id) === aircraftId), 'BRL'),
+        usd: getOriginalAircraftRate(aircrafts.find(a => String(a.id) === aircraftId), 'USD'),
+      };
+      return { ...prev, [aircraftId]: { ...current, [field]: value } };
+    });
+  };
+
+  /**
+   * handleResetRateOverride
+   * pt-BR: Remove o override de tarifa de uma aeronave específica (volta ao padrão do cadastro).
+   * en-US: Removes the rate override for a specific aircraft (back to registration default).
+   */
+  const handleResetRateOverride = (aircraftId: string) => {
+    setRateOverrides(prev => {
+      const next = { ...prev };
+      delete next[aircraftId];
+      return next;
+    });
+  };
+
+  /**
+   * handleResetAllRateOverrides
+   * pt-BR: Remove todos os overrides de tarifa (volta tudo ao padrão do cadastro).
+   * en-US: Removes all rate overrides (back to registration defaults).
+   */
+  const handleResetAllRateOverrides = () => {
+    setRateOverrides({});
+    toast?.({
+      title: 'Tarifas Restauradas',
+      description: 'Todas as tarifas voltaram ao valor padrão do cadastro.',
+    });
   };
 
   // Helper para formatar moeda dinamicamente
@@ -358,7 +461,7 @@ export default function CourseModulesSelector({
       });
       return next;
     });
-  }, [currency, dollarRate]);
+  }, [currency, dollarRate, rateOverrides]);
 
   // Handler para aplicar aeronave global em massa
   const handleApplyGlobalAircraft = (id: string) => {
@@ -437,9 +540,10 @@ export default function CourseModulesSelector({
         etapa1Discount,
         currency,
         dollarRate,
+        rateOverrides,
         symbol: 'R$' // Sempre R$ no final pois a proposta é gerada em reais
     } as any);
-  }, [selections, course, aircrafts, etapa1Discount, currency, dollarRate]);
+  }, [selections, course, aircrafts, etapa1Discount, currency, dollarRate, rateOverrides]);
 
   const handleSelectAllGroup = (groupItems: { index: number }[], checked: boolean) => {
     setSelections(prev => {
@@ -564,6 +668,147 @@ export default function CourseModulesSelector({
           </div>
         </CardContent>
       </Card>
+
+      {/* Painel de Tarifas de Aeronaves — Editável por Proposta */}
+      {courseLinkedAircrafts.length > 0 && (
+        <Card className={`border transition-all duration-300 ${
+          Object.keys(rateOverrides).length > 0 
+            ? 'border-amber-300 dark:border-amber-600 bg-amber-50/30 dark:bg-amber-950/10' 
+            : 'border-dashed bg-muted/20'
+        }`}>
+          <CardHeader 
+            className="py-2.5 px-4 flex flex-row items-center justify-between cursor-pointer hover:bg-muted/20 transition-colors"
+            onClick={() => setRatesCollapsed(!ratesCollapsed)}
+          >
+            <div className="flex items-center gap-2">
+              {ratesCollapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+              <Settings2 className="w-4 h-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                Tarifas de Aeronaves para esta Proposta
+              </CardTitle>
+              {Object.keys(rateOverrides).length > 0 && (
+                <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-600 text-[10px] h-5 gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  {Object.keys(rateOverrides).length} personalizada{Object.keys(rateOverrides).length > 1 ? 's' : ''}
+                </Badge>
+              )}
+            </div>
+            {!ratesCollapsed && Object.keys(rateOverrides).length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[10px] uppercase font-bold text-muted-foreground hover:text-primary gap-1"
+                onClick={(e) => { e.stopPropagation(); handleResetAllRateOverrides(); }}
+              >
+                <RotateCcw className="w-3 h-3" />
+                Restaurar Padrão
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className={`p-0 transition-all duration-300 ${ratesCollapsed ? 'hidden' : 'block'}`}>
+            <div className="px-4 pb-2">
+              <p className="text-[11px] text-muted-foreground">
+                Personalize os valores de hora seca por aeronave. Alterações afetam <strong>apenas esta proposta</strong> — os valores do cadastro não são modificados.
+              </p>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Aeronave</TableHead>
+                  <TableHead className="w-[170px]">Hora Seca (BRL)</TableHead>
+                  <TableHead className="w-[170px]">Hora Seca (USD)</TableHead>
+                  <TableHead className="w-[100px] text-center">Status</TableHead>
+                  <TableHead className="w-[60px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {courseLinkedAircrafts.map((aircraft: any) => {
+                  const aircraftId = String(aircraft.id);
+                  const hasOverride = !!rateOverrides[aircraftId];
+                  const originalBrl = getOriginalAircraftRate(aircraft, 'BRL');
+                  const originalUsd = getOriginalAircraftRate(aircraft, 'USD');
+                  const currentBrl = hasOverride ? rateOverrides[aircraftId].brl : originalBrl;
+                  const currentUsd = hasOverride ? rateOverrides[aircraftId].usd : originalUsd;
+                  const brlChanged = hasOverride && Math.abs(currentBrl - originalBrl) > 0.01;
+                  const usdChanged = hasOverride && Math.abs(currentUsd - originalUsd) > 0.01;
+
+                  return (
+                    <TableRow key={aircraftId} className={hasOverride ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Plane className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="font-medium text-sm">
+                            {aircraft.nome || aircraft.matricula || `Aeronave ${aircraft.id}`}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-bold">R$</span>
+                          <Input
+                            type="text"
+                            className={`h-8 pl-7 text-sm font-medium text-right ${brlChanged ? 'border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-950/30' : ''}`}
+                            value={currencyApplyMask(String(currentBrl.toFixed(2)))}
+                            onChange={(e) => handleRateOverrideChange(aircraftId, 'brl', currencyRemoveMaskToNumber(e.target.value))}
+                          />
+                          {brlChanged && (
+                            <span className="text-[9px] text-muted-foreground mt-0.5 block text-right">
+                              Padrão: {formatValue(originalBrl)}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-bold">U$</span>
+                          <Input
+                            type="text"
+                            className={`h-8 pl-7 text-sm font-medium text-right ${usdChanged ? 'border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-950/30' : ''}`}
+                            value={currencyApplyMask(String(currentUsd.toFixed(2)))}
+                            onChange={(e) => handleRateOverrideChange(aircraftId, 'usd', currencyRemoveMaskToNumber(e.target.value))}
+                          />
+                          {usdChanged && (
+                            <span className="text-[9px] text-muted-foreground mt-0.5 block text-right">
+                              Padrão: {formatValueUSD(originalUsd)}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {hasOverride ? (
+                          <Badge variant="outline" className="bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-600 text-[10px] gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Custom
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border-green-300 dark:border-green-600 text-[10px]">
+                            Padrão
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {hasOverride && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                            title="Restaurar valor padrão desta aeronave"
+                            onClick={() => handleResetRateOverride(aircraftId)}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {Object.entries(groupedModules).map(([etapa, items]) => {
         const normalizedEtapa = String(etapa || '').toLowerCase().replace(/\s/g, '');

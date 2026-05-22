@@ -135,6 +135,7 @@ class ApiCredentialController extends Controller
                 'slug' => $item->post_name ?? '',
                 'active' => ($item->post_status ?? '') === 'publish',
                 'config' => $item->config,
+                'meta' => $this->fetchMetaPairs($item->ID ?? $item->id),
                 'created_at' => $item->created_at ?? null,
                 'updated_at' => $item->updated_at ?? null,
             ];
@@ -318,8 +319,8 @@ class ApiCredentialController extends Controller
         }
         $mapped['post_type'] = 'api_credentials';
         $item->update($mapped);
-        // Atualizar metas (text) e remover chaves ausentes — somente se a tabela existir
-        if (array_key_exists('meta', $data) && is_array($data['meta']) && Schema::hasTable('postmeta')) {
+        // Atualizar metas (text) e remover chaves ausentes
+        if (array_key_exists('meta', $data) && is_array($data['meta'])) {
             $postId = $item->ID ?? $item->id;
             $providedKeys = [];
             foreach ($data['meta'] as $m) {
@@ -410,6 +411,7 @@ class ApiCredentialController extends Controller
                 'slug' => $item->post_name ?? '',
                 'active' => ($item->post_status ?? '') === 'publish',
                 'config' => $item->config,
+                'meta' => $this->fetchMetaPairs($item->ID ?? $item->id),
             ];
         });
         return response()->json($items);

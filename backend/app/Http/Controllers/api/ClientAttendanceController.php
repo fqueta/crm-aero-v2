@@ -152,6 +152,8 @@ class ClientAttendanceController extends Controller
             'stage_id' => 'nullable|integer',
             'stageId' => 'nullable|integer',
             'funnelId' => 'nullable|integer',
+            'enviar_whatsapp' => 'nullable|boolean',
+            'celular_envio' => 'nullable|string|max:30',
         ]);
 
         // Cria o registro de atendimento
@@ -177,6 +179,117 @@ class ClientAttendanceController extends Controller
             'actor_id' => (string) $user->id,
             'ip_address' => $request->ip(),
         ]);
+
+        // Envio opcional via WhatsApp API (ChatGuru) no atendimento
+        $whatsappSent = false;
+        $whatsappError = null;
+        if ($request->input('enviar_whatsapp')) {
+            $text = $validated['observation'] ?? '';
+            if (empty($text)) {
+                return response()->json(['error' => 'A observação (mensagem) não pode estar vazia para envio via WhatsApp.'], 400);
+            }
+
+            // Resolve phone number
+            $telefonezap = $request->input('celular_envio');
+            if (empty($telefonezap)) {
+                $telefonezap = $client->celular;
+                if (empty($telefonezap)) {
+                    $config = is_array($client->config)
+                        ? $client->config
+                        : (is_string($client->config) ? (json_decode($client->config, true) ?? []) : []);
+                    $telefonezap = $config['celular'] ?? '';
+                }
+            }
+
+            $cleanPhone = preg_replace('/\D/', '', (string)$telefonezap);
+            if (empty($cleanPhone)) {
+                return response()->json(['error' => 'Celular do cliente não cadastrado ou inválido para envio via API.'], 400);
+            }
+
+            // Prepend Brazil country code if not present
+            if (strlen($cleanPhone) <= 11 && !str_starts_with($cleanPhone, '55')) {
+                $cleanPhone = '55' . $cleanPhone;
+            }
+
+            // Replace template placeholder {nome} if present
+            $nome = $client->name ?? 'Cliente';
+            $text = str_replace('{nome}', $nome, $text);
+
+            // Dispatch via ZapguruController
+            try {
+                $zgc = new ZapguruController();
+                $res = $zgc->enviar_mensagem([
+                    'celular_completo' => $cleanPhone,
+                    'nome' => $nome,
+                    'text' => $text,
+                    'dialog_id' => $request->input('dialog_id', '') ?: false,
+                ]);
+
+                if (isset($res['exec']) && $res['exec']) {
+                    $whatsappSent = true;
+                    \Illuminate\Support\Facades\Log::info('ClientAttendanceController: WhatsApp enviado com sucesso', [
+                        'phone' => $cleanPhone,
+                        'attendance_id' => $attendance->id,
+                        'client_id' => $client->id,
+                    ]);
+                    try {
+                        EventLog::create([
+                            'entity_type' => 'user',
+                            'entity_id' => (string) $client->id,
+                            'action' => 'whatsapp_guru_attendance_sent',
+                            'description' => "Mensagem de atendimento enviada via WhatsApp (ChatGuru) para {$cleanPhone}.",
+                            'payload' => [
+                                'phone' => $cleanPhone,
+                                'message' => $text,
+                                'attendance_id' => (string) $attendance->id,
+                                'response' => $res['response'] ?? null
+                            ],
+                            'actor_id' => (string) $user->id,
+                            'ip_address' => $request->ip(),
+                        ]);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error('Erro ao salvar EventLog para WhatsApp Guru no Atendimento: ' . $e->getMessage());
+                    }
+
+                    // Update attendance metadata
+                    try {
+                        $metadata = $attendance->metadata ?? [];
+                        $metadata['whatsapp_sent'] = true;
+                        $metadata['whatsapp_response'] = $res['response'] ?? null;
+                        $attendance->metadata = $metadata;
+                        $attendance->save();
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error('Erro ao salvar metadados do atendimento: ' . $e->getMessage());
+                    }
+                } else {
+                    $whatsappError = $res['response']['description'] ?? $res['error'] ?? 'Erro desconhecido na API do ChatGuru';
+                    \Illuminate\Support\Facades\Log::error('ClientAttendanceController: falha no envio WhatsApp', [
+                        'phone' => $cleanPhone,
+                        'error' => $whatsappError,
+                        'attendance_id' => $attendance->id,
+                        'client_id' => $client->id,
+                    ]);
+                    try {
+                        $metadata = $attendance->metadata ?? [];
+                        $metadata['whatsapp_sent'] = false;
+                        $metadata['whatsapp_error'] = $whatsappError;
+                        $attendance->metadata = $metadata;
+                        $attendance->save();
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error('Erro ao salvar metadados do atendimento com falha de envio: ' . $e->getMessage());
+                    }
+                }
+            } catch (\Throwable $e) {
+                $whatsappError = $e->getMessage();
+                \Illuminate\Support\Facades\Log::error('ClientAttendanceController: exceção no disparo WhatsApp', [
+                    'phone' => $cleanPhone ?? null,
+                    'error' => $e->getMessage(),
+                    'attendance_id' => $attendance->id,
+                    'client_id' => $client->id,
+                ]);
+            }
+        }
+
 
         // Atualiza estágio do cliente se solicitado na requisição
         $stageUpdate = false;
@@ -208,6 +321,8 @@ class ClientAttendanceController extends Controller
             'message' => 'Atendimento registrado com sucesso',
             'data' => $attendance,
             'stage_update' => $stageUpdate,
+            'whatsapp_sent' => $whatsappSent,
+            'whatsapp_error' => $whatsappError,
         ], 201);
     }
 }

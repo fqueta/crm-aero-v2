@@ -146,32 +146,35 @@ class Qlib
         }
         return $idade;
     }
+    protected static $optionsCache = [];
+
     static public function qoption($valor = false, $type = false){
         //type é o tipo de respsta
 		$ret = false;
 		if($valor){
-			$result = Option::where('url','=',$valor)->
-               where('excluido','=','n')
-               ->where('deletado','=','n')
-               ->where('ativo','=','s')
-               ->select('value')
-               ->first();
-            //    ->toArray();
-            //    dd($valor,$result['value']);
-               if(isset($result['value'])) {
-                   // output data of each row
-                   $ret = $result['value'];
-					// if($valor=='urlroot'){
-					// 	$ret = str_replace('/home/ctloja/public_html/lojas/','/home/ctdelive/lojas/',$ret);
-					// }
-                    if($type=='array'){
-                        $ret = self::lib_json_array($ret);
-                    }
-                    if($type=='json'){
-                        $ret = self::lib_array_json($ret);
-                    }
-			    }
-			//}
+            if (array_key_exists($valor, self::$optionsCache)) {
+                $resultValue = self::$optionsCache[$valor];
+            } else {
+                $result = Option::where('url','=',$valor)->
+                   where('excluido','=','n')
+                   ->where('deletado','=','n')
+                   ->where('ativo','=','s')
+                   ->select('value')
+                   ->first();
+                   
+                $resultValue = isset($result['value']) ? $result['value'] : null;
+                self::$optionsCache[$valor] = $resultValue;
+            }
+
+            if(isset($resultValue)) {
+                $ret = $resultValue;
+                if($type=='array'){
+                    $ret = self::lib_json_array($ret);
+                }
+                if($type=='json'){
+                    $ret = self::lib_array_json($ret);
+                }
+            }
 		}
 		return $ret;
 	}
@@ -1312,7 +1315,7 @@ class Qlib
         // $meta_value = isset($config['meta_value'])?$config['meta_value']:false;
         $ret = false;
         $tab = 'postmeta';
-        if($post_id&&$meta_key&&$meta_value){
+        if($post_id && $meta_key !== null && $meta_key !== '' && $meta_value !== null){
             $verf = self::totalReg($tab,"WHERE post_id='$post_id' AND meta_key='$meta_key'");
             if($verf){
                 $ret=DB::table($tab)->where('post_id',$post_id)->where('meta_key',$meta_key)->update([

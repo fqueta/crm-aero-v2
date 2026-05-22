@@ -173,14 +173,16 @@ export default function ProposalsCreate() {
       const payload: any = {
         name: quickName,
         email: quickEmail,
-        telefone: phoneClean,
+        celular: phoneClean,
         tipo_pessoa: 'pf',
         status: 'actived',
         // Associate consultant if selected
         autor: quickConsultantId || undefined, 
         // Campos obrigatórios mínimos para passar na validação do backend (se houver)
         // Minimum required fields to pass backend validation (if any)
-        config: {},
+        config: {
+          celular: phoneClean
+        },
       };
       
       const created = await clientsService.createClient(payload);
@@ -841,7 +843,7 @@ export default function ProposalsCreate() {
    * pt-BR: Handler para o seletor de módulos (checklist). Atualiza subtotal e JSON.
    * en-US: Handler for module selector (checklist). Updates subtotal and JSON.
    */
-  function handleModulesSelectionChange({ modules, total, etapa1Discount, currency, dollarRate }: { modules: any[]; total: number; etapa1Discount: number; currency?: 'BRL' | 'USD'; dollarRate?: number }) {
+  function handleModulesSelectionChange({ modules, total, etapa1Discount, currency, dollarRate, rateOverrides }: { modules: any[]; total: number; etapa1Discount: number; currency?: 'BRL' | 'USD'; dollarRate?: number; rateOverrides?: Record<string, { brl: number; usd: number }> }) {
     if (currency) setProposalCurrency(currency);
     form.setValue('subtotal', formatValueByProposalCurrency(total));
     // Salva o desconto da etapa 1 no estado do form para persistência
@@ -865,7 +867,8 @@ export default function ProposalsCreate() {
         meta: {
             etapa1_desconto: etapa1Discount,
             currency: currency || 'BRL',
-            dollarRate: dollarRate || 5.15
+            dollarRate: dollarRate || 5.15,
+            rateOverrides: rateOverrides || {}
         }
       };
       try {

@@ -119,9 +119,14 @@ export default function Integrations() {
       const rows = (editMetaRows[item.id] || []).filter((r) => (r.key || '').trim() !== '');
       return integracoesService.update(item.id, { meta: rows.map((r) => ({ key: r.key.trim(), value: r.value ?? '' })) });
     },
-    onSuccess: () => {
+    onSuccess: (_, item) => {
       toast.success('Metacampos salvos');
       qc.invalidateQueries({ queryKey: ['integracoes'] });
+      setEditMetaRows((m) => {
+        const next = { ...m };
+        delete next[item.id];
+        return next;
+      });
     },
     onError: () => toast.error('Erro ao salvar metacampos'),
   });
@@ -156,10 +161,15 @@ export default function Integrations() {
         config: { url: f.url, user: f.user || undefined, pass: f.pass || undefined, produto: f.produto || undefined },
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, item) => {
       toast.success('Integração atualizada');
       qc.invalidateQueries({ queryKey: ['integracoes'] });
       setExpandedEdit({});
+      setEditFields((fields) => {
+        const next = { ...fields };
+        delete next[item.id];
+        return next;
+      });
     },
     onError: () => toast.error('Erro ao atualizar integração'),
   });

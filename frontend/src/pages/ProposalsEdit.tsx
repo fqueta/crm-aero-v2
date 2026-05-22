@@ -773,7 +773,9 @@ export default function ProposalsEdit() {
                 }
               ],
             };
-            form.setValue('orc_json', JSON.stringify(orc));
+            try {
+              form.setValue('orc_json', JSON.stringify(orc), { shouldDirty: true, shouldValidate: true });
+            } catch {}
           }
       }
     }
@@ -869,6 +871,27 @@ export default function ProposalsEdit() {
   const initialDollarRate = useMemo(() => {
     const orc = (enrollment as any)?.orc;
     return Number(orc?.meta?.dollarRate || 5.15);
+  }, [enrollment]);
+
+  /**
+   * initialRateOverrides
+   * pt-BR: Hidrata os overrides de tarifa de aeronave salvos no orc_json (modo edição).
+   * en-US: Hydrates aircraft rate overrides saved in orc_json (edit mode).
+   */
+  const initialRateOverrides = useMemo(() => {
+    const orc = (enrollment as any)?.orc;
+    return orc?.meta?.rateOverrides || undefined;
+  }, [enrollment]);
+
+  /**
+   * initialCurrency
+   * pt-BR: Hidrata a moeda salva no orc_json (modo edição).
+   * en-US: Hydrates currency saved in orc_json (edit mode).
+   */
+  const initialCurrency = useMemo(() => {
+    const orc = (enrollment as any)?.orc;
+    const saved = orc?.meta?.currency;
+    return (saved === 'BRL' || saved === 'USD') ? saved : undefined;
   }, [enrollment]);
 
   const initialType2Selections = useMemo(() => {
@@ -1102,7 +1125,7 @@ export default function ProposalsEdit() {
    * pt-BR: Handler para o seletor de módulos (checklist) de curso Tipo 2. Atualiza subtotal e JSON.
    * en-US: Handler for Type 2 course module selector (checklist). Updates subtotal and JSON.
    */
-  function handleModulesSelectionChange({ modules, total, etapa1Discount, currency, dollarRate }: { modules: any[]; total: number; etapa1Discount: number; currency?: 'BRL' | 'USD'; dollarRate?: number }) {
+  function handleModulesSelectionChange({ modules, total, etapa1Discount, currency, dollarRate, rateOverrides }: { modules: any[]; total: number; etapa1Discount: number; currency?: 'BRL' | 'USD'; dollarRate?: number; rateOverrides?: Record<string, { brl: number; usd: number }> }) {
     if (currency) setProposalCurrency(currency);
     form.setValue('subtotal', formatValueByProposalCurrency(total));
     form.setValue('etapa1_desconto', etapa1Discount);
@@ -1133,11 +1156,12 @@ export default function ProposalsEdit() {
             ...(currentOrc.meta || {}),
             etapa1_desconto: etapa1Discount,
             currency: currency || 'BRL',
-            dollarRate: dollarRate || 5.15
+            dollarRate: dollarRate || 5.15,
+            rateOverrides: rateOverrides || {}
         }
       };
       try {
-        form.setValue('orc_json', JSON.stringify(orc));
+        form.setValue('orc_json', JSON.stringify(orc), { shouldDirty: true, shouldValidate: true });
       } catch {}
     } else {
       // Se não houver módulos, talvez devêssemos limpar orc_json ou manter metadados?
@@ -1184,7 +1208,7 @@ export default function ProposalsEdit() {
         modulos: [chosenRaw],
       };
       try {
-        form.setValue('orc_json', JSON.stringify(orc));
+        form.setValue('orc_json', JSON.stringify(orc), { shouldDirty: true, shouldValidate: true });
       } catch {}
     }
   }
@@ -2049,6 +2073,8 @@ export default function ProposalsEdit() {
                           initialSelections={initialType2Selections}
                           initialEtapa1Discount={initialEtapa1Discount}
                           initialDollarRate={initialDollarRate}
+                          initialRateOverrides={initialRateOverrides}
+                          initialCurrency={initialCurrency}
                         />
                       </div>
                     ) : (

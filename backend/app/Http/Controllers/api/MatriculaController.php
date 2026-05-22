@@ -343,10 +343,10 @@ class MatriculaController extends Controller
     {
         $query = DB::table('users')
             ->where(function ($query) {
-                $query->whereNull('users.deletado')->orWhere('users.deletado', '!=', 's');
+                $query->where('users.deletado', 'n')->orWhereNull('users.deletado');
             })
             ->where(function ($query) {
-                $query->whereNull('users.excluido')->orWhere('users.excluido', '!=', 's');
+                $query->where('users.excluido', 'n')->orWhereNull('users.excluido');
             })
             ->where(function ($query) {
                 $query->whereExists(function ($subQuery) {
@@ -405,16 +405,16 @@ class MatriculaController extends Controller
             })
             ->where('matriculas.status', 'g')
             ->where(function ($query) {
-                $query->whereNull('users.deletado')->orWhere('users.deletado', '!=', 's');
+                $query->where('users.deletado', 'n')->orWhereNull('users.deletado');
             })
             ->where(function ($query) {
-                $query->whereNull('users.excluido')->orWhere('users.excluido', '!=', 's');
+                $query->where('users.excluido', 'n')->orWhereNull('users.excluido');
             })
             ->where(function ($query) {
-                $query->whereNull('matriculas.deletado')->orWhere('matriculas.deletado', '!=', 's');
+                $query->where('matriculas.deletado', 'n')->orWhereNull('matriculas.deletado');
             })
             ->where(function ($query) {
-                $query->whereNull('matriculas.excluido')->orWhere('matriculas.excluido', '!=', 's');
+                $query->where('matriculas.excluido', 'n')->orWhereNull('matriculas.excluido');
             })
             ->whereRaw("COALESCE(gain_meta.gain_date, financial_gain.gain_date) IS NOT NULL")
             ->whereRaw("STR_TO_DATE(COALESCE(gain_meta.gain_date, financial_gain.gain_date), '%Y-%m-%d') >= DATE(users.created_at)");
@@ -3228,6 +3228,100 @@ class MatriculaController extends Controller
 
         $out = $this->mapOutputFields($matricula->toArray());
         return response()->json($out);
+    }
+
+    /**
+     * Envia mensagem via API ChatGuru para o cliente com celular registrado.
+     * PT-BR: Envia mensagem via API ChatGuru com link de assinatura da proposta para o cliente cadastrado.
+     * EN: Sends a WhatsApp message via ChatGuru API with signature link to the registered client.
+     */
+    public function enviarWhatsapp(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+        if (!$this->permissionService->isHasPermission('edit')) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+
+        $matricula = Matricula::find($id);
+        if (!$matricula) {
+            return response()->json(['error' => 'Matrícula não encontrada'], 404);
+        }
+
+        $dm = $this->dm($id);
+        $cliente = $dm['cliente'] ?? [];
+        $nome = $cliente['name'] ?? ($dm['cliente_nome'] ?? 'Cliente');
+
+        // Resolve phone number
+        $zgc = new ZapguruController();
+        $telefonezap = $zgc->get_telefonezap_by_id_matricula($id);
+        if (empty($telefonezap)) {
+            $telefonezap = $cliente['celular'] ?? ($cliente['config']['celular'] ?? '');
+        }
+
+        // Clean formatting to keep only digits
+        $cleanPhone = preg_replace('/\D/', '', (string)$telefonezap);
+        if (empty($cleanPhone)) {
+            return response()->json(['error' => 'Celular do cliente não cadastrado ou inválido para envio via API.'], 400);
+        }
+
+        // Prepend Brazil country code if not present for typical 10-11 digit numbers
+        if (strlen($cleanPhone) <= 11 && !str_starts_with($cleanPhone, '55')) {
+            $cleanPhone = '55' . $cleanPhone;
+        }
+
+        $text = $request->input('mensagem');
+        if (empty($text)) {
+            $linkAssinatura = $dm['link_assinatura'] ?? '';
+            $text = "Olá, *{nome}*! Segue o link para visualizar e assinar a sua proposta comercial: " . $linkAssinatura;
+        }
+
+        // Replace template placeholder if present
+        $text = str_replace('{nome}', $nome, $text);
+
+        // Dispatch via ZapguruController
+        $res = $zgc->enviar_mensagem([
+            'celular_completo' => $cleanPhone,
+            'nome' => $nome,
+            'text' => $text,
+            'dialog_id' => $request->input('dialog_id', '') ?: false,
+        ]);
+
+        if (isset($res['exec']) && $res['exec']) {
+            // Save Event Log inside proposal history
+            try {
+                EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => (string)$id,
+                    'action' => 'whatsapp_guru_proposal_sent',
+                    'description' => "Mensagem de proposta enviada via WhatsApp (ChatGuru) para {$cleanPhone}.",
+                    'payload' => [
+                        'phone' => $cleanPhone,
+                        'message' => $text,
+                        'response' => $res['response'] ?? null
+                    ],
+                    'actor_id' => (string)auth()->id(),
+                    'ip_address' => $request->ip(),
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Erro ao salvar EventLog para WhatsApp Guru: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Mensagem enviada com sucesso via ChatGuru API!',
+                'response' => $res['response'] ?? null,
+            ]);
+        }
+
+        $errorMsg = $res['response']['description'] ?? $res['error'] ?? 'Erro desconhecido na API do ChatGuru';
+        return response()->json([
+            'success' => false,
+            'error' => 'Erro ao enviar mensagem via ChatGuru API: ' . $errorMsg,
+            'response' => $res['response'] ?? null,
+        ], 500);
     }
 
     /**

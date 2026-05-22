@@ -1487,11 +1487,11 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
                       const payload: any = {
                         autor: addLeadConsultantId || undefined,
                         config: {
-                          bairro: '', celular: '', cep: '', cidade: '', complemento: '', endereco: '', escolaridade: '', nascimento: '', nome_fantasia: '', numero: '', observacoes: '',
+                          bairro: '', celular: phoneRemoveMask(addLeadPhone) || '', cep: '', cidade: '', complemento: '', endereco: '', escolaridade: '', nascimento: '', nome_fantasia: '', numero: '', observacoes: '',
                          stage_id: addLeadStageId || '', funnelId: addLeadFunnelId || '', profissao: '', rg: '', telefone_residencial: '', tipo_pj: '', uf: ''
                         },
                          email: addLeadEmail || '',
-                        telefone: phoneRemoveMask(addLeadPhone) || '',
+                        celular: phoneRemoveMask(addLeadPhone) || '',
                          genero: 'ni',
                          name: addLeadName || '',
                          password: 'ferqueta',
@@ -2004,7 +2004,7 @@ function EnrollmentKanbanCard({
                 <XCircle className="mr-2 h-4 w-4 opacity-70" /> Marcar perda
               </DropdownMenuItem>
               
-              {/* Opção de Assinatura no Dropdown */}
+              {/* Opções de Atendimento Rápido via WhatsApp */}
               {(() => {
                 let signUrl = (enrollment as any)?.link_assinatura || '';
                 if (!signUrl) {
@@ -2014,12 +2014,32 @@ function EnrollmentKanbanCard({
                     signUrl = `${window.location.origin}/aluno/assinatura/${clientId}_${id}/1`;
                   }
                 }
+                const pdfUrl = (enrollment as any)?.meta?.proposta_pdf ? String((enrollment as any).meta.proposta_pdf) : '';
                 
-                if (!signUrl) return null;
+                const handleSendAttendance = (e: React.MouseEvent, type: 'assinatura' | 'pdf') => {
+                  e.stopPropagation();
+                  const q = funnelId ? `&funnel=${encodeURIComponent(String(funnelId))}` : '';
+                  navigate(`/admin/sales/proposals/view/${encodeURIComponent(String(enrollment.id))}?openAttendance=${type}${q}`, { state: { returnTo } });
+                };
+
                 return (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(signUrl, '_blank'); }} className="cursor-pointer text-amber-600 focus:text-amber-700">
-                    <ExternalLink className="mr-2 h-4 w-4 opacity-70" /> Assinar
-                  </DropdownMenuItem>
+                  <>
+                    {signUrl && (
+                      <DropdownMenuItem onClick={(e) => handleSendAttendance(e, 'assinatura')} className="cursor-pointer text-emerald-600 focus:text-emerald-700 font-medium">
+                        <MessageSquare className="mr-2 h-4 w-4 opacity-70" /> Enviar assinatura (WhatsApp)
+                      </DropdownMenuItem>
+                    )}
+                    {pdfUrl && (
+                      <DropdownMenuItem onClick={(e) => handleSendAttendance(e, 'pdf')} className="cursor-pointer text-emerald-600 focus:text-emerald-700 font-medium">
+                        <MessageSquare className="mr-2 h-4 w-4 opacity-70" /> Enviar PDF (WhatsApp)
+                      </DropdownMenuItem>
+                    )}
+                    {signUrl && (
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(signUrl, '_blank'); }} className="cursor-pointer text-amber-600 focus:text-amber-700">
+                        <ExternalLink className="mr-2 h-4 w-4 opacity-70" /> Assinar
+                      </DropdownMenuItem>
+                    )}
+                  </>
                 );
               })()}
             </DropdownMenuContent>

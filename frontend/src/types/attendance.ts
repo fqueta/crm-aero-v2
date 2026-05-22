@@ -88,6 +88,18 @@ export interface CreateClientAttendanceInput {
    *        or the new stage to apply the change.
    */
   stage_id?: string;
+
+  /**
+   * pt-BR: Flag indicando se deve ser enviado via API do WhatsApp (ChatGuru).
+   * en-US: Flag indicating if the message should be sent via WhatsApp API (ChatGuru).
+   */
+  enviar_whatsapp?: boolean;
+
+  /**
+   * pt-BR: Número do celular para envio customizado via API do WhatsApp.
+   * en-US: Mobile number for custom sending via WhatsApp API.
+   */
+  celular_envio?: string;
 }
 
 /**

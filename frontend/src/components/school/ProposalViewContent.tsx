@@ -19,7 +19,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { CheckCircle, Clock, User, Mail, Phone, BookOpen, Layers, Calendar, Hash, CircleDollarSign, Info, Loader2, Copy, MessageCircle } from 'lucide-react';
+import { CheckCircle, Clock, User, Mail, Phone, BookOpen, Layers, Calendar, Hash, CircleDollarSign, Info, Loader2, Copy, MessageCircle, Send, Sparkles } from 'lucide-react';
+import { enrollmentsService } from '@/services/enrollmentsService';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 interface ProposalViewContentProps {
   /**
@@ -376,6 +379,56 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
             || (status === 'aguardando_assinatura' && 'bg-indigo-600')
             || 'bg-slate-600'));
 
+  const [openWhatsAppDialog, setOpenWhatsAppDialog] = useState(false);
+  const [whatsAppMessage, setWhatsAppMessage] = useState('');
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+
+  useEffect(() => {
+    if (openWhatsAppDialog) {
+      const defaultText = `Olá, *${clientName || 'Cliente'}*! Segue o link para visualizar e assinar a sua proposta comercial: ${linkAssinatura}`;
+      setWhatsAppMessage(defaultText);
+    }
+  }, [openWhatsAppDialog, clientName, linkAssinatura]);
+
+  const loadAdminTextIntoMessage = () => {
+    if (administrationText) {
+      setWhatsAppMessage(administrationText);
+      toast.success("Texto administrativo carregado!");
+    }
+  };
+
+  const loadSignatureLinkIntoMessage = () => {
+    const defaultText = `Olá, *${clientName || 'Cliente'}*! Segue o link para visualizar e assinar a sua proposta comercial: ${linkAssinatura}`;
+    setWhatsAppMessage(defaultText);
+    toast.success("Mensagem padrão de assinatura carregada!");
+  };
+
+  const handleSendWhatsAppApi = async () => {
+    if (!whatsAppMessage.trim()) {
+      toast.error('A mensagem não pode estar vazia.');
+      return;
+    }
+    
+    setIsSendingWhatsApp(true);
+    try {
+      const response = await enrollmentsService.sendWhatsApp(String(id), {
+        mensagem: whatsAppMessage,
+      });
+      if (response?.success) {
+        toast.success(response?.message || 'Mensagem enviada com sucesso via WhatsApp API (ChatGuru)!');
+        setOpenWhatsAppDialog(false);
+      } else {
+        toast.error(response?.error || 'Ocorreu um erro ao enviar a mensagem.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      const errDetail = err?.response?.data?.error || err?.message || 'Erro de conexão.';
+      toast.error(`Falha no envio: ${errDetail}`);
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
@@ -452,6 +505,11 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
                {/* Sidebar (Right) */}
                <div className="lg:col-span-4 space-y-6 print:hidden">
+                  {/* Cards de Assinatura movidos da aba Admin */}
+                  {linkAssinatura && <SignatureLinkCard link={linkAssinatura} />}
+                  {meta?.proposta_pdf && <ProposalPdfLinkCard pdfUrl={meta.proposta_pdf} />}
+                  {infoResponsavel && <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />}
+
                   <ProposalAttendanceCard
                     enrollmentId={String(id)}
                     clientId={clientId || undefined}
@@ -459,12 +517,9 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                     status={proposalStatus}
                     meta={meta}
                     proposalAmountLabel={totalMasked || 'R$ 0,00'}
+                    linkAssinatura={linkAssinatura || undefined}
+                    pdfUrl={meta?.proposta_pdf ? String(meta.proposta_pdf) : undefined}
                   />
-
-                  {/* Cards de Assinatura movidos da aba Admin */}
-                  {linkAssinatura && <SignatureLinkCard link={linkAssinatura} />}
-                  {meta?.proposta_pdf && <ProposalPdfLinkCard pdfUrl={meta.proposta_pdf} />}
-                  {infoResponsavel && <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />}
                </div>
             </div>
         </TabsContent>
@@ -507,6 +562,15 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                         >
                           <MessageCircle className="h-3.5 w-3.5" />
                           WhatsApp Web
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-8 text-xs gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 hover:scale-[1.02] shadow-sm transition-all duration-200"
+                          onClick={() => setOpenWhatsAppDialog(true)}
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          WhatsApp API (ChatGuru)
                         </Button>
                       </div>
                     </div>
@@ -616,6 +680,116 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={openWhatsAppDialog} onOpenChange={setOpenWhatsAppDialog}>
+        <DialogContent className="max-w-md rounded-2xl border border-border/50 bg-background/95 backdrop-blur-md shadow-2xl p-6 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <DialogHeader className="space-y-1">
+            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+              <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30">
+                <MessageCircle className="h-5 w-5" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <DialogTitle className="text-lg font-bold tracking-tight">WhatsApp ChatGuru API</DialogTitle>
+                <Badge variant="outline" className="text-[10px] font-bold text-blue-600 border-blue-200/50 bg-blue-50/50 dark:bg-blue-950/20 py-0.5 px-2 rounded-full uppercase tracking-wider">Automático</Badge>
+              </div>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              Dispare mensagens diretamente para o celular do cliente utilizando os servidores do ChatGuru.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 my-4">
+            {/* Recipient Card */}
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/40 dark:border-zinc-800/40 space-y-2">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground opacity-80">Destinatário</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-bold text-foreground leading-tight">{clientName || 'Cliente sem nome'}</span>
+                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Phone className="h-3 w-3 text-blue-500" />
+                  {clientPhone || 'Celular não registrado'}
+                </span>
+              </div>
+            </div>
+
+            {/* Template Selector */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground opacity-80 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-amber-500" /> Modelos Rápidos
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] font-medium gap-1.5 rounded-full hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/20 transition-all"
+                  onClick={loadSignatureLinkIntoMessage}
+                >
+                  📝 Link de Assinatura
+                </Button>
+                {administrationText && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] font-medium gap-1.5 rounded-full hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/20 transition-all"
+                    onClick={loadAdminTextIntoMessage}
+                  >
+                    📊 Resumo Operacional
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Message Body */}
+            <div className="space-y-1.5">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground opacity-80">Mensagem do WhatsApp</span>
+              <Textarea
+                value={whatsAppMessage}
+                onChange={(e) => setWhatsAppMessage(e.target.value)}
+                placeholder="Digite a sua mensagem aqui..."
+                className="min-h-[140px] text-xs leading-relaxed rounded-2xl border border-input/60 focus-visible:ring-blue-500 bg-background/50 resize-none font-sans"
+              />
+              <div className="flex justify-between items-center px-1">
+                <span className="text-[10px] text-muted-foreground/80">Recomendado: utilize <strong>*{'{nome}'}*</strong> para formatação.</span>
+                <span className="text-[10px] text-muted-foreground/80 font-mono">{whatsAppMessage.length} caracteres</span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-row sm:justify-end gap-2 border-t border-border/40 pt-4 mt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs rounded-xl hover:bg-zinc-100"
+              onClick={() => setOpenWhatsAppDialog(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 text-xs gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/10 hover:scale-[1.02] active:scale-[0.98] transition-all font-semibold"
+              onClick={handleSendWhatsAppApi}
+              disabled={isSendingWhatsApp}
+            >
+              {isSendingWhatsApp ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Send className="h-3.5 w-3.5" />
+                  Enviar via API
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

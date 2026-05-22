@@ -127,6 +127,18 @@ class EnrollmentsService extends BaseApiService {
     return super.delete<ApiDeleteResponse>(`/matriculas/${id}`);
   }
 
+  /**
+   * sendWhatsApp
+   * pt-BR: Envia mensagem via WhatsApp (ChatGuru API) para o cliente.
+   * en-US: Sends a WhatsApp message (ChatGuru API) to the client.
+   */
+  async sendWhatsApp(
+    id: string,
+    payload: { mensagem: string; dialog_id?: string }
+  ): Promise<{ success: boolean; message: string; response?: any }> {
+    return this.post<{ success: boolean; message: string; response?: any }>(`/matriculas/${id}/enviar-whatsapp`, payload);
+  }
+
   // Compat layer for useGenericApi
   async list(params?: EnrollmentsListParams): Promise<PaginatedResponse<EnrollmentRecord>> {
     return this.listEnrollments(params);

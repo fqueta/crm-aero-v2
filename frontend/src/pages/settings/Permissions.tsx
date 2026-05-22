@@ -377,14 +377,14 @@ export default function Permissions() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Permissões</h1>
-          <p className="text-muted-foreground">
-            Gerencie as permissões do sistema
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Permissões</h1>
+          <p className="text-muted-foreground text-sm">
+            Gerencie as permissões de acesso do sistema
           </p>
         </div>
-        <Button onClick={() => handleOpenModal()}>
+        <Button onClick={() => handleOpenModal()} className="shadow-sm">
           <Plus className="mr-2 h-4 w-4" />
           Nova Permissão
         </Button>
@@ -520,30 +520,37 @@ export default function Permissions() {
               <CardDescription>
                 Configure as permissões de acesso aos módulos do sistema
               </CardDescription>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="permission-select" className="text-sm font-medium">
-                    Selecionar Permissão:
-                  </label>
-                  <select
-                    id="permission-select"
-                    value={selectedPermissionId}
-                    onChange={(e) => setSelectedPermissionId(e.target.value)}
-                    className="px-3 py-2 border rounded-md bg-background"
-                  >
-                    <option value="">Escolha uma permissão...</option>
-                    {permissions.map(permission => (
-                      <option key={permission.id} value={permission.id}>
-                        {permission.name}
-                      </option>
-                    ))}
-                  </select>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/30 p-4 rounded-lg border border-border/50">
+                <div className="flex items-center space-x-3 w-full sm:w-auto">
+                  <div className="hidden sm:flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Check className="h-5 w-5" />
+                  </div>
+                  <div className="flex flex-col w-full sm:w-auto">
+                    <label htmlFor="permission-select" className="text-sm font-medium text-foreground">
+                      Perfil de Acesso
+                    </label>
+                    <select
+                      id="permission-select"
+                      value={selectedPermissionId}
+                      onChange={(e) => setSelectedPermissionId(e.target.value)}
+                      className="mt-1 flex h-10 w-full sm:min-w-[280px] items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="">Escolha um perfil para gerenciar...</option>
+                      {permissions.map(permission => (
+                        <option key={permission.id} value={permission.id}>
+                          {permission.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 {selectedPermissionId && (
                   <Button 
                     onClick={handleSaveAccessPermissions}
                     disabled={updateMenuPermissionsMutation.isPending}
+                    className="shadow-sm w-full sm:w-auto"
                   >
+                    <Check className="mr-2 h-4 w-4" />
                     Salvar Permissões
                   </Button>
                 )}
@@ -553,115 +560,141 @@ export default function Permissions() {
             {selectedPermissionId ? (
               <CardContent>
                 <div className="space-y-4">
-                  {/* Header with "Marcar todos" checkboxes */}
-                  <div className="flex items-center space-x-4 p-3 bg-muted rounded-md">
-                    <div className="flex-1 font-medium">Módulo / Funcionalidade</div>
-                    <div className="flex space-x-8">
-                      <div className="flex flex-col items-center space-y-1">
-                        <span className="text-xs font-medium">Visualizar</span>
-                        <Checkbox 
-                          checked={leafKeys.every(key => !!accessFlags[key]?.can_view)}
-                          onCheckedChange={(checked) => handleSelectAllForFlag('can_view', !!checked)}
-                        />
+                  <div className="border rounded-lg overflow-hidden bg-card shadow-sm">
+                    {/* Header with "Marcar todos" checkboxes */}
+                    <div className="flex items-center p-4 bg-muted/60 border-b">
+                      <div className="flex-1 font-semibold text-sm text-foreground/80">Módulo / Funcionalidade</div>
+                      <div className="flex gap-2 sm:gap-4 md:gap-6">
+                        <div className="flex flex-col items-center space-y-2 w-[60px] sm:w-[70px]">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Visualizar</span>
+                          <Checkbox 
+                            checked={leafKeys.every(key => !!accessFlags[key]?.can_view)}
+                            onCheckedChange={(checked) => handleSelectAllForFlag('can_view', !!checked)}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                          />
+                        </div>
+                        <div className="flex flex-col items-center space-y-2 w-[60px] sm:w-[70px]">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Criar</span>
+                          <Checkbox 
+                            checked={leafKeys.every(key => !!accessFlags[key]?.can_create)}
+                            onCheckedChange={(checked) => handleSelectAllForFlag('can_create', !!checked)}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                          />
+                        </div>
+                        <div className="flex flex-col items-center space-y-2 w-[60px] sm:w-[70px]">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Editar</span>
+                          <Checkbox 
+                            checked={leafKeys.every(key => !!accessFlags[key]?.can_edit)}
+                            onCheckedChange={(checked) => handleSelectAllForFlag('can_edit', !!checked)}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                          />
+                        </div>
+                        <div className="flex flex-col items-center space-y-2 w-[60px] sm:w-[70px]">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Excluir</span>
+                          <Checkbox 
+                            checked={leafKeys.every(key => !!accessFlags[key]?.can_delete)}
+                            onCheckedChange={(checked) => handleSelectAllForFlag('can_delete', !!checked)}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                          />
+                        </div>
+                        <div className="flex flex-col items-center space-y-2 w-[60px] sm:w-[70px]">
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Upload</span>
+                          <Checkbox 
+                            checked={leafKeys.every(key => !!accessFlags[key]?.can_upload)}
+                            onCheckedChange={(checked) => handleSelectAllForFlag('can_upload', !!checked)}
+                            className="data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+                          />
+                        </div>
                       </div>
-                      <div className="flex flex-col items-center space-y-1">
-                        <span className="text-xs font-medium">Criar</span>
-                        <Checkbox 
-                          checked={leafKeys.every(key => !!accessFlags[key]?.can_create)}
-                          onCheckedChange={(checked) => handleSelectAllForFlag('can_create', !!checked)}
-                        />
-                      </div>
-                      <div className="flex flex-col items-center space-y-1">
-                        <span className="text-xs font-medium">Editar</span>
-                        <Checkbox 
-                          checked={leafKeys.every(key => !!accessFlags[key]?.can_edit)}
-                          onCheckedChange={(checked) => handleSelectAllForFlag('can_edit', !!checked)}
-                        />
-                      </div>
-                      <div className="flex flex-col items-center space-y-1">
-                        <span className="text-xs font-medium">Excluir</span>
-                        <Checkbox 
-                          checked={leafKeys.every(key => !!accessFlags[key]?.can_delete)}
-                          onCheckedChange={(checked) => handleSelectAllForFlag('can_delete', !!checked)}
-                        />
-                      </div>
-                      <div className="flex flex-col items-center space-y-1">
-                        <span className="text-xs font-medium">Upload</span>
-                        <Checkbox 
-                          checked={leafKeys.every(key => !!accessFlags[key]?.can_upload)}
-                          onCheckedChange={(checked) => handleSelectAllForFlag('can_upload', !!checked)}
-                        />
-                      </div>
+                    </div>
+
+                    {/* Permission tree rows */}
+                    <div className="divide-y divide-border/40">
+                      {permissionTree.map((node) => (
+                        <div 
+                          key={node.key}
+                          className={`flex items-center p-3 transition-colors hover:bg-muted/30 ${
+                            node.level === 0 ? 'bg-muted/10' : ''
+                          }`}
+                        >
+                          <div className="flex-1 flex items-center">
+                            <div 
+                              className="flex items-center space-x-2"
+                              style={{ paddingLeft: `${node.level * 24}px` }}
+                            >
+                              {node.level > 0 && (
+                                <div className="h-px w-4 bg-border/80 mr-2 rounded-full" />
+                              )}
+                              <span 
+                                className={`${
+                                  node.level === 0 ? 'font-medium text-foreground' : 'text-sm text-muted-foreground'
+                                }`}
+                              >
+                                {node.title}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 sm:gap-4 md:gap-6">
+                            <div className="w-[60px] sm:w-[70px] flex justify-center">
+                              {(() => {
+                                const viewState = getAggregatedState(node.key, 'can_view');
+                                return (
+                                  <Checkbox 
+                                    checked={viewState.checked}
+                                    onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_view', !!checked)}
+                                  />
+                                );
+                              })()}
+                            </div>
+                            <div className="w-[60px] sm:w-[70px] flex justify-center">
+                              {(() => {
+                                const createState = getAggregatedState(node.key, 'can_create');
+                                return (
+                                  <Checkbox 
+                                    checked={createState.checked}
+                                    onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_create', !!checked)}
+                                  />
+                                );
+                              })()}
+                            </div>
+                            <div className="w-[60px] sm:w-[70px] flex justify-center">
+                              {(() => {
+                                const editState = getAggregatedState(node.key, 'can_edit');
+                                return (
+                                  <Checkbox 
+                                    checked={editState.checked}
+                                    onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_edit', !!checked)}
+                                  />
+                                );
+                              })()}
+                            </div>
+                            <div className="w-[60px] sm:w-[70px] flex justify-center">
+                              {(() => {
+                                const deleteState = getAggregatedState(node.key, 'can_delete');
+                                return (
+                                  <Checkbox 
+                                    checked={deleteState.checked}
+                                    onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_delete', !!checked)}
+                                  />
+                                );
+                              })()}
+                            </div>
+                            <div className="w-[60px] sm:w-[70px] flex justify-center">
+                              {(() => {
+                                const uploadState = getAggregatedState(node.key, 'can_upload');
+                                return (
+                                  <Checkbox 
+                                    checked={uploadState.checked}
+                                    onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_upload', !!checked)}
+                                  />
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-
-                  {/* Permission tree rows */}
-                  {permissionTree.map((node) => (
-                    <div 
-                      key={node.key}
-                      className={`flex items-center space-x-4 p-3 border rounded-md ${
-                        node.level > 0 ? 'ml-6 border-l-4 border-l-muted' : ''
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <span 
-                          className={`${
-                            node.level === 0 ? 'font-semibold' : 'text-muted-foreground'
-                          }`}
-                          style={{ marginLeft: `${node.level * 20}px` }}
-                        >
-                          {node.title}
-                        </span>
-                      </div>
-                      <div className="flex space-x-8">
-                         {(() => {
-                           const viewState = getAggregatedState(node.key, 'can_view');
-                           return (
-                             <Checkbox 
-                               checked={viewState.checked}
-                               onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_view', !!checked)}
-                             />
-                           );
-                         })()}
-                         {(() => {
-                           const createState = getAggregatedState(node.key, 'can_create');
-                           return (
-                             <Checkbox 
-                               checked={createState.checked}
-                               onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_create', !!checked)}
-                             />
-                           );
-                         })()}
-                         {(() => {
-                           const editState = getAggregatedState(node.key, 'can_edit');
-                           return (
-                             <Checkbox 
-                               checked={editState.checked}
-                               onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_edit', !!checked)}
-                             />
-                           );
-                         })()}
-                         {(() => {
-                           const deleteState = getAggregatedState(node.key, 'can_delete');
-                           return (
-                             <Checkbox 
-                               checked={deleteState.checked}
-                               onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_delete', !!checked)}
-                             />
-                           );
-                         })()}
-                         {(() => {
-                           const uploadState = getAggregatedState(node.key, 'can_upload');
-                           return (
-                             <Checkbox 
-                               checked={uploadState.checked}
-                               onCheckedChange={(checked) => handleAccessFlagChange(node.key, 'can_upload', !!checked)}
-                             />
-                           );
-                         })()}
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </CardContent>
             ) : (

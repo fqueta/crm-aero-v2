@@ -1,13 +1,14 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import EditFooterBar from '@/components/ui/edit-footer-bar';
 import { periodsService } from '@/services/periodsService';
 import { PeriodForm } from '@/components/school/PeriodForm';
 import type { CreatePeriodInput } from '@/types/periods';
 import { useToast } from '@/hooks/use-toast';
+import { ChevronLeft } from 'lucide-react';
 
 /**
  * PeriodCreate
@@ -79,13 +80,28 @@ export default function PeriodCreate() {
   };
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Novo Período</CardTitle>
-          <CardDescription>Crie um período vinculado a um curso.</CardDescription>
-        </CardHeader>
-        <CardContent>
+    <div className="space-y-6 pb-20">
+      {/* Cabeçalho principal */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost" 
+            onClick={handleBack}
+            className="h-10 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-zinc-50 transition-all duration-200"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1 text-zinc-500" />
+            Voltar
+          </Button>
+          <div className="h-6 w-[1px] bg-zinc-200 dark:bg-zinc-800"></div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Novo Período</h1>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Configure as etapas, custos, aeronaves e contratos para criar um novo período.</p>
+          </div>
+        </div>
+      </div>
+
+      <Card className="border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm rounded-2xl bg-white dark:bg-zinc-950 p-6">
+        <CardContent className="p-0">
           <PeriodForm
             onSubmit={async (data) => createMutation.mutateAsync(data as CreatePeriodInput)}
             isSubmitting={createMutation.isPending}

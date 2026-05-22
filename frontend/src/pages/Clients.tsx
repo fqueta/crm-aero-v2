@@ -455,6 +455,7 @@ export default function Clients() {
       genero: data.genero,
       status: data.status,
       autor: data.autor,
+      celular: data.config?.celular,
       config: data.config,
     };
     // Dados enviados para API em modo de desenvolvimento

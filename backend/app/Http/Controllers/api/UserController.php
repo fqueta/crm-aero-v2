@@ -68,10 +68,10 @@ class UserController extends Controller
 
         // Não exibir registros marcados como deletados ou excluídos
         $query->where(function($q) {
-            $q->whereNull('deletado')->orWhere('deletado', '!=', 's');
+            $q->where('deletado', 'n')->orWhereNull('deletado');
         });
         $query->where(function($q) {
-            $q->whereNull('excluido')->orWhere('excluido', '!=', 's');
+            $q->where('excluido', 'n')->orWhereNull('excluido');
         });
 
         if ($request->filled('email')) {

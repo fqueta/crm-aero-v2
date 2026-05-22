@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useRegisterClientAttendance, useClientAttendances } from '@/hooks/clients';
+import { useRegisterClientAttendance, useClientAttendances, useClient } from '@/hooks/clients';
 import { useUpdateEnrollmentStatus } from '@/hooks/enrollments';
 import { useToast } from '@/hooks/use-toast';
 import { financialService } from '@/services/financialService';
@@ -23,6 +23,7 @@ import { CreateClientAttendanceInput } from '@/types/attendance';
 import { PaymentMethod } from '@/types/financial';
 import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, CircleDot, Clock3, Headset, MessageSquareText, XCircle } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 interface ProposalAttendanceCardProps {
   enrollmentId: string;
@@ -31,6 +32,8 @@ interface ProposalAttendanceCardProps {
   status?: string;
   meta?: Record<string, unknown>;
   proposalAmountLabel?: string;
+  linkAssinatura?: string;
+  pdfUrl?: string;
 }
 
 interface ProposalAttendanceItem {
@@ -116,6 +119,8 @@ function getChannelLabel(channel?: string | null): string {
       return 'Chat';
     case 'whatsapp':
       return 'WhatsApp';
+    case 'mensagem':
+      return 'Mensagem';
     case 'in_person':
       return 'Presencial';
     case 'email':
@@ -312,9 +317,12 @@ export default function ProposalAttendanceCard({
   status,
   meta,
   proposalAmountLabel,
+  linkAssinatura,
+  pdfUrl,
 }: ProposalAttendanceCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [winDialogOpen, setWinDialogOpen] = useState(false);
   const [lossDialogOpen, setLossDialogOpen] = useState(false);
@@ -325,8 +333,35 @@ export default function ProposalAttendanceCard({
   const [observation, setObservation] = useState('');
   const [duration, setDuration] = useState('');
   const [tagsText, setTagsText] = useState('');
+
   const [gainDate, setGainDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [negotiatedAmount, setNegotiatedAmount] = useState('');
+
+  useEffect(() => {
+    const openAttendance = searchParams.get('openAttendance');
+    if (!openAttendance) return;
+
+    // Check if the data is already loaded
+    const isLoaded = !!clientName || (meta && Object.keys(meta).length > 0);
+    if (!isLoaded) return;
+
+    // Clear param to prevent reopening on refresh
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('openAttendance');
+    setSearchParams(newParams, { replace: true });
+    
+    setDialogOpen(true);
+    setChannel('mensagem');
+    
+    const nome = clientName || 'Cliente';
+    if (openAttendance === 'pdf') {
+      const url = pdfUrl || (meta?.proposta_pdf ? String(meta.proposta_pdf) : '');
+      setObservation(`Olá, *${nome}*! Segue o link do PDF com os detalhes da sua proposta comercial: ${url}`);
+    } else if (openAttendance === 'assinatura') {
+      const url = linkAssinatura || '';
+      setObservation(`Olá, *${nome}*! Segue o link para visualizar e assinar a sua proposta comercial: ${url}`);
+    }
+  }, [searchParams, pdfUrl, linkAssinatura, clientName, meta, setSearchParams]);
   const [paidAmount, setPaidAmount] = useState('');
   const [gainObservation, setGainObservation] = useState('');
   const [lossDate, setLossDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -363,6 +398,20 @@ export default function ProposalAttendanceCard({
     { per_page: 5 },
     { enabled: !!clientId, staleTime: 60_000 }
   );
+  const { data: clientResponse } = useClient(
+    String(clientId || ''),
+    { enabled: !!clientId, staleTime: 60_000 }
+  );
+
+  const clientCelular = clientResponse?.celular || (clientResponse?.config as any)?.celular || '';
+  const [celularEnvio, setCelularEnvio] = useState('');
+
+  useEffect(() => {
+    if (dialogOpen) {
+      setCelularEnvio(clientCelular || '');
+    }
+  }, [dialogOpen, clientCelular]);
+
   const updateEnrollmentStatusMutation = useUpdateEnrollmentStatus();
   const registerAttendanceMutation = useRegisterClientAttendance();
 
@@ -541,6 +590,7 @@ export default function ProposalAttendanceCard({
     setObservation('');
     setDuration('');
     setTagsText('');
+    setCelularEnvio('');
   };
 
   /**
@@ -551,6 +601,15 @@ export default function ProposalAttendanceCard({
   const handleSubmitAttendance = () => {
     if (!clientId || registerAttendanceMutation.isPending) return;
 
+    if ((channel === 'whatsapp' || channel === 'mensagem') && !celularEnvio.trim()) {
+      toast({
+        title: 'Número do WhatsApp obrigatório',
+        description: 'Por favor, informe o número de celular para envio da mensagem.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const payload: CreateClientAttendanceInput = {
       channel: channel || 'whatsapp',
       observation: observation.trim() || undefined,
@@ -560,18 +619,34 @@ export default function ProposalAttendanceCard({
           ? tagsText.split(',').map((item) => item.trim()).filter(Boolean)
           : undefined,
       },
+      enviar_whatsapp: (channel === 'whatsapp' || channel === 'mensagem'),
+      celular_envio: (channel === 'whatsapp' || channel === 'mensagem') ? celularEnvio.trim() : undefined,
     };
 
     registerAttendanceMutation.mutate(
       { clientId: String(clientId), data: payload },
       {
-        onSuccess: () => {
+        onSuccess: (response: any) => {
           setDialogOpen(false);
           resetAttendanceForm();
-          toast({
-            title: 'Atendimento registrado',
-            description: 'O evento de atendimento foi salvo com sucesso.',
-          });
+          
+          if (response?.whatsapp_sent) {
+            toast({
+              title: 'Atendimento registrado',
+              description: 'O atendimento foi salvo e a mensagem WhatsApp enviada com sucesso.',
+            });
+          } else if (response?.whatsapp_error) {
+            toast({
+              title: 'Atendimento salvo com alerta',
+              description: `Atendimento salvo, mas ocorreu um erro no WhatsApp: ${response.whatsapp_error}`,
+              variant: 'destructive',
+            });
+          } else {
+            toast({
+              title: 'Atendimento registrado',
+              description: 'O evento de atendimento foi salvo com sucesso.',
+            });
+          }
         },
         onError: (error: unknown) => {
           toast({
@@ -1030,6 +1105,7 @@ export default function ProposalAttendanceCard({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="mensagem">Mensagem (WhatsApp API)</SelectItem>
                     <SelectItem value="phone">Telefone</SelectItem>
                     <SelectItem value="email">E-mail</SelectItem>
                     <SelectItem value="chat">Chat</SelectItem>
@@ -1065,9 +1141,47 @@ export default function ProposalAttendanceCard({
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Observação
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Observação
+                </label>
+                <div className="flex gap-2">
+                  {linkAssinatura && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded-lg font-semibold"
+                      onClick={() => {
+                        const nome = clientName || 'Cliente';
+                        setObservation(`Olá, *${nome}*! Segue o link para visualizar e assinar a sua proposta comercial: ${linkAssinatura}`);
+                        if (channel !== 'whatsapp' && channel !== 'mensagem') {
+                          setChannel('mensagem');
+                        }
+                      }}
+                    >
+                      Modelo Assinatura
+                    </Button>
+                  )}
+                  {pdfUrl && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded-lg font-semibold"
+                      onClick={() => {
+                        const nome = clientName || 'Cliente';
+                        setObservation(`Olá, *${nome}*! Segue o link do PDF com os detalhes da sua proposta comercial: ${pdfUrl}`);
+                        if (channel !== 'whatsapp' && channel !== 'mensagem') {
+                          setChannel('mensagem');
+                        }
+                      }}
+                    >
+                      Modelo PDF
+                    </Button>
+                  )}
+                </div>
+              </div>
               <Textarea
                 placeholder="Descreva o contato, retorno combinado, objeções ou próximos passos."
                 value={observation}
@@ -1075,6 +1189,24 @@ export default function ProposalAttendanceCard({
                 className="min-h-[140px]"
               />
             </div>
+
+            {(channel === 'whatsapp' || channel === 'mensagem') && (
+              <div className="p-3 rounded-xl border bg-emerald-50/30 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30 space-y-2">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
+                  Celular para Envio (WhatsApp)
+                </label>
+                <Input
+                  placeholder="Ex.: 5511999999999"
+                  value={celularEnvio}
+                  onChange={(e) => setCelularEnvio(e.target.value)}
+                  className="bg-white dark:bg-zinc-950 border-emerald-200 dark:border-emerald-900/60 focus-visible:ring-emerald-500"
+                />
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  A mensagem de atendimento será enviada automaticamente via WhatsApp API (ChatGuru).
+                  Você pode editar o número se necessário (DDI + DDD + número).
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

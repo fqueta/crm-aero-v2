@@ -64,10 +64,10 @@ class ClientController extends Controller
 
         // Não exibir registros marcados como deletados ou excluídos
         $query->where(function($q) {
-            $q->whereNull('deletado')->orWhere('deletado', '!=', 's');
+            $q->where('deletado', 'n')->orWhereNull('deletado');
         });
         $query->where(function($q) {
-            $q->whereNull('excluido')->orWhere('excluido', '!=', 's');
+            $q->where('excluido', 'n')->orWhereNull('excluido');
         });
         //adiciona filtro search por email, cpf ou cnpj ou nome
         if ($request->filled('search')) {
@@ -92,8 +92,9 @@ class ClientController extends Controller
         if ($request->filled('stage_id') || $request->filled('stageId')) {
             $stageId = (int) ($request->input('stage_id') ?? $request->input('stageId'));
             $query->where(function($q) use ($stageId) {
-                $q->whereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(`config`, '$.stage_id')) AS UNSIGNED) = ?", [$stageId])
-                  ->orWhereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(`preferencias`, '$.pipeline.stage_id')) AS UNSIGNED) = ?", [$stageId]);
+                // Utilizando whereJsonContains para melhor performance no lugar de JSON_EXTRACT com whereRaw
+                $q->whereJsonContains('config->stage_id', $stageId)
+                  ->orWhereJsonContains('preferencias->pipeline->stage_id', $stageId);
             });
         }
 
@@ -107,9 +108,10 @@ class ClientController extends Controller
                     // Nenhum estágio para este funil: força vazio
                     $q->whereRaw('1 = 0');
                 } else {
-                    $placeholders = implode(',', array_fill(0, count($stageIds), '?'));
-                    $q->whereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(`config`, '$.stage_id')) AS UNSIGNED) IN ($placeholders)", $stageIds)
-                      ->orWhereRaw("CAST(JSON_UNQUOTE(JSON_EXTRACT(`preferencias`, '$.pipeline.stage_id')) AS UNSIGNED) IN ($placeholders)", $stageIds);
+                    foreach ($stageIds as $id) {
+                        $q->orWhereJsonContains('config->stage_id', $id)
+                          ->orWhereJsonContains('preferencias->pipeline->stage_id', $id);
+                    }
                 }
             });
         }
@@ -663,6 +665,7 @@ class ClientController extends Controller
             'cpf'           => ['nullable','string','max:20', Rule::unique('users','cpf')->ignore($clientToUpdate->id)],
             'cnpj'          => ['nullable','string','max:20', Rule::unique('users','cnpj')->ignore($clientToUpdate->id)],
             'email'         => ['nullable','email', Rule::unique('users','email')->ignore($clientToUpdate->id)],
+            'celular'       => $this->getCellphoneValidationRules($clientToUpdate->id),
             'password'      => 'nullable|string|min:6',
             'genero'        => ['sometimes', Rule::in(['ni','m','f'])],
             'verificado'    => ['sometimes', Rule::in(['n','s'])],

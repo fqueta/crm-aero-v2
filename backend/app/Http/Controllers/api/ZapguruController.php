@@ -14,6 +14,8 @@ class ZapguruController extends Controller
 {
 
     public $url;
+    public $key;
+    public $account_id;
     public $origem_padrao;
     public $phone_id;
 	function __construct(){
@@ -107,12 +109,40 @@ class ZapguruController extends Controller
         $cfg = (new ApiCredentialController())->get('zapguru');
         if (!empty($cfg) && !empty($cfg['config']) && is_array($cfg['config'])) {
             $base = rtrim($cfg['config']['url'] ?? 'https://s4.chatguru.app/api/v1', '/');
-            $key = $cfg['config']['key'] ?? '';
-            $account = $cfg['config']['account_id'] ?? '';
-            $this->phone_id = $cfg['config']['phone_id'] ?? null;
+            
+            // Build a helper map from meta array if it's in list-of-pairs format
+            $metaMap = [];
+            if (!empty($cfg['meta']) && is_array($cfg['meta'])) {
+                foreach ($cfg['meta'] as $m) {
+                    if (is_array($m) && isset($m['key'])) {
+                        $metaMap[$m['key']] = $m['value'] ?? '';
+                    }
+                }
+            }
+
+            $key = $cfg['config']['pass'] 
+                ?? $cfg['config']['key'] 
+                ?? $metaMap['key'] 
+                ?? $cfg['meta']['key'] 
+                ?? '';
+
+            $account = $cfg['config']['account_id'] 
+                ?? $metaMap['account_id'] 
+                ?? $cfg['meta']['account_id'] 
+                ?? '';
+
+            $this->phone_id = $cfg['config']['phone_id'] 
+                ?? $metaMap['phone_id'] 
+                ?? $cfg['meta']['phone_id'] 
+                ?? null;
+
+            $this->key = $key;
+            $this->account_id = $account;
             $this->url = $base.'?key='.$key.'&account_id='.$account.'&';
         } else {
-            $this->url = 'https://s4.chatguru.app/api/v1?key=FQXSYNB8GPSPALZ3MIC5O618HDP0OVUBRFCZ2LAZ4XCLVA44ZA8FPOJM8UG08IJ9&account_id=5f36da757e786f40069aa881&';
+            $this->key = 'FQXSYNB8GPSPALZ3MIC5O618HDP0OVUBRFCZ2LAZ4XCLVA44ZA8FPOJM8UG08IJ9';
+            $this->account_id = '5f36da757e786f40069aa881';
+            $this->url = 'https://s4.chatguru.app/api/v1?key='.$this->key.'&account_id='.$this->account_id.'&';
         }
 	}
 
@@ -934,120 +964,134 @@ class ZapguruController extends Controller
 
 	function enviar_mensagem($config=false){
 
-		//Exemplo de uso
-
-		/*
-
-		$zg = new ZapController;
-
-		$ret = $zg->enviar_mensagem([
-            'celular_completo'=>'553291648202',
-            'nome'=>'Queta',
-            'text'=>'Olá *{nome}* como podemos ajudá-lo teste ',
-            'dialog_id'=>'',
-        ]);
-
-		lib_print($ret);
-
-		*/
-
 		$ret['exec'] = false;
 
 		if(isset($config['celular_completo'])){
 
-			/*
+			$chat_number 	= preg_replace('/\D/', '', $config['celular_completo']);
 
-			$pais = !empty($dadosCli[0]['pais'])?$dadosCli[0]['pais']:'Brasil';
+			$nome 		 	= $config['nome'] ?? false;
 
-			$codi_pais = false;
+			$phone_id 		= $config['phone_id'] ?? ($this->phone_id ?: '628d294cc5ef6cb21b445e47');
 
-			if($pais=='Brasil'){
-
-				$codi_pais = '55';
-
-			}
-
-			$ret['dadosCli'] = $dadosCli;
-
-			*/
-
-			$Celular 	 	= str_replace('(','',$config['celular_completo']);
-
-			$Celular 		= str_replace('+','',$Celular);
-
-			$Celular 		= str_replace(')','',$Celular);
-
-			$Celular 		= str_replace('-','',$Celular);
-
-			$nome 		 	= isset($config['nome'])?$config['nome'] 	:false; //caso o chat não exista irá criar um com este nome
-
-			$sobrenome 		= isset($config['sobrenome'])?$config['sobrenome'] 	:false;
-
-			$name  = urlencode($nome.' '.$sobrenome);
-
-			$text 		 	= isset($config['text'])?$config['text'] 	:'Olá *'.$nome.'* como podemos ajudá-lo';
+			$text 		 	= $config['text'] ?? 'Olá *'.$nome.'* como podemos ajudá-lo';
 
 			$text  = str_replace('{nome}',$nome,$text);
-
-			$text  = urlencode($text);
-
-			$chat_number 	= $Celular;
-
-			$phone_id 		= isset($config['phone_id'])?$config['phone_id']:'628d294cc5ef6cb21b445e47';
-
-			$dialog_id 		= isset($config['dialog_id'])?$config['dialog_id'] 	:false;
 
 			$action 		= 'message_send';
 
 			$ret['config'] = $config;
 
-			$url = $this->url.'action='.$action.'&phone_id='.$phone_id.'&name='.$name.'&text='.$text.'&chat_number='.$chat_number.'&dialog_id='.$dialog_id.'';
+			$baseUrl = explode('?', $this->url)[0];
 
-			$curl 		 	= curl_init();
+			$postData = [
+			    'key'         => $this->key,
+			    'account_id'  => $this->account_id,
+			    'action'      => $action,
+			    'phone_id'    => $phone_id,
+			    'chat_number' => $chat_number,
+			    'text'        => $text,
+			];
 
+			$curl = curl_init();
 
-			curl_setopt_array($curl, array(
-
-			  CURLOPT_URL => $url,
-
-			  CURLOPT_RETURNTRANSFER => true,
-
-			  CURLOPT_ENCODING => '',
-
-			  CURLOPT_MAXREDIRS => 10,
-
-			  CURLOPT_TIMEOUT => 0,
-
-			  CURLOPT_FOLLOWLOCATION => true,
-
-			  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-
-			  CURLOPT_CUSTOMREQUEST => 'POST',
-
-			));
-
-
+			curl_setopt_array($curl, [
+			    CURLOPT_URL            => $baseUrl,
+			    CURLOPT_RETURNTRANSFER => true,
+			    CURLOPT_ENCODING       => '',
+			    CURLOPT_MAXREDIRS      => 10,
+			    CURLOPT_TIMEOUT        => 0,
+			    CURLOPT_FOLLOWLOCATION => true,
+			    CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+			    CURLOPT_POST           => true,
+			    CURLOPT_POSTFIELDS     => http_build_query($postData),
+			    CURLOPT_HTTPHEADER     => [
+			        'Content-Type: application/x-www-form-urlencoded',
+			    ],
+			]);
 
 			$response = curl_exec($curl);
 
-
+			$httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+			$curlError = curl_error($curl);
 
 			curl_close($curl);
 
 			$ret['response'] = Qlib::lib_json_array($response,true);
-			$ret['url'] = $url;
-			/*if(isset($ret['response']['code']) && $ret['response']['code'] != 201){
+			$ret['url'] = $baseUrl;
 
-				$celular_completo = '55'.str_replace('(32)9','(32)',$config['celular_completo']);
+			if ($curlError) {
+			    $ret['exec'] = false;
+			    $ret['error'] = $curlError;
+			    Log::error('ZapguruController: falha no envio do WhatsApp', [
+			        'chat_number' => $chat_number,
+			        'curl_error'  => $curlError,
+			        'http_code'   => $httpCode,
+			    ]);
+			} elseif (isset($ret['response']['code']) && $ret['response']['code'] == 201) {
+			    $ret['exec'] = true;
+			    Log::info('ZapguruController: mensagem enviada com sucesso', [
+			        'chat_number' => $chat_number,
+			        'response'    => $ret['response'],
+			    ]);
+			} else {
+			    $ret['exec'] = false;
+			    Log::warning('ZapguruController: resposta inesperada da API', [
+			        'chat_number' => $chat_number,
+			        'http_code'   => $httpCode,
+			        'response'    => $ret['response'],
+			    ]);
+			}
 
-				$config['celular_completo'] = $celular_completo;
-
-				$ret['response'] = $this->enviar_mensagem($config);
-
-			}else*/if(isset($ret['response']['code'])&&$ret['response']['code']==201){
-
-				$ret['exec'] = true;
-
+			// Fallback: Se o chat não existir, tenta criar usando a action 'chat_add' que cria o chat e já envia a primeira mensagem
+			if (!$ret['exec'] && isset($ret['response']['description']) && (stripos($ret['response']['description'], 'Chat não existe') !== false || stripos($ret['response']['description'], 'não existe com número informado') !== false)) {
+			    Log::info('ZapguruController: Chat não existe. Tentando criar chat via chat_add para o número: ' . $chat_number);
+			    
+			    $nameParam = ($nome ? urldecode($nome) : 'Cliente') . ' | CRM';
+			    $addPostData = [
+			        'key'         => $this->key,
+			        'account_id'  => $this->account_id,
+			        'action'      => 'chat_add',
+			        'phone_id'    => $phone_id,
+			        'chat_number' => $chat_number,
+			        'name'        => $nameParam,
+			        'text'        => $text,
+			    ];
+			    
+			    $curlAdd = curl_init();
+			    curl_setopt_array($curlAdd, [
+			        CURLOPT_URL            => $baseUrl,
+			        CURLOPT_RETURNTRANSFER => true,
+			        CURLOPT_ENCODING       => '',
+			        CURLOPT_MAXREDIRS      => 10,
+			        CURLOPT_TIMEOUT        => 0,
+			        CURLOPT_FOLLOWLOCATION => true,
+			        CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+			        CURLOPT_POST           => true,
+			        CURLOPT_POSTFIELDS     => http_build_query($addPostData),
+			        CURLOPT_HTTPHEADER     => [
+			            'Content-Type: application/x-www-form-urlencoded',
+			        ],
+			    ]);
+			    
+			    $responseAdd = curl_exec($curlAdd);
+			    $httpCodeAdd = curl_getinfo($curlAdd, CURLINFO_HTTP_CODE);
+			    curl_close($curlAdd);
+			    
+			    $parsedAdd = Qlib::lib_json_array($responseAdd, true);
+			    if (isset($parsedAdd['code']) && $parsedAdd['code'] == 201) {
+			        $ret['exec'] = true;
+			        $ret['response'] = $parsedAdd;
+			        Log::info('ZapguruController: chat criado e mensagem enviada com sucesso via chat_add', [
+			            'chat_number' => $chat_number,
+			            'response'    => $parsedAdd,
+			        ]);
+			    } else {
+			        Log::warning('ZapguruController: falha ao tentar criar chat via chat_add', [
+			            'chat_number' => $chat_number,
+			            'response'    => $parsedAdd,
+			        ]);
+			    }
 			}
 
 			if(isset($ret['response']['description'])&&isset($ret['response']['result'])){

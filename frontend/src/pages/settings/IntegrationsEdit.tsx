@@ -17,6 +17,8 @@ export default function IntegrationsEdit() {
     queryKey: ['integracao', id],
     queryFn: () => integracoesService.get(id!),
     enabled: !!id,
+    staleTime: 0,
+    gcTime: 0,
   });
   const item = useMemo(() => data?.data, [data]);
   const [name, setName] = useState('');
@@ -60,6 +62,7 @@ export default function IntegrationsEdit() {
     onSuccess: () => {
       toast.success('Integração atualizada');
       qc.invalidateQueries({ queryKey: ['integracoes'] });
+      qc.invalidateQueries({ queryKey: ['integracao', id] });
       nav('/admin/settings/integrations');
     },
     onError: () => toast.error('Erro ao atualizar integração'),
