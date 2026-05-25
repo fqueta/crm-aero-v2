@@ -10,14 +10,25 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { turmasService } from '@/services/turmasService';
+import { coursesService } from '@/services/coursesService';
 import type { TurmaRecord } from '@/types/turmas';
 import type { PaginatedResponse } from '@/types/index';
+import { Checkbox } from '@/components/ui/checkbox';
+
+import { Badge } from '@/components/ui/badge';
 
 /**
  * Classes — CRUD de turmas com layout moderno
  * pt-BR: Lista, cria, edita e exclui turmas; persiste filtros na URL.
  * en-US: Lists, creates, edits and deletes classes; persists filters in URL.
  */
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(d);
+};
+
 export default function Classes() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -68,6 +79,18 @@ export default function Classes() {
     },
   });
 
+  const coursesQuery = useQuery({
+    queryKey: ['courses', 'list', 'all'],
+    queryFn: async () => coursesService.listCourses({ per_page: 200 } as any),
+  });
+
+  const getCourseName = (id_curso: number) => {
+    if (!coursesQuery.data) return id_curso;
+    const courses = Array.isArray(coursesQuery.data) ? coursesQuery.data : (coursesQuery.data as any)?.data || [];
+    const course = courses.find((c: any) => Number(c.id) === Number(id_curso));
+    return course ? course.nome : id_curso;
+  };
+
   /**
    * deleteMutation
    * pt-BR: Exclui turma.
@@ -101,7 +124,6 @@ export default function Classes() {
   /**
    * resolveSimNao
    * pt-BR: Converte 's'/'n' para rótulo amigável.
-   * en-US: Converts 's'/'n' to human readable label.
    */
   const resolveSimNao = (v?: string) => (v === 's' ? 'Sim' : 'Não');
 
@@ -145,38 +167,55 @@ export default function Classes() {
         </div>
 
         {/* Tabela */}
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Nome</TableHead>
-              <TableHead>Ativo</TableHead>
-              <TableHead>Início</TableHead>
-              <TableHead>Fim</TableHead>
-              <TableHead>Professor</TableHead>
-              <TableHead>Valor</TableHead>
-              <TableHead className="text-right">Ação</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        {/* Tabela similar ao layout legado */}
+        <div className="border rounded-md overflow-x-auto">
+          <Table className="text-sm">
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead className="w-[50px] text-center font-bold">
+                  <div className="flex flex-col items-center leading-tight">
+                    <span>Marcar</span>
+                    <span>Tudo</span>
+                    <Checkbox className="mt-1" />
+                  </div>
+                </TableHead>
+                <TableHead className="font-bold">ID</TableHead>
+                <TableHead className="font-bold min-w-[200px]">Nome da turma</TableHead>
+                <TableHead className="font-bold min-w-[200px]">Curso</TableHead>
+                <TableHead className="text-center font-bold">Incio</TableHead>
+                <TableHead className="text-center font-bold">Ativo</TableHead>
+                <TableHead className="text-center font-bold">Realocar</TableHead>
+                <TableHead className="text-center font-bold">Vagas</TableHead>
+                <TableHead className="text-center font-bold">Matriculados</TableHead>
+                <TableHead className="text-center font-bold">AÇÃO</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
             {listQuery.data?.data?.map((t) => (
-              <TableRow key={t.id}>
-                <TableCell className="font-mono">{t.id}</TableCell>
-                <TableCell>{t.nome ?? '-'}</TableCell>
-                <TableCell>{resolveSimNao(t.ativo)}</TableCell>
-                <TableCell>{t.inicio ?? '-'}</TableCell>
-                <TableCell>{t.fim ?? '-'} </TableCell>
-                <TableCell>{t.professor ?? '-'}</TableCell>
-                <TableCell>{t.Valor ?? '-'}</TableCell>
-                <TableCell className="text-right">
+              <TableRow key={t.id} className="hover:bg-muted/30">
+                <TableCell className="text-center"><Checkbox /></TableCell>
+                <TableCell className="font-mono text-muted-foreground">{String(t.id).padStart(4, '0')}</TableCell>
+                <TableCell className="font-medium">{t.nome ?? '-'}</TableCell>
+                <TableCell className="text-muted-foreground">{getCourseName(t.id_curso)}</TableCell>
+                <TableCell className="text-center text-muted-foreground whitespace-nowrap">{formatDate(t.inicio)}</TableCell>
+                <TableCell className="text-center">{resolveSimNao(t.ativo)}</TableCell>
+                <TableCell className="text-center text-muted-foreground">0</TableCell>
+                <TableCell className="text-center">{t.max_alunos ?? 0}</TableCell>
+                <TableCell className="text-center font-medium text-green-700">0</TableCell>
+                <TableCell className="text-center">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                      <Button variant="outline" size="sm" className="h-8 text-xs px-2 flex items-center">
+                        Ação <span className="ml-1 text-[10px]">▼</span>
+                      </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
+                    <DropdownMenuContent align="end" className="w-40">
                       <DropdownMenuItem onClick={() => goToEdit(t.id)}>Editar</DropdownMenuItem>
+                      <DropdownMenuItem>Copiar</DropdownMenuItem>
+                      <DropdownMenuItem>Chamada</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate('/admin/school/interested')}>Interessados</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate('/admin/school/enroll')}>Matriculados</DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem className="text-red-600" onClick={() => deleteMutation.mutate(t.id)}>Excluir</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -185,6 +224,7 @@ export default function Classes() {
             ))}
           </TableBody>
         </Table>
+        </div>
       </Card>
     </div>
   );
