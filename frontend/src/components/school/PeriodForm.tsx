@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -21,6 +22,7 @@ import {
   Clock, 
   Plane, 
   FileText, 
+  Plus,
   GraduationCap, 
   Award, 
   Check, 
@@ -49,6 +51,8 @@ export function PeriodForm({
    */
   onSubmitRef?: React.MutableRefObject<(() => void) | null>;
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const form = useForm<CreatePeriodInput | UpdatePeriodInput>({
     defaultValues: {
       nome: '',
@@ -206,6 +210,21 @@ export function PeriodForm({
 
   const [valorMask, setValorMask] = useState<string>('');
 
+  /**
+   * handleCreateContract
+   * pt-BR: Abre a tela de novo contrato com o curso atual pré-selecionado e retorno para esta edição.
+   * en-US: Opens the new contract screen with the current course preselected and a return path to this edit screen.
+   */
+  function handleCreateContract() {
+    if (!selectedCourseId) return;
+    navigate('/admin/school/contracts/create', {
+      state: {
+        prefillData: { id_curso: Number(selectedCourseId) },
+        returnPath: location.pathname + location.search,
+      },
+    });
+  }
+
   function handleValorChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { display, numeric } = currencyMaskFromInput(e.target.value);
     setValorMask(display);
@@ -354,7 +373,19 @@ export function PeriodForm({
           {/* Multi-select de contratos, aparece quando há curso selecionado */}
           {selectedCourseId ? (
             <div className="space-y-2">
-              <Label className="text-xs font-semibold text-zinc-700 dark:text-zinc-350">Contratos associados ao curso</Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-xs font-semibold text-zinc-700 dark:text-zinc-350">Contratos associados ao curso</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCreateContract}
+                  className="h-8 rounded-lg px-2.5 text-xs font-semibold"
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Novo contrato
+                </Button>
+              </div>
               <ContractsMultiSelect
                 value={(form.watch('id_contratos') as (number | string)[]) || []}
                 onChange={(next) => form.setValue('id_contratos', next, { shouldDirty: true })}
@@ -362,6 +393,9 @@ export function PeriodForm({
                 loading={contractsQuery.isLoading || contractsQuery.isFetching}
                 onSearch={setContractsSearch}
               />
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                Cadastre um novo contrato para este curso e volte para vinculá-lo ao período.
+              </p>
               {contractsQuery.isError && (
                 <p className="text-xs text-rose-500 font-medium">Falha ao carregar contratos para o curso selecionado.</p>
               )}

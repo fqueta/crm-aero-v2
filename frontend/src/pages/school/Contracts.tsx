@@ -187,7 +187,7 @@ export default function Contracts() {
             <div>{item.nome ?? item.title}</div>
             <div className="truncate">{item.slug}</div>
             <div>{item.id_curso ?? '-'}</div>
-            <div>{item.periodo ?? '-'}</div>
+            <div>{Array.isArray(item.periodo) ? item.periodo.join(', ') : (item.periodo ?? '-')}</div>
             <div>{(item.ativo ?? 's') === 's' ? 'Sim' : 'Não'}</div>
             <div className="flex gap-2">
               <button className="px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleEdit(item)}>Editar</button>

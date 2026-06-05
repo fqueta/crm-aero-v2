@@ -94,6 +94,18 @@ class PeriodsService extends BaseApiService {
   }
 
   /**
+   * reorderPeriods
+   * pt-BR: Persiste a ordem dos períodos enviando a lista de IDs na sequência desejada.
+   * en-US: Persists the periods order by sending the list of IDs in the desired sequence.
+   */
+  async reorderPeriods(ids: Array<string | number>, courseId?: string | number): Promise<{ ok: boolean; message?: string }> {
+    return this.post<{ ok: boolean; message?: string }>(`${this.endpoint}/reorder`, {
+      ids,
+      id_curso: courseId !== undefined && courseId !== null && courseId !== '' ? Number(courseId) : undefined,
+    });
+  }
+
+  /**
    * deletePeriod
    * pt-BR: Remove um período.
    * en-US: Deletes a period.

@@ -431,7 +431,6 @@
                                     @if(!$isEtapa1)
                                         <div class="green-footer-bar">
                                             @if(stripos($stageName, 'Etapa 2') !== false)
-                                                Subtotal: &nbsp; <span style="color: #000;">{{ $footerText }}</span><br>
                                                 TOTAL {{ strtoupper($stageName) }}: &nbsp; {{ $footerText }}
                                             @else
                                                 {{ $stageName }}: &nbsp;&nbsp; {{ $footerText }}

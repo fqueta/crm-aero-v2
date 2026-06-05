@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import EditFooterBar from '@/components/ui/edit-footer-bar';
 import { contractsService } from '@/services/contractsService';
+import { periodsService } from '@/services/periodsService';
 import { ContractForm } from '@/components/school/ContractForm';
 import type { CreateContractInput, ContractRecord } from '@/types/contracts';
 import { toast } from 'sonner';
@@ -53,23 +54,60 @@ export default function ContractCreate() {
   });
 
   /**
+   * normalizePeriodIds
+   * pt-BR: Normaliza a seleção de períodos para um array de IDs string.
+   * en-US: Normalizes the selected periods into a string ID array.
+   */
+  function normalizePeriodIds(value?: CreateContractInput['periodo'] | null): string[] {
+    if (Array.isArray(value)) {
+      return value.map(String).filter(Boolean);
+    }
+    return value ? [String(value)] : [];
+  }
+
+  /**
+   * syncContractWithSelectedPeriod
+   * pt-BR: Vincula o contrato recém-criado ao período escolhido no formulário.
+   * en-US: Links the newly created contract to the period selected in the form.
+   */
+  async function syncContractWithSelectedPeriod(contractId: string | number, periodIds?: CreateContractInput['periodo'] | null) {
+    const normalizedIds = normalizePeriodIds(periodIds);
+    if (!normalizedIds.length) return;
+    for (const periodId of normalizedIds) {
+      const period = await periodsService.getById(periodId);
+      if (!period) continue;
+      const currentIds = Array.isArray(period.id_contratos) ? period.id_contratos.map(String) : [];
+      if (currentIds.includes(String(contractId))) continue;
+      await periodsService.updatePeriod(periodId, {
+        id_contratos: [...currentIds, String(contractId)],
+      });
+    }
+    queryClient.invalidateQueries({ queryKey: ['periodos'] });
+    queryClient.invalidateQueries({ queryKey: ['periods'] });
+  }
+
+  /**
    * handleSubmit
    * pt-BR: Cria novo contrato e volta à listagem se finalizar.
    * en-US: Creates a new contract and navigates back to list if finishing.
    */
   const handleSubmit = async (data: CreateContractInput) => {
-    createMutation.mutate(data, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['contracts'] });
-        if (finishAfterSaveRef.current) {
-          if (returnPath) {
-            navigate(returnPath);
-          } else {
-            navigate('/admin/school/contracts');
-          }
+    try {
+      const created = await createMutation.mutateAsync(data);
+      await syncContractWithSelectedPeriod(created.id, data.periodo);
+      queryClient.invalidateQueries({ queryKey: ['contracts'] });
+      if (finishAfterSaveRef.current) {
+        if (returnPath) {
+          navigate(returnPath);
+        } else {
+          navigate('/admin/school/contracts');
         }
-      },
-    });
+      }
+    } catch (error: any) {
+      toast.error('Erro ao salvar contrato', {
+        description: String(error?.response?.data?.message || error?.body?.message || error?.message || 'Não foi possível salvar o contrato.'),
+      });
+    }
   };
 
   /**

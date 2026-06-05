@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm, FormProvider, useFieldArray } from 'react-hook-form';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -11,9 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Plus, X, Trash2, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { Plus, X, Trash2, GripVertical, ArrowUp, ArrowDown, PencilLine } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { aircraftSettingsService } from '@/services/aircraftSettingsService';
+import { contractsService } from '@/services/contractsService';
 import { periodsService } from '@/services/periodsService';
 import { CoursePayload, CourseRecord, CourseModule } from '@/types/courses';
 import {
@@ -98,6 +99,33 @@ function getPeriodsFilterUrl(id?: string | number): string {
 }
 
 /**
+ * getModulesTabLabel
+ * pt-BR: Retorna o rótulo da aba de módulos, usando "Períodos" para cursos do tipo 4.
+ * en-US: Returns the modules tab label, using "Periods" for type-4 courses.
+ */
+function getModulesTabLabel(courseType?: string | number): string {
+  return String(courseType ?? '') === '4' ? 'Períodos' : 'Módulos';
+}
+
+/**
+ * getPeriodEditUrl
+ * pt-BR: Monta a URL de edição de um período preservando o filtro do curso atual.
+ * en-US: Builds the period edit URL preserving the current course filter.
+ */
+function getPeriodEditUrl(periodId: string | number, courseId?: string | number): string {
+  const base = `/admin/school/periods/${periodId}/edit`;
+  const cid = courseId ? String(courseId) : '';
+  return cid ? `${base}?id_curso=${cid}` : base;
+}
+
+type CoursePeriodListItem = {
+  id: string;
+  nome: string;
+  valor?: number | string;
+  id_contratos: (number | string)[];
+};
+
+/**
  * SortableModuleItem
  * pt-BR: Componente wrapper para tornar o módulo ordenável.
  * en-US: Wrapper component to make the module sortable.
@@ -177,6 +205,8 @@ export function CourseForm({
    * en-US: SPA navigation to open periods page with filter.
    */
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   /**
    * courseSchema
    * pt-BR: Valida campos principais e valores monetários (aba "Valores").
@@ -221,10 +251,16 @@ export function CourseForm({
       .coerce.string()
       .optional()
       .refine((v) => (v === undefined || currencyRemoveMaskToNumber(v) >= 0), 'Valor inválido'),
-    parcelas: z
-      .coerce.string()
-      .optional()
-      .refine((v) => (v === undefined || v === '' || (/^\d+$/.test(String(v).trim()) && parseInt(String(v).trim(), 10) >= 1)), 'Parcelas deve ser inteiro >= 1'),
+    parcelas: z.preprocess(
+      (value) => {
+        const normalized = String(value ?? '').trim();
+        return normalized === '' ? undefined : normalized;
+      },
+      z
+        .string()
+        .optional()
+        .refine((v) => (v === undefined || (/^\d+$/.test(String(v).trim()) && parseInt(String(v).trim(), 10) >= 1)), 'Parcelas deve ser inteiro >= 1')
+    ),
     valor_parcela: z
       .coerce.string()
       .optional()
@@ -579,8 +615,456 @@ export function CourseForm({
       id: String(p.id),
       nome: String(p?.nome || p?.title || p.id),
       valor: p?.valor,
-    }));
+      id_contratos: Array.isArray(p?.id_contratos) ? p.id_contratos : [],
+    })) as CoursePeriodListItem[];
   }, [periodsQuery.data]);
+  const [orderedPeriodItems, setOrderedPeriodItems] = useState<CoursePeriodListItem[]>([]);
+  const [isSavingPeriodOrder, setIsSavingPeriodOrder] = useState(false);
+  const [highlightedPeriodId, setHighlightedPeriodId] = useState<string | null>(null);
+  const periodCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  useEffect(() => {
+    if (!isSavingPeriodOrder) {
+      setOrderedPeriodItems(periodItems);
+    }
+  }, [periodItems, isSavingPeriodOrder]);
+
+  /**
+   * contractsQueryByCourse
+   * pt-BR: Busca os contratos do curso atual para exibir os vínculos de cada período.
+   * en-US: Fetches contracts for the current course to display each period's linked contracts.
+   */
+  const contractsQueryByCourse = useQuery({
+    queryKey: ['contracts', 'by_course', courseId],
+    queryFn: async () => {
+      if (!courseId) return { data: [] } as any;
+      return contractsService.listContracts({ page: 1, per_page: 200, id_curso: courseId as any });
+    },
+    enabled: !!courseId,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const courseContractItems = useMemo(() => {
+    const res = contractsQueryByCourse.data as any;
+    return (res?.data || res?.items || []) as any[];
+  }, [contractsQueryByCourse.data]);
+
+  /**
+   * handleCreatePeriod
+   * pt-BR: Abre a criação de período com curso pré-preenchido e retorno para a aba atual do curso.
+   * en-US: Opens period creation with the course prefilled and a return path to the current course tab.
+   */
+  function handleCreatePeriod() {
+    if (!courseId) return;
+    navigate(`/admin/school/periods/create?id_curso=${encodeURIComponent(String(courseId))}`, {
+      state: {
+        prefillData: { id_curso: Number(courseId) },
+        returnPath: `${location.pathname}${location.search}`,
+      },
+    });
+  }
+
+  /**
+   * handleCreateContractForPeriod
+   * pt-BR: Abre a criação de contrato para o curso atual e retorna para a edição do período selecionado.
+   * en-US: Opens contract creation for the current course and returns to the selected period edit screen.
+   */
+  function handleCreateContractForPeriod(periodId: string | number) {
+    if (!courseId) return;
+    navigate('/admin/school/contracts/create', {
+      state: {
+        prefillData: { id_curso: Number(courseId) },
+        returnPath: getPeriodEditUrl(periodId, courseId),
+      },
+    });
+  }
+
+  /**
+   * handleEditContractFromPeriod
+   * pt-BR: Abre a edição do contrato vinculado ao período e retorna para a aba atual do curso.
+   * en-US: Opens contract editing from a linked period and returns to the current course tab.
+   */
+  function handleEditContractFromPeriod(contractId: string | number) {
+    navigate(`/admin/school/contracts/${encodeURIComponent(String(contractId))}/edit`, {
+      state: {
+        returnPath: `${location.pathname}${location.search}`,
+      },
+    });
+  }
+
+  /**
+   * handleManagePeriodContracts
+   * pt-BR: Abre a edição do período para gerenciar os contratos vinculados e demais dados.
+   * en-US: Opens period editing to manage linked contracts and other settings.
+   */
+  function handleManagePeriodContracts(periodId: string | number) {
+    navigate(getPeriodEditUrl(periodId, courseId), {
+      state: {
+        returnPath: `${location.pathname}${location.search}`,
+      },
+    });
+  }
+
+  /**
+   * getPeriodContractLabels
+   * pt-BR: Resolve os nomes dos contratos associados a um período com base na lista do curso.
+   * en-US: Resolves the names of contracts linked to a period based on the course list.
+   */
+  function getPeriodContractLabels(period: { id_contratos?: (string | number)[] }): string[] {
+    const ids = Array.isArray(period?.id_contratos) ? period.id_contratos : [];
+    return ids.map((cid) => {
+      const item = courseContractItems.find((contract: any) => String(contract?.id) === String(cid));
+      return String(item?.nome || item?.title || item?.slug || cid);
+    });
+  }
+
+  /**
+   * getPeriodContracts
+   * pt-BR: Retorna os contratos completos vinculados ao período para exibir ações rápidas.
+   * en-US: Returns the full contracts linked to the period to render quick actions.
+   */
+  function getPeriodContracts(period: { id_contratos?: (string | number)[] }) {
+    const ids = Array.isArray(period?.id_contratos) ? period.id_contratos : [];
+    return ids.map((cid) => {
+      const item = courseContractItems.find((contract: any) => String(contract?.id) === String(cid));
+      return {
+        id: item?.id ?? cid,
+        label: String(item?.nome || item?.title || item?.slug || cid),
+      };
+    });
+  }
+
+  /**
+   * handleUpdatePeriodContracts
+   * pt-BR: Atualiza os contratos vinculados ao período diretamente pela aba do curso.
+   * en-US: Updates the contracts linked to a period directly from the course tab.
+   */
+  async function handleUpdatePeriodContracts(periodId: string | number, nextContractIds: (string | number)[]) {
+    await periodsService.updatePeriod(periodId, { id_contratos: nextContractIds });
+    setOrderedPeriodItems((current) => current.map((item) => (
+      String(item.id) === String(periodId)
+        ? { ...item, id_contratos: nextContractIds }
+        : item
+    )));
+    queryClient.invalidateQueries({ queryKey: ['periodos'] });
+    queryClient.invalidateQueries({ queryKey: ['periods'] });
+    await periodsQuery.refetch();
+  }
+
+  /**
+   * restorePeriodViewport
+   * pt-BR: Mantém o usuário próximo ao período atualizado, restaurando a rolagem
+   *        e destacando temporariamente o card alterado.
+   * en-US: Keeps the user near the updated period by restoring scroll position
+   *        and temporarily highlighting the changed card.
+   */
+  function restorePeriodViewport(periodId: string | number, scrollTop?: number) {
+    const targetId = String(periodId);
+    window.setTimeout(() => {
+      if (typeof scrollTop === 'number') {
+        window.scrollTo({ top: scrollTop, behavior: 'auto' });
+      }
+      const node = periodCardRefs.current[targetId];
+      node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      setHighlightedPeriodId(targetId);
+      window.setTimeout(() => setHighlightedPeriodId((current) => (current === targetId ? null : current)), 2200);
+    }, 0);
+  }
+
+  /**
+   * handlePeriodDragEnd
+   * pt-BR: Reordena os períodos da aba e persiste a nova sequência no backend.
+   * en-US: Reorders periods in the tab and persists the new sequence in the backend.
+   */
+  async function handlePeriodDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+
+    const oldIndex = orderedPeriodItems.findIndex((item) => String(item.id) === activeId);
+    const newIndex = orderedPeriodItems.findIndex((item) => String(item.id) === overId);
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const next = arrayMove(orderedPeriodItems, oldIndex, newIndex);
+    setOrderedPeriodItems(next);
+    setIsSavingPeriodOrder(true);
+
+    try {
+      await periodsService.reorderPeriods(next.map((item) => item.id), courseId);
+      toast({ title: 'Ordem atualizada', description: 'A nova ordem dos períodos foi salva com sucesso.' });
+      await periodsQuery.refetch();
+    } catch (error: any) {
+      setOrderedPeriodItems(periodItems);
+      toast({
+        title: 'Erro ao salvar ordem',
+        description: String(error?.response?.data?.message || error?.body?.message || error?.message || 'Não foi possível salvar a nova ordem dos períodos.'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingPeriodOrder(false);
+    }
+  }
+
+  /**
+   * SortablePeriodCard
+   * pt-BR: Item ordenável da lista de períodos com ações rápidas para contratos e edição.
+   * en-US: Sortable period list item with quick actions for contracts and editing.
+   */
+  function SortablePeriodCard({ period, index }: { period: CoursePeriodListItem; index: number }) {
+    const id = String(period.id);
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      zIndex: isDragging ? 50 : 'auto',
+      position: 'relative' as const,
+      opacity: isDragging ? 0.3 : 1,
+    };
+
+    return (
+      <div
+        ref={(node) => {
+          setNodeRef(node);
+          periodCardRefs.current[id] = node;
+        }}
+        style={style}
+        className={`group flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between rounded-lg border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md hover:border-primary/20 ${
+          highlightedPeriodId === id ? 'ring-2 ring-primary/40 border-primary/40 bg-primary/5' : ''
+        }`}
+      >
+        <div className="flex items-start gap-3 w-full md:w-auto">
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            className="mt-1 flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed transition-colors"
+            title="Arraste para reordenar"
+            disabled={isSavingPeriodOrder}
+          >
+            <GripVertical className="h-5 w-5" />
+          </button>
+          
+          <div className="flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="text-xs bg-muted/50 font-normal">
+                {index + 1}º Período
+              </Badge>
+              <span className="text-base font-semibold">{period.nome}</span>
+              <span className="text-xs text-muted-foreground">#{period.id}</span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {period.valor ? (
+                <Badge variant="secondary" className="bg-green-50 text-green-700 hover:bg-green-100 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">
+                  Valor: {formatCurrencyBRLDisplay(period.valor)}
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800">
+                  Valor não informado
+                </Badge>
+              )}
+            </div>
+
+            <div className="pt-2">
+              {contractsQueryByCourse.isLoading || contractsQueryByCourse.isFetching ? (
+                <p className="text-xs text-muted-foreground animate-pulse">Carregando contratos...</p>
+              ) : getPeriodContracts(period).length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {getPeriodContracts(period).map((contract) => (
+                    <div
+                      key={`${period.id}-${contract.id}`}
+                      className="inline-flex items-center gap-1 rounded-md border bg-background px-1.5 py-1 shadow-sm"
+                    >
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {contract.label}
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => handleEditContractFromPeriod(contract.id)}
+                        title={`Editar contrato ${contract.label}`}
+                      >
+                        <PencilLine className="mr-1 h-3 w-3" />
+                        Editar contrato
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">Nenhum contrato vinculado a este período.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-end md:self-center ml-10 md:ml-0">
+          <PeriodContractsSelector period={period} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => handleCreateContractForPeriod(period.id)}
+            className="h-8"
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Contrato
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => handleManagePeriodContracts(period.id)}
+            className="h-8"
+          >
+            <PencilLine className="mr-1.5 h-3.5 w-3.5" />
+            Editar
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /**
+   * PeriodContractsSelector
+   * pt-BR: Popover para selecionar contratos já existentes e vinculá-los ao período atual.
+   * en-US: Popover to select existing contracts and link them to the current period.
+   */
+  function PeriodContractsSelector({ period }: { period: CoursePeriodListItem }) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const [draftIds, setDraftIds] = useState<(string | number)[]>(period.id_contratos || []);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+      setDraftIds(period.id_contratos || []);
+    }, [period.id_contratos]);
+
+    const filteredContracts = useMemo(() => {
+      const term = query.trim().toLowerCase();
+      if (!term) return courseContractItems;
+      return courseContractItems.filter((contract: any) =>
+        String(contract?.nome || contract?.title || contract?.slug || '')
+          .toLowerCase()
+          .includes(term)
+      );
+    }, [query]);
+
+    const hasChanges = JSON.stringify(draftIds.map(String).sort()) !== JSON.stringify((period.id_contratos || []).map(String).sort());
+
+    /**
+     * handleSaveContracts
+     * pt-BR: Persiste os contratos selecionados para o período atual.
+     * en-US: Persists the selected contracts for the current period.
+     */
+    async function handleSaveContracts() {
+      const currentScrollTop = typeof window !== 'undefined' ? window.scrollY : undefined;
+      setIsSaving(true);
+      try {
+        await handleUpdatePeriodContracts(period.id, draftIds);
+        toast({
+          title: 'Contratos atualizados',
+          description: 'Os contratos do período foram atualizados com sucesso.',
+        });
+        setOpen(false);
+        restorePeriodViewport(period.id, currentScrollTop);
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao atualizar contratos',
+          description: String(error?.response?.data?.message || error?.body?.message || error?.message || 'Não foi possível atualizar os contratos do período.'),
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    }
+
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" size="sm">
+            Selecionar contratos
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[420px] p-3" align="end">
+          <div className="space-y-3">
+            <Input
+              placeholder="Buscar contrato existente..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <ScrollArea className="h-56 pr-2">
+              <div className="space-y-1">
+                {filteredContracts.map((contract: any) => {
+                  const id = contract.id;
+                  const checked = draftIds.map(String).includes(String(id));
+                  const label = String(contract?.nome || contract?.title || contract?.slug || id);
+                  return (
+                    <label
+                      key={String(id)}
+                      className="flex items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(nextChecked) => {
+                          const next = new Set(draftIds.map(String));
+                          if (nextChecked) {
+                            next.add(String(id));
+                          } else {
+                            next.delete(String(id));
+                          }
+                          setDraftIds(Array.from(next));
+                        }}
+                      />
+                      <span className="text-sm">{label}</span>
+                    </label>
+                  );
+                })}
+                {filteredContracts.length === 0 && (
+                  <div className="py-4 text-center text-xs text-muted-foreground">
+                    Nenhum contrato encontrado.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+            <div className="flex items-center justify-between border-t pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setDraftIds([])}
+                disabled={isSaving}
+              >
+                Limpar
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOpen(false)}
+                  disabled={isSaving}
+                >
+                  Fechar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveContracts}
+                  disabled={!hasChanges || isSaving}
+                >
+                  {isSaving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  }
 
   /**
    * formatPeriodModuleTitle
@@ -717,7 +1201,7 @@ export function CourseForm({
             <TabsTrigger value="pricing">Valores</TabsTrigger>
             <TabsTrigger value="config">Configurações</TabsTrigger>
             <TabsTrigger value="aircrafts">Aeronaves</TabsTrigger>
-            <TabsTrigger value="modules">Módulos</TabsTrigger>
+            <TabsTrigger value="modules">{getModulesTabLabel(courseType)}</TabsTrigger>
             {(form.watch('tipo') === '1' || form.watch('tipo') === '2') && (
               <TabsTrigger value="contracts">Termos e Contratos</TabsTrigger>
             )}
@@ -850,10 +1334,16 @@ export function CourseForm({
                   value={form.watch('parcelas') || ''}
                   onChange={(e) => {
                     /**
-                     * Aceita apenas dígitos e valida mínimo de 1 parcela.
+                     * Aceita apenas dígitos e não trata vazio como erro.
                      */
                     const onlyDigits = e.target.value.replace(/\D/g, '');
-                    form.setValue('parcelas', onlyDigits, { shouldValidate: true });
+                    form.setValue('parcelas', onlyDigits, {
+                      shouldDirty: true,
+                      shouldValidate: onlyDigits.length > 0,
+                    });
+                    if (!onlyDigits.length) {
+                      form.clearErrors('parcelas');
+                    }
                   }}
                   className={form.formState.errors?.parcelas ? 'border-red-500' : ''}
                 />
@@ -1165,10 +1655,87 @@ export function CourseForm({
             </div>
           </TabsContent>
 
-          {/* Módulos */}
+          {/* Módulos / Períodos */}
           <TabsContent value="modules" className="space-y-4 pt-4">
             {form.watch('tipo') === '4' ? (
-              <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Períodos do Curso</CardTitle>
+                    <CardDescription>
+                      Este curso usa períodos (tipo 4). Gerencie os módulos diretamente pela estrutura de períodos.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCreatePeriod}
+                        disabled={!courseId}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Novo período
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => navigate(getPeriodsFilterUrl(courseId))}
+                        disabled={!courseId}
+                      >
+                        Abrir períodos do curso
+                      </Button>
+                      {!courseId && (
+                        <span className="text-xs text-muted-foreground">Salve o curso para gerar o ID e habilitar o link.</span>
+                      )}
+                    </div>
+                    {courseId ? (
+                      periodsQuery.isLoading || periodsQuery.isFetching ? (
+                        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                          Carregando períodos vinculados ao curso...
+                        </div>
+                      ) : orderedPeriodItems.length > 0 ? (
+                        <div className="rounded-md border">
+                          <div className="border-b px-4 py-3 text-sm font-medium">
+                            <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                              <span>
+                                {orderedPeriodItems.length} {orderedPeriodItems.length === 1 ? 'período encontrado' : 'períodos encontrados'}
+                              </span>
+                              <span className="text-xs font-normal text-muted-foreground">
+                                Arraste os itens para reordenar os períodos do curso.
+                              </span>
+                            </div>
+                          </div>
+                          <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handlePeriodDragEnd}
+                          >
+                            <SortableContext
+                              items={orderedPeriodItems.map((period) => period.id)}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              <div className="divide-y">
+                                {orderedPeriodItems.map((period, index) => (
+                                  <SortablePeriodCard key={period.id} period={period} index={index} />
+                                ))}
+                              </div>
+                            </SortableContext>
+                          </DndContext>
+                        </div>
+                      ) : (
+                        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                          Nenhum período cadastrado para este curso até o momento.
+                        </div>
+                      )
+                    ) : (
+                      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                        Salve o curso para visualizar os períodos vinculados.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-3 p-4 border rounded-md bg-muted/20">
                 {/**
                  * ModulesTabTipo4
                  * pt-BR: Para cursos do tipo 4, os módulos são geridos via página de períodos.
@@ -1190,6 +1757,7 @@ export function CourseForm({
                   {!courseId && (
                     <span className="text-xs text-muted-foreground">Salve o curso para gerar o ID e habilitar o link.</span>
                   )}
+                </div>
                 </div>
               </div>
             ) : (

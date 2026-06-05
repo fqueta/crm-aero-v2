@@ -33,8 +33,8 @@ class ContractsService extends BaseApiService {
    * @param data Dados do contrato
    */
   async createContract(data: CreateContractInput): Promise<ContractRecord> {
-    const response = await this.post<ApiResponse<ContractRecord>>(this.endpoint, data);
-    return response.data;
+    const response = await this.post<any>(this.endpoint, data);
+    return (response?.data ?? response) as ContractRecord;
   }
 
   /**
@@ -43,8 +43,8 @@ class ContractsService extends BaseApiService {
    * @param data Dados atualizados
    */
   async updateContract(id: string | number, data: UpdateContractInput): Promise<ContractRecord> {
-    const response = await this.put<ApiResponse<ContractRecord>>(`${this.endpoint}/${id}`, data);
-    return response.data;
+    const response = await this.put<any>(`${this.endpoint}/${id}`, data);
+    return (response?.data ?? response) as ContractRecord;
   }
 
   /**

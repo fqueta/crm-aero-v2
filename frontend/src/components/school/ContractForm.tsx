@@ -11,7 +11,10 @@ import { RichTextEditor } from '@/components/ui/RichTextEditor';
 import { periodsService } from '@/services/periodsService';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Copy } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { CheckSquare, Copy, Layers3, X } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -50,6 +53,7 @@ export function ContractForm({
       slug: '',
       conteudo: '',
       id_curso: undefined,
+      periodo: [],
       tipo: 'geral',
       ativo: 'draft',
     },
@@ -91,12 +95,15 @@ export function ContractForm({
   useEffect(() => {
     if (!initialData) return;
     const d = initialData as any;
+    const normalizedPeriods = Array.isArray(d?.periodo)
+      ? d.periodo.map((item: any) => String(item)).filter(Boolean)
+      : (d?.periodo ? [String(d.periodo)] : []);
     form.reset({
       nome: d?.nome ?? '',
       slug: d?.slug ?? '',
       conteudo: d?.conteudo ?? d?.content ?? '',
       id_curso: d?.id_curso ?? undefined,
-      periodo: d?.periodo ?? '',
+      periodo: normalizedPeriods,
       tipo: d?.tipo ?? d?.config?.tipo ?? 'geral',
       ativo: (d?.ativo as any) ?? 'draft',
     });
@@ -163,7 +170,7 @@ export function ContractForm({
     }
   }
 
-  // Query de períodos do curso selecionado (visualização)
+  // Query de períodos do curso selecionado
   const selectedCourseId = form.watch('id_curso') ? Number(form.watch('id_curso')) : undefined;
 
   // Busca detalhes do curso para verificar o tipo (se não estiver na lista)
@@ -194,6 +201,31 @@ export function ContractForm({
     refetchOnReconnect: false,
   });
   const periodItems = ((periodsQuery.data as any)?.data || (periodsQuery.data as any)?.items || []) as any[];
+  const selectedPeriods = (((form.watch('periodo') as any[]) || []) as (number | string)[]).map(String);
+
+  /**
+   * normalizeSelectedPeriods
+   * pt-BR: Limpa ou filtra os períodos quando o curso atual não suporta períodos
+   *        ou quando parte da seleção não pertence ao curso escolhido.
+   * en-US: Clears or filters selected periods when the current course does not support
+   *        periods or when part of the selection does not belong to the chosen course.
+   */
+  useEffect(() => {
+    const currentValue = form.getValues('periodo');
+    const currentPeriods = Array.isArray(currentValue)
+      ? currentValue.map(String).filter(Boolean)
+      : (currentValue ? [String(currentValue)] : []);
+    if (!currentPeriods.length) return;
+    if (!showPeriods) {
+      form.setValue('periodo', [], { shouldDirty: true });
+      return;
+    }
+    const validIds = new Set(periodItems.map((p: any) => String(p?.id)));
+    const nextPeriods = currentPeriods.filter((id) => validIds.has(id));
+    if (!periodsQuery.isLoading && nextPeriods.length !== currentPeriods.length) {
+      form.setValue('periodo', nextPeriods, { shouldDirty: true });
+    }
+  }, [showPeriods, periodItems, periodsQuery.isLoading, form, selectedCourseId]);
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
@@ -226,11 +258,11 @@ export function ContractForm({
         </div>
       </div>
 
-      {/* Visualização de períodos do curso (apenas tipo 4) */}
+      {/* Seleção de período do curso (apenas tipo 4) */}
       {showPeriods && (
         <div className="space-y-1">
-          <Label>Períodos do curso (visualização)</Label>
-          <div className="border rounded-md p-2 min-h-[42px]">
+          <Label>Períodos do curso</Label>
+          <div className="space-y-2">
             {!selectedCourseId && (
               <p className="text-sm text-muted-foreground">Selecione um curso para ver os períodos.</p>
             )}
@@ -241,17 +273,23 @@ export function ContractForm({
               <p className="text-sm text-muted-foreground">Nenhum período encontrado para este curso.</p>
             )}
             {selectedCourseId && !periodsQuery.isLoading && periodItems.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {periodItems.map((p: any) => {
-                  const relacionados: any[] = (p?.id_contratos as any[]) || [];
-                  const isLinked = !!relacionados?.includes?.((initialData as any)?.id);
-                  return (
-                    <Badge key={String(p?.id)} variant={isLinked ? 'default' : 'secondary'}>
-                      {String(p?.nome || p?.title || '')}
-                    </Badge>
-                  );
-                })}
-              </div>
+              <>
+                <Controller
+                  control={form.control}
+                  name="periodo"
+                  render={({ field }) => (
+                    <PeriodsMultiSelect
+                      value={Array.isArray(field.value) ? field.value : (field.value ? [field.value] : [])}
+                      onChange={field.onChange}
+                      items={periodItems}
+                      loading={periodsQuery.isLoading || periodsQuery.isFetching}
+                    />
+                  )}
+                />
+                <div className="rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-blue-700">
+                  Ao salvar, este contrato sera vinculado automaticamente aos periodos selecionados nos modulos do curso.
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -380,6 +418,115 @@ export function ContractForm({
       </div>
 
     </form>
+  );
+}
+
+/**
+ * PeriodsMultiSelect
+ * pt-BR: Seleção múltipla de períodos com busca e badges removíveis.
+ * en-US: Multi-select for periods with search and removable badges.
+ */
+function PeriodsMultiSelect({
+  value,
+  onChange,
+  items,
+  loading,
+}: {
+  value: (number | string)[];
+  onChange: (next: (number | string)[]) => void;
+  items: any[];
+  loading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filtered = query.trim()
+    ? items.filter((item) => String(item?.nome || item?.title || '').toLowerCase().includes(query.trim().toLowerCase()))
+    : items;
+
+  const selectedItems = items.filter((item) => value.map(String).includes(String(item?.id)));
+  const triggerLabel = value.length === 0
+    ? 'Selecione os periodos...'
+    : `${value.length} ${value.length === 1 ? 'periodo selecionado' : 'periodos selecionados'}`;
+
+  return (
+    <div className="space-y-2.5">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" className="w-full justify-between text-left font-normal">
+            <span className="flex items-center gap-2 truncate text-sm">
+              <Layers3 className="h-4 w-4 text-zinc-400" />
+              {loading ? 'Carregando...' : triggerLabel}
+            </span>
+            <CheckSquare className="h-4 w-4 text-zinc-400" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[420px] p-3" align="start">
+          <div className="space-y-3">
+            <Input
+              placeholder="Buscar periodos..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <ScrollArea className="h-56">
+              <div className="space-y-1 pr-2">
+                {filtered.map((item) => {
+                  const id = String(item?.id);
+                  const checked = value.map(String).includes(id);
+                  const nome = String(item?.nome || item?.title || id);
+                  return (
+                    <label key={id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(nextChecked) => {
+                          const next = new Set(value.map(String));
+                          if (nextChecked) next.add(id);
+                          else next.delete(id);
+                          onChange(Array.from(next));
+                        }}
+                      />
+                      <span className="text-sm">{nome}</span>
+                    </label>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <div className="px-2 py-3 text-center text-xs text-muted-foreground">Nenhum periodo encontrado</div>
+                )}
+              </div>
+            </ScrollArea>
+            <div className="flex items-center justify-between border-t pt-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => onChange([])}>
+                Limpar
+              </Button>
+              <Button type="button" size="sm" onClick={() => setOpen(false)}>
+                Concluir
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      {selectedItems.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 rounded-md border border-dashed border-zinc-200 bg-zinc-50/30 p-2">
+          {selectedItems.map((item) => {
+            const id = String(item?.id);
+            const nome = String(item?.nome || item?.title || id);
+            return (
+              <Badge key={id} className="flex items-center gap-1 rounded-md px-2 py-1">
+                <span>{nome}</span>
+                <button
+                  type="button"
+                  title="Remover periodo"
+                  onClick={() => onChange(value.filter((selectedId) => String(selectedId) !== id))}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

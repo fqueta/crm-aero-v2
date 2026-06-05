@@ -11,6 +11,23 @@ use Illuminate\Support\Facades\Validator;
 class ContratoController extends Controller
 {
     /**
+     * Normaliza a seleção de períodos para um array simples de strings.
+     */
+    private function normalizePeriodoSelection($value): array
+    {
+        if (is_array($value)) {
+            return array_values(array_unique(array_filter(array_map(function ($item) {
+                return trim((string) $item);
+            }, $value), function ($item) {
+                return $item !== '';
+            })));
+        }
+
+        $single = trim((string) ($value ?? ''));
+        return $single !== '' ? [$single] : [];
+    }
+
+    /**
      * List contracts (post_type = 'contratos') with optional pagination and filters.
      * Supports filters: name (search in post_title), slug (post_name), id_curso (config.id_curso), periodo (config.periodo), ativo (publish/draft).
      */
@@ -49,7 +66,11 @@ class ContratoController extends Controller
         }
 
         if ($request->filled('periodo')) {
-            $query->where('config->periodo', $request->input('periodo'));
+            $periodo = (string) $request->input('periodo');
+            $query->where(function ($q) use ($periodo) {
+                $q->where('config->periodo', $periodo)
+                  ->orWhereJsonContains('config->periodo', $periodo);
+            });
         }
 
         if ($request->filled('tipo')) {
@@ -66,7 +87,7 @@ class ContratoController extends Controller
                 'slug' => $item->post_name,
                 'conteudo' => $item->post_content,
                 'id_curso' => $item->config['id_curso'] ?? ($item->post_parent ?: null),
-                'periodo' => $item->config['periodo'] ?? null,
+                'periodo' => $this->normalizePeriodoSelection($item->config['periodo'] ?? null),
                 'tipo' => $item->config['tipo'] ?? 'geral',
                 'ativo' => $item->post_status,
             ];
@@ -82,12 +103,16 @@ class ContratoController extends Controller
     public function store(Request $request)
     {
         $data = $request->all();
+        if (array_key_exists('periodo', $data) && !is_array($data['periodo']) && $data['periodo'] !== null && $data['periodo'] !== '') {
+            $data['periodo'] = [$data['periodo']];
+        }
         $validator = Validator::make($data, [
             'nome' => 'required|string|max:255',
             'slug' => 'nullable|string|max:255',
             'conteudo' => 'nullable|string',
             'id_curso' => 'nullable|integer',
-            'periodo' => 'nullable|string|max:150',
+            'periodo' => 'nullable|array',
+            'periodo.*' => 'nullable|string|max:150',
             'tipo' => 'nullable|string|max:50',
             'ativo' => 'nullable|in:publish,draft'
         ]);
@@ -112,7 +137,7 @@ class ContratoController extends Controller
         }
         $post->config = [
             'id_curso' => $data['id_curso'] ?? null,
-            'periodo' => $data['periodo'] ?? null,
+            'periodo' => $this->normalizePeriodoSelection($data['periodo'] ?? []),
             'tipo' => $data['tipo'] ?? 'geral',
         ];
 
@@ -124,7 +149,7 @@ class ContratoController extends Controller
             'slug' => $post->post_name,
             'conteudo' => $post->post_content,
             'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
-            'periodo' => $post->config['periodo'] ?? null,
+            'periodo' => $this->normalizePeriodoSelection($post->config['periodo'] ?? null),
             'tipo' => $post->config['tipo'] ?? 'geral',
             'ativo' => $post->post_status,
         ], 201);
@@ -203,7 +228,7 @@ class ContratoController extends Controller
             'slug' => $post->post_name,
             'conteudo' => $post->post_content,
             'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
-            'periodo' => $post->config['periodo'] ?? null,
+            'periodo' => $this->normalizePeriodoSelection($post->config['periodo'] ?? null),
             'tipo' => $post->config['tipo'] ?? 'geral',
             'ativo' => $post->post_status,
         ]);
@@ -217,12 +242,16 @@ class ContratoController extends Controller
         $post = Post::ofType('contratos')->findOrFail($id);
 
         $data = $request->all();
+        if (array_key_exists('periodo', $data) && !is_array($data['periodo']) && $data['periodo'] !== null && $data['periodo'] !== '') {
+            $data['periodo'] = [$data['periodo']];
+        }
         $validator = Validator::make($data, [
             'nome' => 'nullable|string|max:255',
             'slug' => 'nullable|string|max:255',
             'conteudo' => 'nullable|string',
             'id_curso' => 'nullable|integer',
-            'periodo' => 'nullable|string|max:150',
+            'periodo' => 'nullable|array',
+            'periodo.*' => 'nullable|string|max:150',
             'tipo' => 'nullable|string|max:50',
             'ativo' => 'nullable|in:publish,draft'
         ]);
@@ -261,7 +290,7 @@ class ContratoController extends Controller
             $config['id_curso'] = $data['id_curso'];
         }
         if (array_key_exists('periodo', $data)) {
-            $config['periodo'] = $data['periodo'];
+            $config['periodo'] = $this->normalizePeriodoSelection($data['periodo']);
         }
         if (array_key_exists('tipo', $data)) {
             $config['tipo'] = $data['tipo'];
@@ -276,7 +305,7 @@ class ContratoController extends Controller
             'slug' => $post->post_name,
             'conteudo' => $post->post_content,
             'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
-            'periodo' => $post->config['periodo'] ?? null,
+            'periodo' => $this->normalizePeriodoSelection($post->config['periodo'] ?? null),
             'tipo' => $post->config['tipo'] ?? 'geral',
             'ativo' => $post->post_status,
         ]);

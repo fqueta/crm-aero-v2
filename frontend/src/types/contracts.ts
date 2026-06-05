@@ -13,7 +13,7 @@ export interface ContractRecord {
   slug?: string;
   conteudo?: string;
   id_curso?: number | string | null;
-  periodo?: string | null;
+  periodo?: (number | string)[] | string | null;
   tipo?: string | null;
   ativo: ContractStatus;
 }
@@ -26,7 +26,7 @@ export interface CreateContractInput {
   slug?: string;
   conteudo?: string;
   id_curso?: number | string | null;
-  periodo?: string | null;
+  periodo?: (number | string)[] | string | null;
   tipo?: string | null;
   ativo?: ContractStatus;
 }
@@ -39,7 +39,7 @@ export interface UpdateContractInput {
   slug?: string;
   conteudo?: string;
   id_curso?: number | string | null;
-  periodo?: string | null;
+  periodo?: (number | string)[] | string | null;
   tipo?: string | null;
   ativo?: ContractStatus;
 }

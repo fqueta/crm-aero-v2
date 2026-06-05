@@ -97,9 +97,9 @@ export default function ProposalsView() {
           return;
         }
 
-        toast({ 
-            title: 'Solicitação Enviada', 
-            description: 'A geração do PDF da proposta foi iniciada em segundo plano. Assim que concluída, ela estará disponível na aba "Contratos".' 
+        toast({
+            title: 'Solicitação Enviada',
+            description: 'A geração do PDF da proposta foi iniciada em segundo plano. Assim que concluir, atualize esta página para visualizar o card "Link da proposta em PDF".'
         });
     } catch (err: any) {
       console.error('Erro PDF:', err);

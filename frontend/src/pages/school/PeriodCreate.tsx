@@ -1,4 +1,4 @@
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,21 +17,27 @@ import { ChevronLeft } from 'lucide-react';
  */
 export default function PeriodCreate() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const submitRef = useRef<(() => void) | null>(null);
   const finishAfterSaveRef = useRef<boolean>(false);
   const { toast } = useToast();
+  const returnPath = (location.state as any)?.returnPath as string | undefined;
+  const prefillData = ((location.state as any)?.prefillData ?? null) as CreatePeriodInput | null;
 
   const createMutation = useMutation({
     mutationFn: async (payload: CreatePeriodInput) => periodsService.createPeriod(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['periods'] });
+      queryClient.invalidateQueries({ queryKey: ['periodos'] });
       toast({
         title: 'Período criado com sucesso',
         description: 'As alterações foram salvas.',
       });
-      if (finishAfterSaveRef.current) navigate(buildListUrlWithSearch());
+      if (finishAfterSaveRef.current) {
+        navigate(returnPath || buildListUrlWithSearch());
+      }
     },
     onError: (err: any) => {
       toast({
@@ -57,7 +63,7 @@ export default function PeriodCreate() {
    * pt-BR: Volta para listagem de períodos.
    * en-US: Navigates back to periods listing.
    */
-  const handleBack = () => navigate(buildListUrlWithSearch());
+  const handleBack = () => navigate(returnPath || buildListUrlWithSearch());
 
   /**
    * handleSaveContinue
@@ -103,6 +109,9 @@ export default function PeriodCreate() {
       <Card className="border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm rounded-2xl bg-white dark:bg-zinc-950 p-6">
         <CardContent className="p-0">
           <PeriodForm
+            initialData={prefillData || {
+              id_curso: searchParams.get('id_curso') ? Number(searchParams.get('id_curso')) : undefined,
+            }}
             onSubmit={async (data) => createMutation.mutateAsync(data as CreatePeriodInput)}
             isSubmitting={createMutation.isPending}
             onSubmitRef={submitRef}

@@ -436,6 +436,7 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::apiResource('periodos', PeriodoController::class, ['parameters' => [
             'periodos' => 'id'
         ]]);
+        Route::post('periodos/reorder', [PeriodoController::class, 'reorder'])->name('periodos.reorder');
 
          // Rotas para service-units
          Route::apiResource('service-units', ServiceUnitController::class,['parameters' => [

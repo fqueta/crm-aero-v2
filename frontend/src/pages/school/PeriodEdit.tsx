@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,12 +17,14 @@ import { ChevronLeft } from 'lucide-react';
  */
 export default function PeriodEdit() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const submitRef = useRef<(() => void) | null>(null);
   const finishAfterSaveRef = useRef<boolean>(false);
   const { toast } = useToast();
+  const returnPath = (location.state as any)?.returnPath as string | undefined;
 
   const { data: period, isLoading } = useQuery<PeriodRecord | null>({
     queryKey: ['periods', 'detail', id],
@@ -43,11 +45,14 @@ export default function PeriodEdit() {
     mutationFn: async (payload: UpdatePeriodInput) => periodsService.updatePeriod(String(id), payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['periods'] });
+      queryClient.invalidateQueries({ queryKey: ['periodos'] });
       toast({
         title: 'Período atualizado com sucesso',
         description: 'As alterações foram salvas.',
       });
-      if (finishAfterSaveRef.current) navigate(buildListUrlWithSearch());
+      if (finishAfterSaveRef.current) {
+        navigate(returnPath || buildListUrlWithSearch());
+      }
     },
     onError: (err: any) => {
       toast({
@@ -73,7 +78,7 @@ export default function PeriodEdit() {
    * pt-BR: Volta para listagem de períodos.
    * en-US: Navigates back to periods listing.
    */
-  const handleBack = () => navigate(buildListUrlWithSearch());
+  const handleBack = () => navigate(returnPath || buildListUrlWithSearch());
 
   /**
    * handleSaveContinue
