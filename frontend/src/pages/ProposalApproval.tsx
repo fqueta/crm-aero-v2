@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldErrors, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, CheckCircle, FileText as LucideFileText, User as LucideUser, ScrollText as LucideScrollText, Check as LucideCheck, Copy as LucideCopy } from "lucide-react";
+import { Loader2, CheckCircle, FileText as LucideFileText, User as LucideUser, ScrollText as LucideScrollText, Check as LucideCheck, Copy as LucideCopy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
@@ -132,6 +133,48 @@ export default function ProposalApproval() {
     },
   });
 
+  /**
+   * focusFieldByName
+   * pt-BR: Centraliza o primeiro campo inválido na tela e tenta aplicar foco ao controle correspondente.
+   * en-US: Centers the first invalid field on screen and tries to focus its matching control.
+   */
+  function focusFieldByName(fieldName?: Path<ApprovalFormData>) {
+    if (!fieldName || typeof document === "undefined") return;
+
+    window.setTimeout(() => {
+      const fieldKey = String(fieldName);
+      const container = document.querySelector<HTMLElement>(`[data-field="${fieldKey}"]`);
+      const control =
+        document.querySelector<HTMLElement>(`[name="${fieldKey}"]`) ||
+        container?.querySelector<HTMLElement>('input, textarea, button, [role="combobox"], [role="checkbox"]');
+
+      const scrollTarget = container || control;
+      if (scrollTarget) {
+        scrollTarget.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      try {
+        form.setFocus(fieldName);
+      } catch {
+        control?.focus?.({ preventScroll: true });
+      }
+
+      if (document.activeElement === document.body) {
+        control?.focus?.({ preventScroll: true });
+      }
+    }, 0);
+  }
+
+  /**
+   * handleInvalidSubmit
+   * pt-BR: Leva o usuário até o primeiro campo com erro na etapa de aprovação.
+   * en-US: Takes the user to the first invalid field on the approval step.
+   */
+  function handleInvalidSubmit(errors: FieldErrors<ApprovalFormData>) {
+    const firstFieldName = Object.keys(errors)[0] as Path<ApprovalFormData> | undefined;
+    focusFieldByName(firstFieldName);
+  }
+
   useEffect(() => {
     async function loadData() {
       if (!id_cliente || !id_matricula) {
@@ -194,6 +237,10 @@ export default function ProposalApproval() {
 
   const onSubmit = async (data: ApprovalFormData) => {
     if (!id_cliente || !id_matricula) return;
+    if (isProposalExpired) {
+      toast.error(proposalExpirationMessage);
+      return;
+    }
     
     setSubmitting(true);
     try {
@@ -202,6 +249,7 @@ export default function ProposalApproval() {
           requiredErrors.forEach((error) => {
             form.setError(error.key, { type: 'manual', message: error.message });
           });
+          focusFieldByName(requiredErrors[0]?.key);
           toast.error('Preencha as perguntas obrigatórias.');
           return;
         }
@@ -223,7 +271,11 @@ export default function ProposalApproval() {
         });
     } catch (error) {
         console.error("Erro ao aprovar:", error);
-        toast.error("Erro ao realizar a aprovação.");
+        const errorMessage =
+          (error as any)?.body?.message ||
+          (error as any)?.message ||
+          "Erro ao realizar a aprovação.";
+        toast.error(errorMessage);
     } finally {
         setSubmitting(false);
     }
@@ -251,6 +303,8 @@ export default function ProposalApproval() {
   const showStatusSection = approvalVisibleSections.status && statusQuestions.length > 0;
   const showInfoSection = approvalVisibleSections.info && infoQuestions.length > 0;
   const showApprovalQuestions = showStatusSection || showInfoSection;
+  const isProposalExpired = Boolean(proposal?.is_expired);
+  const proposalExpirationMessage = proposal?.expiration_message || 'A validade desta proposta expirou. Solicite uma nova proposta para continuar.';
 
   if (loading) {
     return (
@@ -333,6 +387,44 @@ export default function ProposalApproval() {
             <PublicFooter />
         </div>
       );
+  }
+
+  if (isProposalExpired) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        <PublicHeader />
+        <main className="flex-1 container mx-auto px-4 py-10 md:py-12">
+          <div className="max-w-3xl mx-auto">
+            <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
+              <CardHeader className="text-center">
+                <div className="mx-auto bg-red-100 text-red-600 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+                  <AlertTriangle className="w-8 h-8" />
+                </div>
+                <CardTitle className="text-2xl text-red-800">Proposta vencida</CardTitle>
+                <CardDescription>
+                  Esta proposta não pode mais ser aprovada com este link.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Alert variant="destructive" className="border-red-200 bg-red-50">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Solicite uma nova proposta</AlertTitle>
+                  <AlertDescription>
+                    {proposalExpirationMessage} Entre em contato com o atendimento para receber um novo link.
+                  </AlertDescription>
+                </Alert>
+                <div className="flex justify-center">
+                  <Button variant="outline" onClick={() => window.open('https://aeroclubejf.com.br', '_blank')}>
+                    Voltar ao site
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+        <PublicFooter />
+      </div>
+    );
   }
 
   return (
@@ -511,7 +603,7 @@ export default function ProposalApproval() {
             {/* Action Buttons - Terms Card removed temporarily */}
             <div className="mt-8">
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <form onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)} className="space-y-6">
                         {showApprovalQuestions && (
                           <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
                             <div className="bg-slate-50/50 p-6 border-b border-slate-100">
@@ -532,7 +624,7 @@ export default function ProposalApproval() {
                                         name={question.key}
                                         render={({ field }) => (
                                           question.kind === 'select' ? (
-                                            <FormItem>
+                                            <FormItem data-field={question.key}>
                                               <FormLabel>
                                                 {getStudentFacingQuestionLabel(question.label, question.section)}{approvalRequiredQuestions.includes(question.key) ? ' *' : ''}
                                               </FormLabel>
@@ -553,7 +645,7 @@ export default function ProposalApproval() {
                                               <FormMessage />
                                             </FormItem>
                                           ) : (
-                                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                            <FormItem data-field={question.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
                                               <FormControl>
                                                 <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
                                               </FormControl>
@@ -581,7 +673,7 @@ export default function ProposalApproval() {
                                         control={form.control}
                                         name={question.key}
                                         render={({ field }) => (
-                                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                          <FormItem data-field={question.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
                                             <FormControl>
                                               <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
                                             </FormControl>

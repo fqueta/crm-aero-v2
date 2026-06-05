@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\api\ApiCredentialController;
+use App\Models\User;
 use App\Services\Qlib;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -109,7 +110,7 @@ class ZapguruController extends Controller
         $cfg = (new ApiCredentialController())->get('zapguru');
         if (!empty($cfg) && !empty($cfg['config']) && is_array($cfg['config'])) {
             $base = rtrim($cfg['config']['url'] ?? 'https://s4.chatguru.app/api/v1', '/');
-            
+
             // Build a helper map from meta array if it's in list-of-pairs format
             $metaMap = [];
             if (!empty($cfg['meta']) && is_array($cfg['meta'])) {
@@ -120,20 +121,20 @@ class ZapguruController extends Controller
                 }
             }
 
-            $key = $cfg['config']['pass'] 
-                ?? $cfg['config']['key'] 
-                ?? $metaMap['key'] 
-                ?? $cfg['meta']['key'] 
+            $key = $cfg['config']['pass']
+                ?? $cfg['config']['key']
+                ?? $metaMap['key']
+                ?? $cfg['meta']['key']
                 ?? '';
 
-            $account = $cfg['config']['account_id'] 
-                ?? $metaMap['account_id'] 
-                ?? $cfg['meta']['account_id'] 
+            $account = $cfg['config']['account_id']
+                ?? $metaMap['account_id']
+                ?? $cfg['meta']['account_id']
                 ?? '';
 
-            $this->phone_id = $cfg['config']['phone_id'] 
-                ?? $metaMap['phone_id'] 
-                ?? $cfg['meta']['phone_id'] 
+            $this->phone_id = $cfg['config']['phone_id']
+                ?? $metaMap['phone_id']
+                ?? $cfg['meta']['phone_id']
                 ?? null;
 
             $this->key = $key;
@@ -757,6 +758,80 @@ class ZapguruController extends Controller
         $ret = $this->post('dialog_execute',$comple_sql);
         return $ret;
     }
+
+    /**
+     * normalizeChatNumber
+     * pt-BR: Normaliza o telefone para o formato aceito pelo Zapguru.
+     * en-US: Normalizes phone number to the format expected by Zapguru.
+     */
+    private function normalizeChatNumber($phone): ?string
+    {
+        $digits = preg_replace('/\D/', '', (string) $phone);
+        if (!$digits) {
+            return null;
+        }
+
+        if (strlen($digits) <= 11) {
+            $digits = '55' . $digits;
+        }
+
+        return $digits;
+    }
+
+    /**
+     * resolveChatRecipient
+     * pt-BR: Resolve telefone, nome e id do destinatário usando o payload legado ou os registros atuais de users.
+     * en-US: Resolves phone, name, and recipient id using legacy payload or current users records.
+     */
+    private function resolveChatRecipient(array $config): array
+    {
+        $email = trim((string) ($config['email'] ?? ''));
+        $rawPhone = $config['telefonezap'] ?? $config['Celular'] ?? $config['celular_completo'] ?? $config['celular'] ?? null;
+        $user = null;
+
+        if (!empty($config['user_id'])) {
+            $user = User::find((string) $config['user_id']);
+        }
+
+        if (!$user && $email !== '') {
+            $user = User::where('email', $email)->first();
+        }
+
+        if (!$rawPhone && $user?->celular) {
+            $rawPhone = $user->celular;
+        }
+
+        $chatNumber = $this->normalizeChatNumber($rawPhone);
+        $name = trim((string) ($config['nome'] ?? $config['name'] ?? ($user->name ?? 'Cliente')));
+
+        return [
+            'user' => $user,
+            'email' => $email ?: null,
+            'raw_phone' => $rawPhone,
+            'chat_number' => $chatNumber,
+            'name' => $name !== '' ? $name : 'Cliente',
+            'id_cliente' => $config['id_cliente'] ?? ($user->id ?? null),
+        ];
+    }
+
+    /**
+     * sendFormRequest
+     * pt-BR: Envia uma requisição x-www-form-urlencoded para a API nova do Zapguru.
+     * en-US: Sends an x-www-form-urlencoded request to the new Zapguru API.
+     */
+    private function sendFormRequest(array $payload): array
+    {
+        $baseUrl = explode('?', $this->url)[0];
+        $response = Http::asForm()->acceptJson()->post($baseUrl, $payload);
+
+        return [
+            'url' => $baseUrl,
+            'http_code' => $response->status(),
+            'raw' => $response->body(),
+            'parsed' => Qlib::lib_json_array($response->body(), true),
+        ];
+    }
+
     /**
      * Metodo para criar um chat zapguru com o Email do cliente ou telefone
      * @param array estrutura do array $config=['telefonezap'=>'553299999999','dialog_id'=>'opcional'];
@@ -764,187 +839,83 @@ class ZapguruController extends Controller
      * uso $ret = (new ZapguruController)->criar_chat(['telefonezap'=>'5532999999','text'=>'Mensagem de teste']);
      */
 	public function criar_chat($config=false){
+        $config = is_array($config) ? $config : [];
+		$ret = [
+            'exec' => false,
+            'config' => $config,
+        ];
 
-		//Exemplo de uso
-
-		/*
-
-		$zg = new ZapguruController;
-
-		$ret = $zg->criar_chat(array('telefonezap'=>'5532984741602'));
-
-		*/
-		dd($config);
-		$ret['exec'] = false;
-        $cel = isset($config['telefonezap']) ? $config['telefonezap'] : false;
-        $tab = isset($config['tab']) ? $config['tab'] : $GLOBALS['tab15'];
-        $user_id = isset($config['user_id']) ? $config['user_id'] : '';
-        $cadastrado = isset($config['cadastrados']) ? $config['cadastrados'] : true; // permite criar chat de clientes cadastrados ou não
-        // $text 		 	= isset($config['text'])?$config['text'] 	:'Olá *{nome}* como podemos ajudá-lo';
-        $text 		 	= isset($config['text'])?$config['text'] 	:' ';
-        if(!$cel){
-            $cel = isset($config['Celular']) ? $config['Celular'] : false;
+        $recipient = $this->resolveChatRecipient($config);
+        $chatNumber = $recipient['chat_number'] ?? null;
+        if (!$chatNumber) {
+            $ret['mens'] = Qlib::formatMensagemInfo('Telefone não informado ou não encontrado para o destinatário.','danger');
+            $ret['color'] = 'danger';
+            $ret['recipient'] = $recipient;
+            return $ret;
         }
-		if($cel){
-            if($tab=='capta_lead'){
-                $comSc = " AND celular='".$cel."'";
-            }else{
-                $comSc = " AND telefonezap='".$cel."'";
-            }
-		}else{
-            //verificar se foi informado um email para conseguir o telefonezap pelo email
-            $email = isset($config['email']) ? $config['email'] : false;
-            if($email){
-                if($tab=='capta_lead'){
-                    $campo_bus = 'email';
-                    $campo_enc = 'celular';
-                    $cel = Qlib::buscaValorDb($tab,$campo_bus,$email,$campo_enc," AND ".Qlib::compleDelete());
-                }elseif($tab == 'usuarios_sistemas'){
-                    $campo_bus = 'email';
-                    $campo_enc = 'telefonezap';
-                    $comSc = "WHERE $campo_bus='$email'";
-                }else{
-                    $campo_bus = 'Email';
-                    $campo_enc = 'telefonezap';
-                    $cel = Qlib::buscaValorDb($tab,$campo_bus,$email,$campo_enc," AND ".Qlib::compleDelete());
-                }
-                // dd($cel);
-                if($tab != 'usuarios_sistemas'){
-                    if($cel){
-                        $comSc = " AND $campo_enc='".$cel."'";
-                    }else{
-                        $ret['mens'] = Qlib::formatMensagemInfo('Telefone não informado não encontrado!','danger');
-                        $ret['color'] = 'danger';
-                        return $ret;
-                    }
-                }
-            }else{
-           		$ret['mens'] = Qlib::formatMensagemInfo('Email ou telefone não informado não encontrado!','danger');
-                $ret['color'] = 'danger';
-				return $ret;
 
-            }
-		}
-        if($comSc){
-            if($tab=='usuarios_sistemas'){
-                $dadosCli = Qlib::get_user_data($comSc);
-            }else{
-                $dadosCli = Qlib::dados_tab($tab,['campos'=>'*','where'=>"WHERE ".Qlib::compleDelete()."$comSc ORDER BY id DESC"]);
-            }
-            // return $dadosCli;
-			if(!$dadosCli && $cadastrado){
-				$ret['mens'] = Qlib::formatMensagemInfo('Cliente com telefone '.$cel.' não encontrado!','danger');
-                $ret['color'] = 'danger';
-				return $ret;
-			}
-            $id_cliente = isset($dadosCli[0]['id']) ? $dadosCli[0]['id'] : false;
-            // dump($dadosCli);
-            if($cadastrado){
-                if($tab=='capta_lead'){
-                    $Celular 	 	= str_replace('(','',$dadosCli[0]['celular']);
-                    $nome 		 	= isset($dadosCli[0]['nome'])?$dadosCli[0]['nome'] 	:false;
-                    $sobrenome = '';
-                    $chat_number 	= $dadosCli[0]['celular'];
-                }else{
-                    $nome 		 	= isset($dadosCli[0]['Nome'])?$dadosCli[0]['Nome'] 	:false;
-                    $pais = !empty($dadosCli[0]['pais'])?$dadosCli[0]['pais']:'Brasil';
-                    $codi_pais = false;
-                    if($pais=='Brasil' && !isset($config['telefonezap'])){
+        $name = $recipient['name'] ?? 'Cliente';
+        $text = (string) ($config['text'] ?? ' ');
+        $text = str_replace('{nome}', $name, $text);
+        $phone_id = $config['phone_id'] ?? $this->phone_id();
+        $dialog_id = $config['dialog_id'] ?? '';
+        $user_id = $config['user_id'] ?? '';
+        $id_cliente = $recipient['id_cliente'] ?? null;
 
-                        $codi_pais = '55';
+        $nameParam = $name;
+        if (!empty($id_cliente)) {
+            $nameParam .= ' - ' . $id_cliente . ' | CRM';
+        } else {
+            $nameParam .= ' | CRM';
+        }
 
-                    }
-                    $sobrenome 		= isset($dadosCli[0]['sobrenome']) ? $dadosCli[0]['sobrenome'] 	:false;
-                    if(isset($dadosCli[0]['telefonezap']) && !empty($dadosCli[0]['telefonezap'])){
-                        $chat_number 	= $dadosCli[0]['telefonezap'];
-                    }else{
-                        if($tab=='usuarios_sistemas'){
-                            $Celular 	 	= str_replace('(','',$dadosCli['celular']);
-                            $nome 		 	= isset($dadosCli['nome'])?$dadosCli['nome'] 	:false;
-                        }else{
-                            $Celular 	 	= str_replace('(','',$dadosCli[0]['Celular']);
-                        }
-                        $Celular 		= str_replace(')','',$Celular);
-                        $Celular 		= str_replace('-','',$Celular);
-                        $chat_number 	= $codi_pais.$Celular;
-                    }
-                }
-                $name  = urlencode($nome.' '.$sobrenome);
-                $ret['dadosCli'] = $dadosCli;
-			}else{
-                $name = 'Senhor(a)';
-                $chat_number 	= $cel;
-            }
-            $nome_=$nome;
-            $nom = explode('+',$nome_);
-            if(isset($nom[0]) && !empty($nom[0])){
-                $nome_=$nome;
-            }
-            $text  = str_replace('{nome}',$nome_,$text);
-            $text  = urlencode($text);
+        $postData = [
+            'key' => $this->key,
+            'account_id' => $this->account_id,
+            'action' => 'chat_add',
+            'phone_id' => $phone_id,
+            'chat_number' => $chatNumber,
+            'name' => $nameParam,
+            'text' => $text,
+        ];
 
-			$phone_id 		= isset($config['phone_id'])?$config['phone_id']:$this->phone_id();
-			//Executar um dialogo opcional
-			$dialog_id 		= isset($config['dialog_id'])?$config['dialog_id']:'';
+        if ($dialog_id) {
+            $postData['dialog_id'] = $dialog_id;
+        }
+        if ($user_id) {
+            $postData['user_id'] = $user_id;
+        }
 
-			$action 		= 'chat_add';
+        $apiResponse = $this->sendFormRequest($postData);
+        $ret['url'] = $apiResponse['url'];
+        $ret['http_code'] = $apiResponse['http_code'];
+        $ret['response'] = $apiResponse['parsed'];
+        $ret['id_cliente'] = $id_cliente;
+        $ret['chat_number'] = $chatNumber;
+        $ret['recipient'] = $recipient;
 
-			$ret['config'] = $config;
-            //adiciona o id no nome
-            if($tab=='usuarios_sistemas'){
-                if(isset($dadosCli['id']) && ($id_cliente=$dadosCli['id'])){
-                    $name .= ' - '.$id_cliente.' | CRM';
-                }
-            }else{
-                if(isset($dadosCli[0]['id']) && ($id_cliente=$dadosCli[0]['id'])){
-                    $name .= ' - '.$id_cliente.' | CRM';
-                }
-            }
-            // return $nome;
-			$url = $this->url.'action='.$action.'&phone_id='.$phone_id.'&name='.$name.'&text='.$text.'&chat_number='.$chat_number;
-			// return $url;
-            if($dialog_id){
-				$url .= '&dialog_id='.$dialog_id.'';
-			}
-			if($user_id){
-				$url .= '&user_id='.$user_id.'';
-			}
-			$ret['url'] = $url;
-            // return $url;
-            // return $ret;
-            $response = Http::accept('application/json')->post($url);
+        if (isset($ret['response']['code']) && (int) $ret['response']['code'] === 201) {
+            $ret['exec'] = true;
+            Log::info('ZapguruController: chat criado com sucesso', [
+                'chat_number' => $chatNumber,
+                'id_cliente' => $id_cliente,
+                'response' => $ret['response'],
+            ]);
+        } else {
+            Log::warning('ZapguruController: falha ao criar chat', [
+                'chat_number' => $chatNumber,
+                'id_cliente' => $id_cliente,
+                'http_code' => $apiResponse['http_code'],
+                'response' => $ret['response'],
+            ]);
+        }
 
-			$ret['response'] = Qlib::lib_json_array($response,true);
+        if (isset($ret['response']['description']) && isset($ret['response']['result'])) {
+            $css = $ret['response']['result'] === 'success' ? $ret['response']['result'] : 'danger';
+            $ret['mens'] = Qlib::formatMensagem0($ret['response']['description'], $css);
+        }
 
-			if(isset($ret['response']['code']) && $ret['response']['code']==201){
-				$ret['exec'] = true;
-                //gravar o status no usuario encotrado no CRM do Aero
-                $ret['id_cliente'] = $id_cliente;
-                //Controlar a gravação da respota ao usar essa função para não apagar o que ja está gravado
-                $gravar_resposta = isset($config['gravar_resposta']) ? $config['gravar_resposta'] : true;
-                if($gravar_resposta && $cadastrado && $id_cliente){
-                    $ret['salvar'] = DB::table($GLOBALS['tab15'])->where('id',$id_cliente)->update(['zapguru' => $response]);
-                }
-			}
-
-			if(isset($ret['response']['description'])&&isset($ret['response']['result'])){
-
-				$css = 'danger';
-
-				if($ret['response']['result']=='success'){
-
-					$css = $ret['response']['result'];
-
-				}
-
-				$ret['mens'] = Qlib::formatMensagem0($ret['response']['description'],$css);
-
-			}
-
-		}
-
-		return $ret;
-
+        return $ret;
 	}
 
     /**
@@ -1046,7 +1017,7 @@ class ZapguruController extends Controller
 			// Fallback: Se o chat não existir, tenta criar usando a action 'chat_add' que cria o chat e já envia a primeira mensagem
 			if (!$ret['exec'] && isset($ret['response']['description']) && (stripos($ret['response']['description'], 'Chat não existe') !== false || stripos($ret['response']['description'], 'não existe com número informado') !== false)) {
 			    Log::info('ZapguruController: Chat não existe. Tentando criar chat via chat_add para o número: ' . $chat_number);
-			    
+
 			    $nameParam = ($nome ? urldecode($nome) : 'Cliente') . ' | CRM';
 			    $addPostData = [
 			        'key'         => $this->key,
@@ -1057,7 +1028,7 @@ class ZapguruController extends Controller
 			        'name'        => $nameParam,
 			        'text'        => $text,
 			    ];
-			    
+
 			    $curlAdd = curl_init();
 			    curl_setopt_array($curlAdd, [
 			        CURLOPT_URL            => $baseUrl,
@@ -1073,11 +1044,11 @@ class ZapguruController extends Controller
 			            'Content-Type: application/x-www-form-urlencoded',
 			        ],
 			    ]);
-			    
+
 			    $responseAdd = curl_exec($curlAdd);
 			    $httpCodeAdd = curl_getinfo($curlAdd, CURLINFO_HTTP_CODE);
 			    curl_close($curlAdd);
-			    
+
 			    $parsedAdd = Qlib::lib_json_array($responseAdd, true);
 			    if (isset($parsedAdd['code']) && $parsedAdd['code'] == 201) {
 			        $ret['exec'] = true;

@@ -909,6 +909,71 @@ class MatriculaController extends Controller
     }
 
     /**
+     * getPublicProposalExpirationContext
+     * pt-BR: Calcula a data final de validade da proposta pública e informa se ela já expirou.
+     * en-US: Computes the public proposal expiry date and tells whether it has already expired.
+     */
+    private function getPublicProposalExpirationContext(Matricula $matricula): array
+    {
+        $meta = $this->getAllMatriculaMeta($matricula->id);
+        $validityDays = (int) ($meta['validade'] ?? 14);
+        $baseDateRaw = $matricula->{Matricula::CREATED_AT} ?? null;
+        $timezone = env('APP_TIMEZONE', config('app.timezone', 'America/Sao_Paulo'));
+
+        if (!$baseDateRaw || $validityDays <= 0) {
+            return [
+                'is_expired' => false,
+                'validity_days' => $validityDays > 0 ? $validityDays : 14,
+                'valid_until' => null,
+                'expiration_message' => null,
+            ];
+        }
+
+        try {
+            $validUntil = Carbon::parse($baseDateRaw)
+                ->setTimezone($timezone)
+                ->startOfDay()
+                ->addDays($validityDays)
+                ->endOfDay();
+        } catch (\Throwable $exception) {
+            return [
+                'is_expired' => false,
+                'validity_days' => $validityDays,
+                'valid_until' => null,
+                'expiration_message' => null,
+            ];
+        }
+
+        $validUntilFormatted = $validUntil->format('d/m/Y');
+        $isExpired = now($timezone)->greaterThan($validUntil);
+
+        return [
+            'is_expired' => $isExpired,
+            'validity_days' => $validityDays,
+            'valid_until' => $validUntilFormatted,
+            'expiration_message' => $isExpired
+                ? 'A validade desta proposta expirou em ' . $validUntilFormatted . '. Solicite uma nova proposta para continuar.'
+                : null,
+        ];
+    }
+
+    /**
+     * proposalExpiredResponse
+     * pt-BR: Retorna uma resposta padronizada quando a proposta pública está vencida.
+     * en-US: Returns a standardized response when the public proposal has expired.
+     */
+    private function proposalExpiredResponse(array $expirationContext)
+    {
+        return response()->json([
+            'error' => $expirationContext['expiration_message'] ?? 'A validade desta proposta expirou. Solicite uma nova proposta para continuar.',
+            'message' => $expirationContext['expiration_message'] ?? 'A validade desta proposta expirou. Solicite uma nova proposta para continuar.',
+            'code' => 'proposal_expired',
+            'is_expired' => true,
+            'valid_until' => $expirationContext['valid_until'] ?? null,
+        ], 422);
+    }
+
+    /**
      * findFinancialIncomeCategoryId
      * pt-BR: Busca uma categoria financeira de receita para usar em lancamentos automaticos.
      * en-US: Finds an income financial category to use in automated postings.
@@ -2227,6 +2292,8 @@ class MatriculaController extends Controller
                 ->where('id_cliente', $client_id)
                 ->firstOrFail();
             $data = $this->dm($matricula_id, $client_id);
+            $expirationContext = $this->getPublicProposalExpirationContext($matricula);
+            $data = array_merge($data, $expirationContext);
             //Verificar se a assinatura ja foi registrada
             $status_assintura_atual = Qlib::get_matriculameta($matricula_id,$this->campos_status_assinatura);
             $is_assinado = Escola::contrato_assinado($matricula_id);
@@ -2276,6 +2343,13 @@ class MatriculaController extends Controller
         try {
             // tranform matricual_id em int
             $matricula_id = (int) $matricula_id;
+            $matricula = Matricula::where('id', $matricula_id)
+                ->where('id_cliente', $client_id)
+                ->firstOrFail();
+            $expirationContext = $this->getPublicProposalExpirationContext($matricula);
+            if (!empty($expirationContext['is_expired'])) {
+                return $this->proposalExpiredResponse($expirationContext);
+            }
             $client = User::findOrFail($client_id);
 
             // Validate request data
@@ -2399,7 +2473,6 @@ class MatriculaController extends Controller
             $client->save();
 
             // Mark Step 1 as done in Matricula config
-            $matricula = \App\Models\Matricula::find($matricula_id);
             $ret['exec'] = false;
             if ($matricula) {
                 $matConfig = $matricula->config ?? [];
@@ -3093,6 +3166,10 @@ class MatriculaController extends Controller
             ]);
 
             $matricula = \App\Models\Matricula::findOrFail($matricula_id);
+            $expirationContext = $this->getPublicProposalExpirationContext($matricula);
+            if (!empty($expirationContext['is_expired'])) {
+                return $this->proposalExpiredResponse($expirationContext);
+            }
 
             // Validate Step 1 completion
             $config = $matricula->config ?? [];

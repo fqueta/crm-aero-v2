@@ -1,14 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, type FieldErrors, type Path } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Check, ArrowRight, X, CheckCircle, Clock, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Check, ArrowRight, X, CheckCircle, Clock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { proposalService, ProposalData, SignProposalData } from '@/services/proposalService';
@@ -164,6 +165,48 @@ export default function ProposalSignature() {
     }
   });
 
+  /**
+   * focusFieldByName
+   * pt-BR: Rola a tela até o primeiro campo inválido e tenta posicionar o foco no controle visível.
+   * en-US: Scrolls to the first invalid field and tries to focus the visible control.
+   */
+  function focusFieldByName(fieldName?: Path<FormData>) {
+    if (!fieldName || typeof document === 'undefined') return;
+
+    window.setTimeout(() => {
+      const fieldKey = String(fieldName);
+      const container = document.querySelector<HTMLElement>(`[data-field="${fieldKey}"]`);
+      const control =
+        document.querySelector<HTMLElement>(`[name="${fieldKey}"]`) ||
+        container?.querySelector<HTMLElement>('input, textarea, button, [role="combobox"], [role="checkbox"]');
+
+      const scrollTarget = container || control;
+      if (scrollTarget) {
+        scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      try {
+        form.setFocus(fieldName);
+      } catch {
+        control?.focus?.({ preventScroll: true });
+      }
+
+      if (document.activeElement === document.body) {
+        control?.focus?.({ preventScroll: true });
+      }
+    }, 0);
+  }
+
+  /**
+   * handleInvalidSubmit
+   * pt-BR: Move o usuário para o primeiro campo com erro retornado pela validação do formulário.
+   * en-US: Moves the user to the first field that failed form validation.
+   */
+  function handleInvalidSubmit(errors: FieldErrors<FormData>) {
+    const firstFieldName = Object.keys(errors)[0] as Path<FormData> | undefined;
+    focusFieldByName(firstFieldName);
+  }
+
   useEffect(() => {
     async function loadData() {
       if (!clientId || !matriculaId) {
@@ -292,6 +335,10 @@ export default function ProposalSignature() {
 
   async function onSubmit(data: FormData) {
     if (!clientId || !matriculaId) return;
+    if (isProposalExpired) {
+      toast.error(proposalExpirationMessage);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -300,6 +347,7 @@ export default function ProposalSignature() {
         requiredErrors.forEach((error) => {
           form.setError(error.key, { type: 'manual', message: error.message });
         });
+        focusFieldByName(requiredErrors[0]?.key);
         toast.error('Preencha as perguntas obrigatórias.');
         return;
       }
@@ -334,6 +382,11 @@ export default function ProposalSignature() {
         }
     } catch (error: any) {
       console.error(error);
+
+      if (error.status === 422 && (error.body?.code === 'proposal_expired' || isProposalExpired)) {
+        toast.error(error.body?.message || proposalExpirationMessage);
+        return;
+      }
       
       // Validação de erros do backend
       if (error.status === 422 && error.body && error.body.messages) {
@@ -356,6 +409,8 @@ export default function ProposalSignature() {
         }
 
         if (hasFieldErrors) {
+          const firstBackendField = (['cpf', 'email', 'celular'] as Array<Path<FormData>>).find((field) => Boolean(messages[field]));
+          focusFieldByName(firstBackendField);
           toast.error('Verifique os campos com erro.');
           return;
         }
@@ -388,6 +443,8 @@ export default function ProposalSignature() {
   const showStatusSection = signatureVisibleSections.status && statusQuestions.length > 0;
   const showInfoSection = signatureVisibleSections.info && infoQuestions.length > 0;
   const showAdministrativeQuestions = showStatusSection || showInfoSection;
+  const isProposalExpired = Boolean(proposal?.is_expired);
+  const proposalExpirationMessage = proposal?.expiration_message || 'A validade desta proposta expirou. Solicite uma nova proposta para continuar.';
 
   if (loading) {
     return (
@@ -462,9 +519,13 @@ export default function ProposalSignature() {
               
               <Separator className="my-4" />
               
-              <div className="bg-blue-50 p-4 rounded-md border border-blue-100">
-                <h4 className="text-blue-800 font-medium mb-1">Status da Matrícula</h4>
-                <p className="text-blue-600 text-sm">Aguardando assinatura e confirmação de dados.</p>
+              <div className={`${isProposalExpired ? 'bg-red-50 border-red-100' : 'bg-blue-50 border-blue-100'} p-4 rounded-md border`}>
+                <h4 className={`${isProposalExpired ? 'text-red-800' : 'text-blue-800'} font-medium mb-1`}>Status da Matrícula</h4>
+                <p className={`${isProposalExpired ? 'text-red-700' : 'text-blue-600'} text-sm`}>
+                  {isProposalExpired
+                    ? proposalExpirationMessage
+                    : 'Aguardando assinatura e confirmação de dados.'}
+                </p>
               </div>
               
               {/* Admin Status Card */}
@@ -516,6 +577,16 @@ export default function ProposalSignature() {
             </CardContent>
           </Card>
 
+          {isProposalExpired && (
+            <Alert variant="destructive" className="border-red-200 bg-red-50">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Proposta vencida</AlertTitle>
+              <AlertDescription>
+                {proposalExpirationMessage} Solicite uma nova proposta ao atendimento para seguir com a matrícula.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {showBudget && (
             <Card className="animate-in fade-in slide-in-from-top-4 duration-300">
               <CardHeader>
@@ -542,116 +613,117 @@ export default function ProposalSignature() {
           )}
 
           {/* Student Form */}
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Seus Dados</CardTitle>
-                  <CardDescription>Confirme e complete suas informações cadastrais</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
+          {!isProposalExpired && (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit, handleInvalidSubmit)} className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Seus Dados</CardTitle>
+                    <CardDescription>Confirme e complete suas informações cadastrais</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                   
-                  {/* Personal Info Section */}
-                  <div className="space-y-4">
-                    <h3 className="font-medium text-lg">Dados Pessoais</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Nome Completo</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>E-mail</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="cpf"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>CPF</FormLabel>
-                            <FormControl>
-                              <Input 
-                                {...field} 
-                                onChange={(e) => field.onChange(cpfApplyMask(e.target.value))}
-                                maxLength={14}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="celular"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Celular (WhatsApp)</FormLabel>
-                            <FormControl>
-                              <Input 
-                                {...field} 
-                                onChange={(e) => field.onChange(phoneApplyMask(e.target.value))}
-                                maxLength={20}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="nascimento"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Data de Nascimento</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="sexo"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Sexo</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || ""}>
+                    {/* Personal Info Section */}
+                    <div className="space-y-4">
+                      <h3 className="font-medium text-lg">Dados Pessoais</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nome Completo</FormLabel>
                               <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecionar" />
-                                </SelectTrigger>
+                                <Input {...field} />
                               </FormControl>
-                              <SelectContent>
-                                <SelectItem value="M">Masculino</SelectItem>
-                                <SelectItem value="F">Feminino</SelectItem>
-                                <SelectItem value="ni">Não informar</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="email"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>E-mail</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="cpf"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>CPF</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  onChange={(e) => field.onChange(cpfApplyMask(e.target.value))}
+                                  maxLength={14}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="celular"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Celular (WhatsApp)</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  onChange={(e) => field.onChange(phoneApplyMask(e.target.value))}
+                                  maxLength={20}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="nascimento"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Data de Nascimento</FormLabel>
+                              <FormControl>
+                                <Input type="date" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="sexo"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Sexo</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || ""}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Selecionar" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="M">Masculino</SelectItem>
+                                  <SelectItem value="F">Feminino</SelectItem>
+                                  <SelectItem value="ni">Não informar</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                     </div>
-                  </div>
 
                   <Separator />
 
@@ -663,7 +735,7 @@ export default function ProposalSignature() {
                         control={form.control}
                         name="identidade"
                         render={({ field }) => (
-                          <FormItem>
+                          <FormItem data-field="sexo">
                             <FormLabel>RG / Identidade</FormLabel>
                             <FormControl>
                               <Input {...field} />
@@ -877,7 +949,7 @@ export default function ProposalSignature() {
                                 name={question.key}
                                 render={({ field }) => (
                                   question.kind === 'select' ? (
-                                    <FormItem>
+                                    <FormItem data-field={question.key}>
                                       <FormLabel>
                                         {getStudentFacingQuestionLabel(question.label, question.section)}{signatureRequiredQuestions.includes(question.key) ? ' *' : ''}
                                       </FormLabel>
@@ -898,7 +970,7 @@ export default function ProposalSignature() {
                                       <FormMessage />
                                     </FormItem>
                                   ) : (
-                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                    <FormItem data-field={question.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
                                       <FormControl>
                                         <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
                                       </FormControl>
@@ -927,7 +999,7 @@ export default function ProposalSignature() {
                                   control={form.control}
                                   name={question.key}
                                   render={({ field }) => (
-                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                    <FormItem data-field={question.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
                                       <FormControl>
                                         <Checkbox checked={Boolean(field.value)} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
                                       </FormControl>
@@ -946,28 +1018,29 @@ export default function ProposalSignature() {
                     </>
                   )}
 
-                </CardContent>
-                <CardFooter className="flex justify-between border-t p-6">
-                  <Button variant="outline" type="button" onClick={() => navigate(-1)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={loading} size="lg" className="bg-primary hover:bg-primary/90">
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processando...
-                      </>
-                    ) : (
-                      <>
-                        Salvar e Avançar
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </CardFooter>
-              </Card>
-            </form>
-          </Form>
+                  </CardContent>
+                  <CardFooter className="flex justify-between border-t p-6">
+                    <Button variant="outline" type="button" onClick={() => navigate(-1)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={loading} size="lg" className="bg-primary hover:bg-primary/90">
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Processando...
+                        </>
+                      ) : (
+                        <>
+                          Salvar e Avançar
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </form>
+            </Form>
+          )}
         </div>
       </main>
 

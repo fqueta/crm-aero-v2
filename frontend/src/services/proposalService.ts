@@ -7,6 +7,10 @@ export interface ProposalData {
   curso_nome: string;
   turma_nome: string;
   total: number;
+  is_expired?: boolean;
+  valid_until?: string | null;
+  expiration_message?: string | null;
+  validity_days?: number;
   config?: any; // Matricula config
   meta?: {
       contrato_pdf?: Array<{
