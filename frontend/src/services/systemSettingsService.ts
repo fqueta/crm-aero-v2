@@ -10,6 +10,7 @@ export interface AdvancedSystemSettings {
   enableCaching: boolean;
   enableCompression: boolean;
   enableSslRedirect: boolean;
+  enviar_link_assinatura_zap?: string;
   
   // Configurações com Select
   logLevel: string;

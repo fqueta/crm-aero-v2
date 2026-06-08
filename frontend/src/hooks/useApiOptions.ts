@@ -87,7 +87,7 @@ export const useApiOptions = () => {
       // Atualiza o estado local com as novas opções
       setOptions(prevOptions => 
         prevOptions.map(option => {
-          const newValue = dataToSave[option.name];
+          const newValue = dataToSave[option.url];
           return newValue !== undefined ? { ...option, value: newValue } : option;
         })
       );

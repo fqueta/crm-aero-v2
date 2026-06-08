@@ -45,6 +45,15 @@ export default function SystemSettings() {
     return localApiOptions[option.id] !== undefined ? localApiOptions[option.id] : option.value;
   };
   /**
+   * isEnabledOptionValue
+   * pt-BR: Converte valores persistidos (`s/n`, `1/0`, boolean) para estado de switch.
+   * en-US: Converts persisted values (`s/n`, `1/0`, boolean) into switch state.
+   */
+  const isEnabledOptionValue = (rawValue: unknown) => {
+    if (typeof rawValue === 'boolean') return rawValue;
+    return ['s', '1', 'true', 'yes', 'on'].includes(String(rawValue || '').toLowerCase());
+  };
+  /**
    * Funis/Etapas para selects de padrão
    * pt-BR: Carrega funis (área de vendas) e etapas do funil selecionado.
    * en-US: Loads funnels (sales area) and stages for the selected funnel.
@@ -63,6 +72,9 @@ export default function SystemSettings() {
   const selectedDefaultFunnelId = React.useMemo(() => (
     defaultFunnelOption ? String(getCurrentOptionValue(defaultFunnelOption) || '') : ''
   ), [defaultFunnelOption, localApiOptions]);
+  const functionalityOptions = React.useMemo(() => (
+    (apiOptions || []).filter((option: any) => !['enviar_link_assinatura_zap', 'credenciais_zapsign'].includes(option.url))
+  ), [apiOptions]);
   const { data: stagesData, isLoading: isLoadingStages } = useStagesList(String(selectedDefaultFunnelId || ''), { per_page: 200 }, { enabled: !!selectedDefaultFunnelId });
   const stagesForDefaultFunnel = React.useMemo(() => (
     stagesData?.data || (stagesData as any)?.items || []
@@ -112,6 +124,7 @@ export default function SystemSettings() {
     enableCaching: true,
     enableCompression: false,
     enableSslRedirect: true,
+    sendSignatureLinkByZap: false,
   });
 
   // Estados para configurações avançadas - Select
@@ -391,6 +404,7 @@ export default function SystemSettings() {
         backupRetention: advancedInputSettings.backupRetention,
         url_api_aeroclube: advancedInputSettings.url_api_aeroclube,
         token_api_aeroclube: advancedInputSettings.token_api_aeroclube,
+        enviar_link_assinatura_zap: advancedSwitchSettings.sendSignatureLinkByZap ? 's' : 'n',
         credenciais_zapsign: {
           url_api: advancedInputSettings.zapsign_url,
           id_api: advancedInputSettings.zapsign_id
@@ -447,15 +461,14 @@ export default function SystemSettings() {
       });
       
       // Também atualiza as outras configurações se necessário
-      if (data.enableApiLogging !== undefined) {
-        setAdvancedSwitchSettings(prev => ({
-          ...prev,
-          enableApiLogging: data.enableApiLogging,
-          enableCaching: data.enableCaching,
-          enableCompression: data.enableCompression,
-          enableSslRedirect: data.enableSslRedirect,
-        }));
-      }
+      setAdvancedSwitchSettings(prev => ({
+        ...prev,
+        enableApiLogging: data.enableApiLogging ?? prev.enableApiLogging,
+        enableCaching: data.enableCaching ?? prev.enableCaching,
+        enableCompression: data.enableCompression ?? prev.enableCompression,
+        enableSslRedirect: data.enableSslRedirect ?? prev.enableSslRedirect,
+        sendSignatureLinkByZap: isEnabledOptionValue(data.enviar_link_assinatura_zap),
+      }));
       
       if (data.logLevel) {
         setAdvancedSelectSettings(prev => ({
@@ -886,6 +899,20 @@ export default function SystemSettings() {
                   onCheckedChange={(value) => handleAdvancedSwitchChange('enableSslRedirect', value)}
                 />
               </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="sendSignatureLinkByZap">Enviar link de assinatura no WhatsApp</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Envia automaticamente o link do ZapSign para os assinantes pelo Zapguru.
+                  </p>
+                </div>
+                <Switch
+                  id="sendSignatureLinkByZap"
+                  checked={advancedSwitchSettings.sendSignatureLinkByZap}
+                  onCheckedChange={(value) => handleAdvancedSwitchChange('sendSignatureLinkByZap', value)}
+                />
+              </div>
             </CardContent>
           </Card>
 
@@ -1058,6 +1085,38 @@ export default function SystemSettings() {
               
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Integração ZapSign</CardTitle>
+              <CardDescription>
+                Configure as credenciais da API do ZapSign no fluxo novo da aba avançada.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="zapsign_url">URL da API</Label>
+                <Input
+                  id="zapsign_url"
+                  type="text"
+                  value={advancedInputSettings.zapsign_url}
+                  onChange={(e) => handleAdvancedInputChange('zapsign_url', e.target.value)}
+                  placeholder="https://api.zapsign.com.br/api/v1"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="zapsign_id">Token/ID da API</Label>
+                <Input
+                  id="zapsign_id"
+                  type="text"
+                  value={advancedInputSettings.zapsign_id}
+                  onChange={(e) => handleAdvancedInputChange('zapsign_id', e.target.value)}
+                  placeholder="Seu token ou ID de integração"
+                />
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Aba de Configurações de API */}
@@ -1131,50 +1190,6 @@ export default function SystemSettings() {
            </CardContent>
           </Card>
 
-          {/* Card 4 - Integração ZapSign */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Integração ZapSign</CardTitle>
-              <CardDescription>
-                Configure as credenciais para integração com a API do ZapSign.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="zapsign_url">URL da API</Label>
-                <Input
-                  id="zapsign_url"
-                  type="text"
-                  value={advancedInputSettings.zapsign_url}
-                  onChange={(e) => handleAdvancedInputChange('zapsign_url', e.target.value)}
-                  placeholder="https://api.zapsign.com.br/api/v1"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="zapsign_id">Token/ID da API</Label>
-                <Input
-                  id="zapsign_id"
-                  type="text"
-                  value={advancedInputSettings.zapsign_id}
-                  onChange={(e) => handleAdvancedInputChange('zapsign_id', e.target.value)}
-                  placeholder="Seu token ou ID de integração"
-                />
-              </div>
-
-               <div className="flex justify-end pt-4 border-t">
-                 <Button 
-                   onClick={handleSaveSettings}
-                   className="flex items-center space-x-2"
-                 >
-                   <Save className="h-4 w-4" />
-                   <span>Salvar Integração</span>
-                 </Button>
-               </div>
-            </CardContent>
-          </Card>
-
-
           {/* Card - Configurações de Funcionalidade */}
           <Card>
             <CardHeader>
@@ -1194,7 +1209,7 @@ export default function SystemSettings() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4">
-                  {(apiOptions || []).map((option: any) => (
+                  {functionalityOptions.map((option: any) => (
                     <div key={option.id} className="space-y-2">
                       <Label htmlFor={`func-option-${option.id}`}>{option.name}</Label>
                       {option.url === 'default_funil_vendas_id' ? (
@@ -1260,13 +1275,13 @@ export default function SystemSettings() {
                     </div>
                   ))}
 
-                  {(apiOptions || []).length === 0 && (
+                  {functionalityOptions.length === 0 && (
                     <div className="text-center p-8 text-muted-foreground">Nenhuma configuração encontrada.</div>
                   )}
                 </div>
               )}
 
-              {(apiOptions || []).length > 0 && (
+              {functionalityOptions.length > 0 && (
                 <div className="flex justify-end pt-4 border-t">
                   <Button
                     onClick={handleSaveFunctionalityOptions}
