@@ -274,8 +274,9 @@
     @foreach($extras as $idx => $p)
         @php
             $pageBg = $p['background_data_uri'] ?? $p['background_url'] ?? null;
+            $isWkhtmltopdf = ($pdf_engine ?? 'wkhtmltopdf') === 'wkhtmltopdf';
             $pageBgStyle = 'page-break-before: always; break-before: page; page-break-after: always; break-after: page; height: 297mm; width: 210mm;';
-            if ($pageBg) {
+            if ($pageBg && !$isWkhtmltopdf) {
                 $bgPos = isset($p['background_position']) && is_string($p['background_position']) ? $p['background_position'] : 'top center';
                 $bgFit = isset($p['background_fit']) && is_string($p['background_fit']) ? $p['background_fit'] : 'contain';
                 $pageBgStyle .= " background-image: url('" . $pageBg . "'); background-repeat: no-repeat; background-position: " . $bgPos . "; background-size: " . ($bgFit === 'cover' ? 'cover' : 'contain') . ";";

@@ -423,16 +423,49 @@ class PdfController extends Controller
         $defaultBgPos = $request->input('background_position');
         $defaultBgFit = $request->input('background_fit', 'contain');
 
+        /**
+         * pt-BR: O wkhtmltopdf pode falhar ao tentar usar PDFs ou outros arquivos
+         * não suportados como imagem de fundo. Mantemos apenas extensões de imagem.
+         * en-US: wkhtmltopdf may fail when trying to use PDFs or other unsupported
+         * files as background images. We keep image extensions only.
+         */
+        $isSupportedBackgroundUrl = static function (?string $url): bool {
+            $value = trim((string)$url);
+            if ($value === '') {
+                return false;
+            }
+
+            if (str_starts_with($value, 'data:image/')) {
+                return true;
+            }
+
+            $path = parse_url($value, PHP_URL_PATH);
+            $extension = strtolower((string)pathinfo((string)$path, PATHINFO_EXTENSION));
+
+            return in_array($extension, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'], true);
+        };
+
         if (!$skipExtras && !empty($galleryBackgrounds)) {
             // Primeiro fundo vai para a capa
-            $backgroundUrl = $galleryBackgrounds[0]['url'];
+            $firstBackgroundUrl = $galleryBackgrounds[0]['url'] ?? null;
+            $backgroundUrl = $isSupportedBackgroundUrl($firstBackgroundUrl) ? $firstBackgroundUrl : null;
 
             // Demais viram páginas extras
             foreach ($galleryBackgrounds as $idx => $gb) {
+                $backgroundItemUrl = $gb['url'] ?? null;
+                if (!$isSupportedBackgroundUrl($backgroundItemUrl)) {
+                    \Log::warning('proposal_generation.background.skipped_non_image', [
+                        'matricula_id' => $matricula['id'] ?? null,
+                        'course_id' => $matricula['id_curso'] ?? null,
+                        'url' => $backgroundItemUrl,
+                    ]);
+                    continue;
+                }
+
                 $extraPages[$idx] = [
                     'title' => $gb['title'] ?? null,
                     'html' => '',
-                    'background_url' => $gb['url'],
+                    'background_url' => $backgroundItemUrl,
                     'background_data_uri' => null,
                     'background_position' => is_string($defaultBgPos ?? null) ? $defaultBgPos : null,
                     'background_fit' => is_string($defaultBgFit ?? null) ? $defaultBgFit : null,
@@ -605,6 +638,7 @@ class PdfController extends Controller
             'background_fit' => $config['background_fit'],
             'cta_url' => $cta_url,
             'cta_text' => $config['cta_text'],
+            'pdf_engine' => $config['engine'] ?? 'wkhtmltopdf',
             'extra_pages' => $resolvedPages['extraPages'],
             'aviso_importante' => str_replace(
                 ['{dias}', '{dias_extenso}'],
@@ -819,7 +853,6 @@ class PdfController extends Controller
             ->setOption('page-width', '210mm')
             ->setOption('page-height', '297mm')
             ->setOption('zoom', '1.0')
-            ->setOption('header-html', $headerHtml)
             ->setOption('margin-top', 0)
             ->setOption('margin-bottom', 0)
             ->setOption('margin-left', 0)
@@ -832,8 +865,20 @@ class PdfController extends Controller
                 '{PAGE_NUM}' => '{PAGE_NUM}',
                 '{PAGE_COUNT}' => '{PAGE_COUNT}'
             ])
-            ->setOption('footer-html', $footerHtml)
             ->setTimeout(300);
+
+        /**
+         * pt-BR: No Windows, enviar `header-html` ou `footer-html` vazios para o
+         * wkhtmltopdf pode provocar crash nativo. Só adicionamos quando houver conteúdo.
+         * en-US: On Windows, sending empty `header-html` or `footer-html` to
+         * wkhtmltopdf may trigger a native crash. Only add them when content exists.
+         */
+        if (trim((string)$headerHtml) !== '') {
+            $pdf->setOption('header-html', $headerHtml);
+        }
+        if (trim((string)$footerHtml) !== '') {
+            $pdf->setOption('footer-html', $footerHtml);
+        }
 
         if ($config['no_store']) {
             return $pdf->inline($fileInfo['filename']);
@@ -843,7 +888,50 @@ class PdfController extends Controller
             if (file_exists($fileInfo['absolute'])) {
                 @unlink($fileInfo['absolute']);
             }
-            $knp->generateFromHtml($bodyHtml, $fileInfo['absolute'], $pdf->getOptions());
+
+            /**
+             * pt-BR: No Windows local, o caminho `generateFromHtml()` do Snappy cria um
+             * HTML temporário no diretório do sistema e esse fluxo está crashando com
+             * algumas propostas. Como a mesma marcação funciona ao renderizar a partir
+             * de um arquivo estável em disco, geramos primeiro esse HTML e passamos o
+             * caminho para o wkhtmltopdf.
+             * en-US: On local Windows, Snappy's `generateFromHtml()` creates a temp HTML
+             * in the system temp directory and this path is crashing for some proposals.
+             * Since the same markup works when rendered from a stable file on disk, we
+             * first write that HTML and pass its path to wkhtmltopdf.
+             */
+            $htmlCacheDir = storage_path('app/tmp/wkhtmltopdf-html');
+            if (!is_dir($htmlCacheDir)) {
+                mkdir($htmlCacheDir, 0775, true);
+            }
+            $stableHtmlPath = $htmlCacheDir . DIRECTORY_SEPARATOR . ($fileInfo['slug'] ?? ('proposal-' . time())) . '.html';
+            file_put_contents($stableHtmlPath, $bodyHtml);
+
+            /**
+             * pt-BR: Evidência coletada nesta sessão mostrou que o mesmo comando do
+             * wkhtmltopdf funciona no terminal, mas falha via Symfony Process no
+             * Windows local. Mantemos a engine/command builder do Snappy, porém
+             * executamos o comando diretamente com `exec()` apenas nesse ambiente.
+             * en-US: Runtime evidence from this session showed the exact same
+             * wkhtmltopdf command works in the terminal but fails through Symfony
+             * Process on local Windows. We keep Snappy's engine/command builder,
+             * but execute the command directly with `exec()` only in that environment.
+             */
+            $isLocalWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && env('APP_ENV') === 'local';
+            if ($isLocalWindows) {
+                $command = $knp->getCommand($stableHtmlPath, $fileInfo['absolute'], $pdf->getOptions());
+                $outputLines = [];
+                $exitCode = 0;
+                exec($command . ' 2>&1', $outputLines, $exitCode);
+
+                if ($exitCode !== 0 || !file_exists($fileInfo['absolute'])) {
+                    throw new \RuntimeException(
+                        'wkhtmltopdf exec fallback failed. Exit code: ' . $exitCode . '. Output: ' . implode(PHP_EOL, $outputLines)
+                    );
+                }
+            } else {
+                $knp->generate($stableHtmlPath, $fileInfo['absolute'], $pdf->getOptions());
+            }
             return null;
         }
     }
@@ -855,18 +943,6 @@ class PdfController extends Controller
     {
         $disk = Storage::disk('public');
         $relative = $fileInfo['relative'];
-
-        // #region debug-point proposal-persist-start
-        \Log::info('proposal_generation.persist.start', [
-            'matricula_id' => $matricula['id'] ?? null,
-            'relative' => $relative,
-            'absolute' => $fileInfo['absolute'] ?? null,
-            'exists_before_persist' => $disk->exists($relative),
-            'engine' => $config['engine'] ?? null,
-            'force' => $config['force'] ?? null,
-            'no_store' => $config['no_store'] ?? null,
-        ]);
-        // #endregion debug-point proposal-persist-start
 
         $mime = 'application/pdf';
         $size = $disk->exists($relative) ? $disk->size($relative) : null;
@@ -889,16 +965,6 @@ class PdfController extends Controller
         $publicUrl = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
         $publicUrl = rtrim((string)$publicUrl, ", \t\n\r\0\x0B");
         $saveLink = Qlib::update_matriculameta($matricula['id'], 'proposta_pdf', $publicUrl);
-
-        // #region debug-point proposal-persist-success
-        \Log::info('proposal_generation.persist.success', [
-            'matricula_id' => $matricula['id'] ?? null,
-            'relative' => $relative,
-            'public_url' => $publicUrl,
-            'save_link' => $saveLink,
-            'file_size' => $size,
-        ]);
-        // #endregion debug-point proposal-persist-success
 
         if (class_exists('App\Models\EventLog')) {
             try {
@@ -956,21 +1022,6 @@ class PdfController extends Controller
 
         $matricula = (new MatriculaController)->dm($id);
         $config = $this->getMatriculaPdfConfig($request);
-
-        // #region debug-point proposal-controller-start
-        \Log::info('proposal_generation.controller.start', [
-            'matricula_id' => $id,
-            'config' => [
-                'engine' => $config['engine'] ?? null,
-                'force' => $config['force'] ?? null,
-                'no_store' => $config['no_store'] ?? null,
-                'fast_dev' => $config['fast_dev'] ?? null,
-                'skip_extra_pages' => $config['skip_extra_pages'] ?? null,
-            ],
-            'request_query' => $request->query(),
-        ]);
-        // #endregion debug-point proposal-controller-start
-
         $viewData = $this->prepareMatriculaViewData($request, $matricula, $config);
         $htmlData = $this->renderMatriculaHtml($viewData, $config['engine']);
         if ($request->boolean('debug_html')) {
@@ -983,16 +1034,6 @@ class PdfController extends Controller
 
         $shouldGenerate = $this->shouldGenerateMatriculaPdf($fileInfo['relative'], $config);
 
-        // #region debug-point proposal-controller-file
-        \Log::info('proposal_generation.controller.file', [
-            'matricula_id' => $id,
-            'relative' => $fileInfo['relative'] ?? null,
-            'absolute' => $fileInfo['absolute'] ?? null,
-            'should_generate' => $shouldGenerate,
-            'exists_before_generation' => Storage::disk('public')->exists($fileInfo['relative']),
-        ]);
-        // #endregion debug-point proposal-controller-file
-
         if ($shouldGenerate && $config['force'] && Storage::disk('public')->exists($fileInfo['relative'])) {
             try { Storage::disk('public')->delete($fileInfo['relative']); } catch (\Throwable $e) {}
         }
@@ -1000,13 +1041,6 @@ class PdfController extends Controller
         if ($shouldGenerate) {
             $pdfResponse = $this->engineGeneratePdf($config, $htmlData, $fileInfo, $matricula);
             if ($pdfResponse !== null) {
-                // #region debug-point proposal-controller-engine-response
-                \Log::info('proposal_generation.controller.engine_response', [
-                    'matricula_id' => $id,
-                    'response_type' => is_object($pdfResponse) ? get_class($pdfResponse) : gettype($pdfResponse),
-                    'status_code' => method_exists($pdfResponse, 'getStatusCode') ? $pdfResponse->getStatusCode() : null,
-                ]);
-                // #endregion debug-point proposal-controller-engine-response
                 return $pdfResponse;
             }
         }
@@ -1064,11 +1098,6 @@ class PdfController extends Controller
                 Qlib::update_matriculameta($matriculaId, 'proposta_pdf', $sanitizedGeneratedUrl);
                 return redirect()->away((string)$generatedUrl);
             }
-        }
-
-        $savedProposalUrl = $this->sanitizeGeneratedPdfUrl((string)Qlib::get_matriculameta($matriculaId, 'proposta_pdf'));
-        if ($savedProposalUrl !== '') {
-            return redirect()->away($savedProposalUrl);
         }
 
         return $response;

@@ -87,6 +87,12 @@ export interface EditFooterBarProps {
    * en-US: Additional class for container customization.
    */
   className?: string;
+  /**
+   * extraContent
+   * pt-BR: Conteúdo opcional exibido na barra antes do grupo de ações principais.
+   * en-US: Optional content displayed in the bar before the main actions group.
+   */
+  extraContent?: React.ReactNode;
 }
 
 /**
@@ -111,6 +117,7 @@ export function EditFooterBar({
   showView = false,
   fixed = true,
   className = '',
+  extraContent,
 }: EditFooterBarProps) {
   const containerClasses = fixed
     ? 'fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'
@@ -127,6 +134,7 @@ export function EditFooterBar({
             <Eye className="h-4 w-4 mr-2" /> {viewLabel}
           </Button>
         )}
+        {extraContent}
         <div className="ml-auto flex items-center gap-2">
           {showContinue && (
             <Button type="button" onClick={onContinue} disabled={disabled}>

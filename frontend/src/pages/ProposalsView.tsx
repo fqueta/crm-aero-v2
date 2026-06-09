@@ -88,7 +88,7 @@ export default function ProposalsView() {
     }
 
     const base = getApiUrl();
-    const url = `${base}/pdf/propostas/public/${encodeURIComponent(clientId)}/${encodeURIComponent(String(id))}`;
+    const url = `${base}/pdf/propostas/public/${encodeURIComponent(clientId)}/${encodeURIComponent(String(id))}?force=1&t=${Date.now()}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 

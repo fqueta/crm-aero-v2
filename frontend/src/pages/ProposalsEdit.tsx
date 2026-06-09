@@ -1739,6 +1739,13 @@ export default function ProposalsEdit() {
     </div>
   );
 
+  /**
+   * footerTotalValue
+   * pt-BR: Valor total exibido fixo na barra de ações do rodapé.
+   * en-US: Total amount displayed fixed in the footer action bar.
+   */
+  const footerTotalValue = form.watch('total') || 'R$ 0,00';
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -2644,6 +2651,17 @@ export default function ProposalsEdit() {
         onContinue={handleSaveContinue}
         onFinish={handleSaveFinish}
         onView={handleView}
+        extraContent={(
+          <div className="inline-flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-emerald-900 shadow-sm">
+            <div className="rounded-lg bg-emerald-100 p-2">
+              <CircleDollarSign className="h-4 w-4 text-emerald-700" />
+            </div>
+            <div className="leading-tight">
+              <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-700">Total da Proposta</p>
+              <p className="text-sm font-bold md:text-base">{footerTotalValue}</p>
+            </div>
+          </div>
+        )}
         showView={!!id}
         disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
       />
