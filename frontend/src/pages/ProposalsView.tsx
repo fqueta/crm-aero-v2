@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Pencil, Printer, FileText, Loader2 } from 'lucide-react';
@@ -6,6 +6,7 @@ import ProposalViewContent from '@/components/school/ProposalViewContent';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEnrollment } from '@/hooks/enrollments';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 
@@ -26,13 +27,19 @@ export default function ProposalsView() {
    * pt-BR: Fornece token atual para autenticação das chamadas de API.
    * en-US: Provides current token for authenticating API calls.
    */
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   // navState
   const navState = (location?.state || {}) as { returnTo?: string; funnelId?: string; stageId?: string };
   const { id } = useParams<{ id: string }>();
   const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const { data: enrollment } = useEnrollment(String(id || ''));
+  const isAdmin = Number(user?.permission_id) === 1;
+  const clientId = useMemo(() => {
+    const value = (enrollment as any)?.id_cliente ?? (enrollment as any)?.client_id;
+    return value ? String(value) : '';
+  }, [enrollment]);
   /**
    * handleBack
    * pt-BR: Volta para a página de origem (histórico) ou para `returnTo`.
@@ -66,15 +73,31 @@ export default function ProposalsView() {
   }
 
   /**
-   * handleGeneratePdf
-   * pt-BR: Faz uma requisição GET ao endpoint de PDF de matrículas.
-   *        Se receber HTML (com debug_html=1), usa a biblioteca html2pdf no frontend
-   *        para converter o HTML em PDF e baixar diretamente.
-   * en-US: Performs a GET request to the enrollment PDF endpoint.
-   *        If it receives HTML (with debug_html=1), uses the html2pdf library in the 
-   *        frontend to convert HTML to PDF and download directly.
+   * handleOpenProposalPdf
+   * pt-BR: Abre a rota pública responsável por gerar e exibir o PDF final da proposta.
+   * en-US: Opens the public route responsible for generating and displaying the final proposal PDF.
    */
-  async function handleGeneratePdf() {
+  function handleOpenProposalPdf() {
+    if (!id || !clientId) {
+      toast({
+        title: 'Dados incompletos',
+        description: 'Não foi possível localizar o cliente da proposta para abrir o PDF.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const base = getApiUrl();
+    const url = `${base}/pdf/propostas/public/${encodeURIComponent(clientId)}/${encodeURIComponent(String(id))}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  /**
+   * handleGeneratePdfAsync
+   * pt-BR: Dispara a geração assíncrona atual do PDF para administradores.
+   * en-US: Triggers the current asynchronous PDF generation for administrators.
+   */
+  async function handleGeneratePdfAsync() {
     if (!id) return;
     setIsPdfLoading(true);
     try {
@@ -99,7 +122,7 @@ export default function ProposalsView() {
 
         toast({
             title: 'Solicitação Enviada',
-            description: 'A geração do PDF da proposta foi iniciada em segundo plano. Assim que concluir, atualize esta página para visualizar o card "Link da proposta em PDF".'
+            description: 'A geração assíncrona do PDF da proposta foi iniciada. Assim que concluir, atualize esta página para visualizar o card "Link da proposta em PDF".'
         });
     } catch (err: any) {
       console.error('Erro PDF:', err);
@@ -130,9 +153,14 @@ export default function ProposalsView() {
           <Button variant="ghost" onClick={handleBack}>
             <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
           </Button>
-          <Button variant="outline" onClick={handleGeneratePdf}>
+          <Button variant="outline" onClick={handleOpenProposalPdf}>
             <FileText className="h-4 w-4 mr-2" /> Gerar PDF
           </Button>
+          {isAdmin && (
+            <Button variant="outline" onClick={handleGeneratePdfAsync} disabled={isPdfLoading}>
+              <FileText className="h-4 w-4 mr-2" /> Gerar PDF Async
+            </Button>
+          )}
           <Button variant="secondary" onClick={handlePrint}>
             <Printer className="h-4 w-4 mr-2" /> Imprimir
           </Button>

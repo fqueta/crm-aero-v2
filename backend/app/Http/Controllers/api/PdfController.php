@@ -501,10 +501,52 @@ class PdfController extends Controller
     /**
      * Get PDF generation configuration for matricula.
      */
+    /**
+     * normalizePdfEngine
+     * pt-BR: Normaliza aliases da engine para os valores aceitos internamente.
+     * en-US: Normalizes engine aliases into the internal accepted values.
+     */
+    private function normalizePdfEngine(?string $engine): string
+    {
+        $normalized = strtolower(trim((string)$engine));
+
+        return match ($normalized) {
+            'snappy', 'snap', 'wkhtml', 'wkhtmltopdf' => 'wkhtmltopdf',
+            'browser', 'browsershot' => 'browsershot',
+            default => 'wkhtmltopdf',
+        };
+    }
+
+    /**
+     * sanitizeGeneratedPdfUrl
+     * pt-BR: Remove querystring temporária do link retornado para salvar no metacampo.
+     * en-US: Removes temporary querystring from the returned link before saving it into metadata.
+     */
+    private function sanitizeGeneratedPdfUrl(?string $url): string
+    {
+        $value = trim((string)$url);
+        if ($value === '') {
+            return '';
+        }
+
+        $parts = parse_url($value);
+        if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
+            return $value;
+        }
+
+        $sanitized = $parts['scheme'] . '://' . $parts['host'];
+        if (!empty($parts['port'])) {
+            $sanitized .= ':' . $parts['port'];
+        }
+        $sanitized .= $parts['path'] ?? '';
+
+        return $sanitized;
+    }
+
     private function getMatriculaPdfConfig(Request $request): array
     {
-        $engine = strtolower((string)($request->input('engine', env('PDF_ENGINE', 'wkhtmltopdf'))));
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && env('APP_ENV') === 'local' && !in_array($engine, ['snap', 'browsershot'], true)) {
+        $engine = $this->normalizePdfEngine((string)($request->input('engine', env('PDF_ENGINE', 'wkhtmltopdf'))));
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' && env('APP_ENV') === 'local' && $engine !== 'browsershot') {
             $engine = 'wkhtmltopdf';
         }
 
@@ -1004,6 +1046,7 @@ class PdfController extends Controller
             $request->path(),
             'GET',
             array_merge($request->query(), [
+                'engine' => 'wkhtmltopdf',
                 'force' => true,
                 'no_store' => false,
             ])
@@ -1015,10 +1058,17 @@ class PdfController extends Controller
         if ($response instanceof \Illuminate\Http\JsonResponse) {
             $payload = $response->getData(true);
             $generatedUrl = data_get($payload, 'data.url');
+            $sanitizedGeneratedUrl = $this->sanitizeGeneratedPdfUrl($generatedUrl);
 
-            if (!empty($generatedUrl)) {
+            if ($sanitizedGeneratedUrl !== '') {
+                Qlib::update_matriculameta($matriculaId, 'proposta_pdf', $sanitizedGeneratedUrl);
                 return redirect()->away((string)$generatedUrl);
             }
+        }
+
+        $savedProposalUrl = $this->sanitizeGeneratedPdfUrl((string)Qlib::get_matriculameta($matriculaId, 'proposta_pdf'));
+        if ($savedProposalUrl !== '') {
+            return redirect()->away($savedProposalUrl);
         }
 
         return $response;
