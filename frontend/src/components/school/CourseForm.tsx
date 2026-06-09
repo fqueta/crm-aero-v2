@@ -293,6 +293,10 @@ export function CourseForm({
           status: z.boolean().optional(),
           info: z.boolean().optional(),
         }).optional(),
+        pdf_show_cover: z.boolean().optional(),
+        pdf_show_budget: z.boolean().optional(),
+        pdf_show_notes: z.boolean().optional(),
+        pdf_show_payment: z.boolean().optional(),
     }).optional(),
   });
 
@@ -328,6 +332,10 @@ export function CourseForm({
         public_approval_required_questions: getDefaultPublicProposalRequiredQuestions('approval', '2'),
         public_signature_sections: getDefaultPublicProposalSections('signature', '2'),
         public_approval_sections: getDefaultPublicProposalSections('approval', '2'),
+        pdf_show_cover: true,
+        pdf_show_budget: true,
+        pdf_show_notes: true,
+        pdf_show_payment: true,
       },
       inscricao: '0,00',
       valor: '0,00',
@@ -550,6 +558,10 @@ export function CourseForm({
         public_approval_required_questions: c.config?.public_approval_required_questions ?? getDefaultPublicProposalRequiredQuestions('approval', c.tipo),
         public_signature_sections: c.config?.public_signature_sections ?? getDefaultPublicProposalSections('signature', c.tipo),
         public_approval_sections: c.config?.public_approval_sections ?? getDefaultPublicProposalSections('approval', c.tipo),
+        pdf_show_cover: c.config?.pdf_show_cover ?? true,
+        pdf_show_budget: c.config?.pdf_show_budget ?? true,
+        pdf_show_notes: c.config?.pdf_show_notes ?? true,
+        pdf_show_payment: c.config?.pdf_show_payment ?? true,
       },
       aeronaves: c.aeronaves ?? [],
       modulos: c.modulos ?? [],
@@ -1498,6 +1510,47 @@ export function CourseForm({
                     );
                   })}
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Páginas do PDF</CardTitle>
+                <CardDescription>
+                  Selecione quais páginas aparecem no PDF do orçamento.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-12 gap-2 rounded-md border bg-muted/20 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="col-span-8">Página</div>
+                  <div className="col-span-4 text-center">Exibir</div>
+                </div>
+                {[
+                  { key: 'pdf_show_cover', label: 'Capa' },
+                  { key: 'pdf_show_budget', label: 'Orçamento (módulos, taxas, totais)' },
+                  { key: 'pdf_show_notes', label: 'Observações' },
+                  { key: 'pdf_show_payment', label: 'Parcelamento' },
+                ].map((page) => (
+                  <div
+                    key={page.key}
+                    className="grid grid-cols-12 gap-2 items-center rounded-lg border px-3 py-3"
+                  >
+                    <div className="col-span-8">
+                      <div className="text-sm font-medium">{page.label}</div>
+                    </div>
+                    <div className="col-span-4 flex items-center justify-center">
+                      <Checkbox
+                        checked={Boolean(form.watch(`config.${page.key}`))}
+                        onCheckedChange={(checked) =>
+                          form.setValue(`config.${page.key}` as any, Boolean(checked), {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
 

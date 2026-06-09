@@ -48,6 +48,10 @@ class CoursesService extends GenericApiService<CourseRecord, CoursePayload, Cour
   async deleteCourse(id: string | number): Promise<void> {
     return this.deleteById(id);
   }
+
+  async deleteMultipleCourses(ids: (string | number)[]): Promise<void> {
+    await Promise.all(ids.map((id) => this.deleteById(id)));
+  }
 }
 
 /**

@@ -100,6 +100,47 @@ Route::get('rescisoes/public/{token}', [RescisaoController::class, 'publicShow']
 ```
 Registradas fora do grupo `auth:sanctum`.
 
+## Proposta — PDF de Orçamento (4 páginas configuráveis)
+
+### Contexto
+O PDF do orçamento (proposta) tem 4 páginas de conteúdo, geradas pela view `backend/resources/views/pdf/matricula.blade.php` no loop `@foreach($extras as $idx => $p)`:
+
+| Índice | Página | Conteúdo |
+|--------|--------|----------|
+| 0 | **Capa** | Título, dados do cliente (nome, tel, email, curso), CTA "ACEITO A PROPOSTA" |
+| 1 | **Orçamento** | Módulos agrupados por etapa, taxas, totais, simulação de combustível |
+| 2 | **Observações** | `obs_proposta` do curso ou texto de validade + preview de parcelamento |
+| 3 | **Parcelamento** | Tabela de opções de parcelamento com descontos |
+
+### Configuração de exibição por página
+Cada curso pode definir quais páginas aparecem no PDF, via campos no `config`:
+
+**Type:** `frontend/src/types/courses.ts` → `CourseConfig`
+```typescript
+pdf_show_cover?: boolean;   // Capa (default: true)
+pdf_show_budget?: boolean;  // Orçamento (default: true)
+pdf_show_notes?: boolean;   // Observações (default: true)
+pdf_show_payment?: boolean; // Parcelamento (default: true)
+```
+
+**UI:** `frontend/src/components/school/CourseForm.tsx` — Card "Páginas do PDF" na aba Configurações, com 4 checkboxes.
+
+### Fluxo dos dados
+1. Frontend salva `config.pdf_show_*` como booleano no JSON do curso
+2. `PdfController::prepareMatriculaViewData()` lê `curso.config.pdf_show_*` e passa ao template com fallback `true` para retrocompatibilidade
+3. Blade `matricula.blade.php` calcula `$pdfShowThisPage` por índice e envolve cada `<div class="page">` em `@if($pdfShowThisPage)`
+
+### Backward compatibility
+Cursos existentes sem essas flags exibem todas as 4 páginas normalmente.
+
+### Arquivos alterados
+| Arquivo | Descrição |
+|---------|----------|
+| `frontend/src/types/courses.ts` | CourseConfig: 4 campos `pdf_show_*` |
+| `frontend/src/components/school/CourseForm.tsx` | Zod, defaults, applyInitialData, UI checkboxes |
+| `backend/app/Http/Controllers/api/PdfController.php` | Leitura das flags no config do curso |
+| `backend/resources/views/pdf/matricula.blade.php` | Condicional `@if($pdfShowThisPage)` no loop de páginas |
+
 ## Seeder
 `backend/database/seeders/tenant/TermoRescisaoSeeder.php` — registrado em `DatabaseSeeder.php`
 Para rodar manualmente:
@@ -118,3 +159,7 @@ php artisan db:seed --class=Database\\Seeders\\Tenant\\TermoRescisaoSeeder
 | `backend/database/seeders/DatabaseSeeder.php` | Registro do seeder |
 | `backend/routes/api.php` | Rota publica `rescisoes/public/{token}` |
 | `backend/routes/tenant.php` | Rota publica `rescisoes/public/{token}` |
+| `frontend/src/types/courses.ts` | Campos `pdf_show_*` no CourseConfig |
+| `frontend/src/components/school/CourseForm.tsx` | Card "Páginas do PDF" no formulário de cursos |
+| `backend/app/Http/Controllers/api/PdfController.php` | Leitura de `config.pdf_show_*` |
+| `backend/resources/views/pdf/matricula.blade.php` | Condicional de exibição por página |

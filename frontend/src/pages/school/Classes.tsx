@@ -55,6 +55,7 @@ export default function Classes() {
   const [perPage, setPerPage] = useState<number>(init.perPage);
   const [page, setPage] = useState<number>(init.page);
   const [searchTerm, setSearchTerm] = useState<string>(init.searchTerm);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Persistência de params na URL
   useEffect(() => {
@@ -127,6 +128,18 @@ export default function Classes() {
    */
   const resolveSimNao = (v?: string) => (v === 's' ? 'Sim' : 'Não');
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: (string | number)[]) => turmasService.deleteMultipleTurma(ids),
+    onSuccess: () => {
+      toast({ title: 'Turmas excluídas', description: 'Registros removidos.' });
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['turmas', 'list'] });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Erro ao excluir em massa', description: String(err?.message ?? 'Falha ao excluir turmas'), variant: 'destructive' });
+    },
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -173,11 +186,16 @@ export default function Classes() {
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="w-[50px] text-center font-bold">
-                  <div className="flex flex-col items-center leading-tight">
-                    <span>Marcar</span>
-                    <span>Tudo</span>
-                    <Checkbox className="mt-1" />
-                  </div>
+                  <Checkbox
+                    checked={listQuery.data?.data?.length > 0 && selectedIds.size === listQuery.data?.data?.length}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedIds(new Set(listQuery.data?.data?.map((t) => String(t.id)) ?? []));
+                      } else {
+                        setSelectedIds(new Set());
+                      }
+                    }}
+                  />
                 </TableHead>
                 <TableHead className="font-bold">ID</TableHead>
                 <TableHead className="font-bold min-w-[200px]">Nome da turma</TableHead>
@@ -192,8 +210,18 @@ export default function Classes() {
             </TableHeader>
             <TableBody>
             {listQuery.data?.data?.map((t) => (
-              <TableRow key={t.id} className="hover:bg-muted/30">
-                <TableCell className="text-center"><Checkbox /></TableCell>
+              <TableRow key={t.id} className="hover:bg-muted/30 cursor-pointer" onDoubleClick={() => goToEdit(t.id)}>
+                <TableCell className="text-center">
+                  <Checkbox
+                    checked={selectedIds.has(String(t.id))}
+                    onCheckedChange={(checked) => {
+                      const next = new Set(selectedIds);
+                      if (checked) next.add(String(t.id));
+                      else next.delete(String(t.id));
+                      setSelectedIds(next);
+                    }}
+                  />
+                </TableCell>
                 <TableCell className="font-mono text-muted-foreground">{String(t.id).padStart(4, '0')}</TableCell>
                 <TableCell className="font-medium">{t.nome ?? '-'}</TableCell>
                 <TableCell className="text-muted-foreground">{getCourseName(t.id_curso)}</TableCell>
@@ -226,6 +254,32 @@ export default function Classes() {
         </Table>
         </div>
       </Card>
+
+      {/* Barra de ações em massa */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between border-t bg-background/95 backdrop-blur px-6 py-4 shadow-lg">
+          <span className="text-sm font-medium text-destructive">
+            {selectedIds.size} turma(s) selecionada(s)
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => {
+                if (window.confirm(`Excluir ${selectedIds.size} turma(s)?`)) {
+                  bulkDeleteMutation.mutate(Array.from(selectedIds));
+                }
+              }}
+            >
+              {bulkDeleteMutation.isPending ? 'Excluindo...' : `Excluir ${selectedIds.size} selecionada(s)`}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

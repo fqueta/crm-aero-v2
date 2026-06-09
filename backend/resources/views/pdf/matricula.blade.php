@@ -281,7 +281,13 @@
                 $bgFit = isset($p['background_fit']) && is_string($p['background_fit']) ? $p['background_fit'] : 'contain';
                 $pageBgStyle .= " background-image: url('" . $pageBg . "'); background-repeat: no-repeat; background-position: " . $bgPos . "; background-size: " . ($bgFit === 'cover' ? 'cover' : 'contain') . ";";
             }
+            $pdfShowThisPage = true;
+            if ($idx === 0 && !($pdf_show_cover ?? true)) $pdfShowThisPage = false;
+            if ($idx === 1 && !($pdf_show_budget ?? true)) $pdfShowThisPage = false;
+            if ($idx === 2 && !($pdf_show_notes ?? true)) $pdfShowThisPage = false;
+            if ($idx === 3 && !($pdf_show_payment ?? true)) $pdfShowThisPage = false;
         @endphp
+        @if($pdfShowThisPage)
         <div class="page" style="{{ $pageBgStyle }}">
             @if($pageBg)
                 <!-- PT/EN: Element-based full-bleed background for wkhtmltopdf reliability -->
@@ -524,23 +530,27 @@
                                 </table>
                                 <div style="text-align: right; font-size: 10px; color: #999; margin-top: 5px;">*{{ $matricula['curso_nome'] ?? '' }}</div>
                             </div>
+                            @php
+                                $cursoConfig = $matricula['curso']['config'] ?? [];
+                                if (is_string($cursoConfig)) $cursoConfig = json_decode($cursoConfig, true);
+                                $obsProposta = $cursoConfig['obs_proposta'] ?? null;
 
-                             <div style="margin-top: 30px; padding: 12px; border: 1px solid #bfdbfe; background-color: #eff6ff; border-radius: 6px; font-size: 11px; color: #1e3a8a; page-break-inside: avoid; break-inside: avoid;">
-                                @php
-                                    // Recupera observações personalizadas do curso ou usa padrão
-                                    $cursoConfig = $matricula['curso']['config'] ?? [];
-                                    if (is_string($cursoConfig)) $cursoConfig = json_decode($cursoConfig, true);
-                                    $obsProposta = $cursoConfig['obs_proposta'] ?? null;
-                                @endphp
-                            </div>
+                            @endphp
+                            @if($obsProposta)
+                                <div style="margin-top: 30px; padding: 12px; border: 1px solid #bfdbfe; background-color: #eff6ff; border-radius: 6px; font-size: 11px; color: #1e3a8a; page-break-inside: avoid; break-inside: avoid;">
+                                    @php
+                                        // Recupera observações personalizadas do curso ou usa padrão
+                                    @endphp
+                                </div>
+                            @endif
                         @endif
 
-                            
+
                             <div class="footer">Gerado em {{ $generatedAt->format('d/m/Y H:i') }}</div>
                     </div>
                 @elseif($idx === 2)
                     <!-- PT/EN: Remaining pages from controller -->
-                    <div style="margin-top: 15mm; page-break-inside: avoid; break-inside: avoid;">
+                    <div style="margin-top: 15mm; padding-left: 20px; padding-right: 20px; page-break-inside: avoid; break-inside: avoid;">
                         @php
                             $diasValidade = $validadeDiasPdf;
                         @endphp
@@ -575,8 +585,8 @@
 
                 @elseif($idx === 3)
                     <!-- PT/EN: Remaining pages from controller -->
-                    <div style="margin-top: 15mm; page-break-inside: avoid; break-inside: avoid;">
-                        
+                    <div style="margin-top: 15mm; padding-left: 20px; padding-right: 20px; page-break-inside: avoid; break-inside: avoid;">
+
                         @php
                             $orcArr = is_array($orc) ? $orc : (is_string($orc) ? (json_decode($orc, true) ?: []) : []);
                             $linhas = [];
@@ -687,6 +697,7 @@
                 @endif
             </div>
         </div>
+        @endif
     @endforeach
     <script>
         // PT: Script para ajustar o tamanho da fonte da página de orçamento (Página 2)

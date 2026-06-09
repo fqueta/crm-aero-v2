@@ -87,6 +87,15 @@ export interface CourseConfig {
   public_approval_required_questions?: PublicProposalQuestionKey[];
   public_signature_sections?: PublicProposalSectionConfig;
   public_approval_sections?: PublicProposalSectionConfig;
+  /**
+   * pdf_show_*
+   * pt-BR: Controla quais páginas do PDF do orçamento serão exibidas.
+   * en-US: Controls which pages of the budget PDF are displayed.
+   */
+  pdf_show_cover?: boolean;
+  pdf_show_budget?: boolean;
+  pdf_show_notes?: boolean;
+  pdf_show_payment?: boolean;
 }
 
 /**

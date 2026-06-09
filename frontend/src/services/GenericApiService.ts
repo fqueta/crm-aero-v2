@@ -46,12 +46,21 @@ export class GenericApiService<T = any, CreateInput = any, UpdateInput = any> ex
     /**
      * Fallback de normalização de resposta
      * pt-BR: Alguns endpoints retornam o objeto diretamente (sem wrapper { data }).
-     *        Para evitar `undefined` no React Query, retornamos `response.data ?? response`.
+     *        Para evitar extrair campo homônimo (ex.: TurmaRecord tem campo 'data' do tipo string),
+     *        verificamos se response.data é um objeto não-nulo (indicando envelope verdadeiro).
      * en-US: Some endpoints return the object directly (without { data } wrapper).
-     *        To avoid `undefined` in React Query, we return `response.data ?? response`.
+     *        To avoid extracting a homonymous field (e.g. TurmaRecord has a string 'data' field),
+     *        we check whether response.data is a non-null object (indicating a real envelope).
      */
     const response = await this.get<any>(`${this.endpoint}/${id}`);
-    const normalized = (response && typeof response === 'object' && 'data' in response)
+    const normalized = (
+      response &&
+      typeof response === 'object' &&
+      !Array.isArray(response) &&
+      'data' in response &&
+      typeof response.data === 'object' &&
+      response.data !== null
+    )
       ? (response.data as T)
       : (response as T);
     return normalized;
@@ -72,8 +81,18 @@ export class GenericApiService<T = any, CreateInput = any, UpdateInput = any> ex
    * @param data - Dados para atualização
    */
   async update(id: string | number, data: UpdateInput): Promise<T> {
-    const response = await this.put<ApiResponse<T>>(`${this.endpoint}/${id}`, data);
-    return response.data;
+    const response = await this.put<any>(`${this.endpoint}/${id}`, data);
+    const normalized = (
+      response &&
+      typeof response === 'object' &&
+      !Array.isArray(response) &&
+      'data' in response &&
+      typeof response.data === 'object' &&
+      response.data !== null
+    )
+      ? (response.data as T)
+      : (response as T);
+    return normalized;
   }
 
   /**

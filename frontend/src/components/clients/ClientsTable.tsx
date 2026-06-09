@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Pencil, Trash2, Eye, RotateCcw, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,10 @@ interface ClientsTableProps {
    * When true, shows a visual banner warning the list is filtering deleted records.
    */
   trashEnabled?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
 }
 
 /**
@@ -25,7 +30,7 @@ interface ClientsTableProps {
  * Renders client rows with owner and status. When `trashEnabled` is true,
  * shows a purple banner at the top, hides the Delete action, e exibe "Restaurar".
  */
-export function ClientsTable({ clients, onEdit, onDelete, isLoading, trashEnabled }: ClientsTableProps) {
+export function ClientsTable({ clients, onEdit, onDelete, isLoading, trashEnabled, selectedIds, onToggleSelect, onSelectAll, onDeselectAll }: ClientsTableProps) {
   const navigate = useNavigate();
   const location = useLocation();
   // Garantir que clients seja sempre um array válido
@@ -91,6 +96,15 @@ export function ClientsTable({ clients, onEdit, onDelete, isLoading, trashEnable
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[50px] text-center">
+              <Checkbox
+                checked={clientsList.length > 0 && (selectedIds?.size ?? 0) === clientsList.length}
+                onCheckedChange={(checked) => {
+                  if (checked) onSelectAll?.();
+                  else onDeselectAll?.();
+                }}
+              />
+            </TableHead>
             <TableHead>Nome</TableHead>
             <TableHead>CPF</TableHead>
             <TableHead>Email</TableHead>
@@ -107,6 +121,12 @@ export function ClientsTable({ clients, onEdit, onDelete, isLoading, trashEnable
               className="cursor-pointer hover:bg-muted/50"
               title={`Visualizar detalhes do cliente ${client.name} com dois cliques`}
             >
+              <TableCell className="text-center">
+                <Checkbox
+                  checked={selectedIds?.has(String(client.id)) ?? false}
+                  onCheckedChange={() => onToggleSelect?.(String(client.id))}
+                />
+              </TableCell>
               <TableCell className="font-medium">{client.name}</TableCell>
               <TableCell>
                 {client.tipo_pessoa === 'pf' ? (client.cpf || 'Não informado') : (client.cnpj || 'Não informado')}

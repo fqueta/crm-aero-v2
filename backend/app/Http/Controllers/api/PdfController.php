@@ -618,6 +618,10 @@ class PdfController extends Controller
         $cta_url = Qlib::getFrontUrl() . '/aluno/assinatura/' . $token ?? '';
 
         $resolvedPages = $this->resolveBackgroundPages($request, $matricula, $config['skip_extra_pages']);
+
+        $cursoPdfConfig = $matricula['curso']['config'] ?? [];
+        if (is_string($cursoPdfConfig)) $cursoPdfConfig = json_decode($cursoPdfConfig, true) ?: [];
+
         return [
             'cliente_nome' => $matricula['cliente']['name'] ?? ($matricula['cliente']['nome'] ?? ''),
             'cliente_email' => $matricula['cliente']['email'] ?? '',
@@ -646,6 +650,10 @@ class PdfController extends Controller
                 Qlib::get_post_by_shortcode('aviso-informacoes-importantes-proposta')['obs'] ?? ''
             ),
             'matricula' => $matricula,
+            'pdf_show_cover'  => !isset($cursoPdfConfig['pdf_show_cover'])  || $cursoPdfConfig['pdf_show_cover'] !== false,
+            'pdf_show_budget' => !isset($cursoPdfConfig['pdf_show_budget']) || $cursoPdfConfig['pdf_show_budget'] !== false,
+            'pdf_show_notes'  => !isset($cursoPdfConfig['pdf_show_notes'])  || $cursoPdfConfig['pdf_show_notes'] !== false,
+            'pdf_show_payment'=> !isset($cursoPdfConfig['pdf_show_payment'])|| $cursoPdfConfig['pdf_show_payment'] !== false,
         ];
     }
 

@@ -127,6 +127,10 @@ class EnrollmentsService extends BaseApiService {
     return super.delete<ApiDeleteResponse>(`/matriculas/${id}`);
   }
 
+  async deleteMultipleEnrollments(ids: (string | number)[]): Promise<void> {
+    await Promise.all(ids.map((id) => this.deleteEnrollment(String(id))));
+  }
+
   /**
    * sendWhatsApp
    * pt-BR: Envia mensagem via WhatsApp (ChatGuru API) para o cliente.

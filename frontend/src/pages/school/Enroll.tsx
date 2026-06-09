@@ -31,9 +31,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Loader2, MoreHorizontal, Eye, Edit, Trash2, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { enrollmentsService } from '@/services/enrollmentsService';
 import { coursesService } from '@/services/coursesService';
 import { useTurmasList } from '@/hooks/turmas';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -79,6 +81,7 @@ export default function Enroll() {
    * en-US: Situation ID for listing filter. Starts empty (all situations).
    */
   const [selectedSituationId, setSelectedSituationId] = useState<string>('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   /**
    * situationsQuery
@@ -217,6 +220,20 @@ export default function Enroll() {
     },
     onError: (err: any) => {
       toast({ title: 'Erro ao atualizar matrícula', description: err?.message || 'Verifique os campos e tente novamente.', variant: 'destructive' });
+    },
+  });
+
+  const queryClient = useQueryClient();
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: (string | number)[]) => enrollmentsService.deleteMultipleEnrollments(ids),
+    onSuccess: () => {
+      toast({ title: 'Matrículas excluídas', description: 'Registros removidos.' });
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['enrollments'] });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Erro ao excluir em massa', description: String(err?.message ?? 'Falha ao excluir matrículas'), variant: 'destructive' });
     },
   });
 
@@ -460,6 +477,20 @@ export default function Enroll() {
                 navigate(`/admin/sales/proposals/edit/${String(enroll.id)}`, { state: { returnTo } });
               }}
               onDelete={(enroll: any) => { setSelected(enroll); setDeleteOpen(true); }}
+              selectedIds={selectedIds}
+              onSelectChange={(id: string) => {
+                const next = new Set(selectedIds);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                setSelectedIds(next);
+              }}
+              onSelectAllChange={(checked: boolean) => {
+                if (checked) {
+                  setSelectedIds(new Set(enrollments.map((e: any) => String(e.id))));
+                } else {
+                  setSelectedIds(new Set());
+                }
+              }}
             />
           </div>
 
@@ -581,6 +612,32 @@ export default function Enroll() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Barra de ações em massa */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between border-t bg-background/95 backdrop-blur px-6 py-4 shadow-lg">
+          <span className="text-sm font-medium text-destructive">
+            {selectedIds.size} matrícula(s) selecionada(s)
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => {
+                if (window.confirm(`Excluir ${selectedIds.size} matrícula(s)?`)) {
+                  bulkDeleteMutation.mutate(Array.from(selectedIds));
+                }
+              }}
+            >
+              {bulkDeleteMutation.isPending ? 'Excluindo...' : `Excluir ${selectedIds.size} selecionada(s)`}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

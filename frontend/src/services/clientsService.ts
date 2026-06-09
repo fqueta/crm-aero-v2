@@ -64,6 +64,10 @@ class ClientsService extends BaseApiService {
     return super.delete<ApiDeleteResponse>(`/clients/${id}`);
   }
 
+  async deleteMultipleClients(ids: string[]): Promise<void> {
+    await Promise.all(ids.map((id) => this.deleteClient(id)));
+  }
+
   /**
    * Restaura um cliente excluído (soft delete)
    * Executa PATCH em `/clients/{id}/restore`.

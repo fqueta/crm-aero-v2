@@ -7,14 +7,17 @@ import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from '@
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useComponentsList, useDeleteComponent, useDuplicateComponent } from '@/hooks/components';
+import { componentsService } from '@/services/componentsService';
 import { useContentTypesList } from '@/hooks/contentTypes';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { coursesService } from '@/services/coursesService';
 import { PaginatedResponse } from '@/types';
 import type { ComponentRecord } from '@/types/components';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/components/ui/use-toast';
 
 /**
  * SiteComponentsList
@@ -52,6 +55,7 @@ export default function SiteComponentsList() {
   const [tipoConteudo, setTipoConteudo] = useState<string>(init.tipoConteudo);
   const [idCurso, setIdCurso] = useState<string>(init.idCurso);
   const debouncedSearch = useDebounce(searchTerm, 400);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   /**
    * fetchSelectOptions
@@ -101,6 +105,20 @@ export default function SiteComponentsList() {
   const { data: resp, isLoading, isFetching } = useComponentsList(listParams);
   const deleteMutation = useDeleteComponent();
   const duplicateMutation = useDuplicateComponent();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: (string | number)[]) => componentsService.deleteMultipleComponents(ids),
+    onSuccess: () => {
+      toast({ title: 'Componentes excluídos', description: 'Registros removidos.' });
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['cmsComponents'] });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Erro ao excluir em massa', description: String(err?.message ?? 'Falha ao excluir componentes'), variant: 'destructive' });
+    },
+  });
 
   /**
    * Actions
@@ -202,6 +220,18 @@ export default function SiteComponentsList() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[50px] text-center">
+                <Checkbox
+                  checked={resp?.data?.length > 0 && selectedIds.size === resp?.data?.length}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setSelectedIds(new Set(resp?.data?.map((item) => String(item.id)) ?? []));
+                    } else {
+                      setSelectedIds(new Set());
+                    }
+                  }}
+                />
+              </TableHead>
               <TableHead>ID</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Short Code</TableHead>
@@ -218,6 +248,17 @@ export default function SiteComponentsList() {
                 className="cursor-pointer"
                 onDoubleClick={() => handleRowDoubleClick(String(item.id))}
               >
+                <TableCell className="text-center">
+                  <Checkbox
+                    checked={selectedIds.has(String(item.id))}
+                    onCheckedChange={(checked) => {
+                      const next = new Set(selectedIds);
+                      if (checked) next.add(String(item.id));
+                      else next.delete(String(item.id));
+                      setSelectedIds(next);
+                    }}
+                  />
+                </TableCell>
                 <TableCell className="font-mono">{item.id}</TableCell>
                 <TableCell>{item.nome ?? '-'}</TableCell>
                 <TableCell>{item.short_code ?? '-'}</TableCell>
@@ -252,6 +293,32 @@ export default function SiteComponentsList() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Barra de ações em massa */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between border-t bg-background/95 backdrop-blur px-6 py-4 shadow-lg">
+          <span className="text-sm font-medium text-destructive">
+            {selectedIds.size} componente(s) selecionado(s)
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => {
+                if (window.confirm(`Excluir ${selectedIds.size} componente(s)?`)) {
+                  bulkDeleteMutation.mutate(Array.from(selectedIds));
+                }
+              }}
+            >
+              {bulkDeleteMutation.isPending ? 'Excluindo...' : <><Trash2 className="h-4 w-4 mr-1" /> Excluir {selectedIds.size} selecionado(s)</>}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

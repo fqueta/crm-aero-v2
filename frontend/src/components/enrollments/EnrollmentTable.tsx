@@ -3,6 +3,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, MoreHorizontal, Eye, Edit, Trash2 } from 'lucide-react';
 
 export interface EnrollmentTableProps {
@@ -14,6 +15,12 @@ export interface EnrollmentTableProps {
   onEdit?: (item: any) => void;
   onDelete?: (item: any) => void;
   resolveAmountBRL?: (item: any) => string;
+  /** IDs selecionadas para exclusão em massa */
+  selectedIds?: Set<string>;
+  /** Toggle de seleção de um item */
+  onSelectChange?: (id: string) => void;
+  /** Selecionar/desmarcar todos */
+  onSelectAllChange?: (checked: boolean) => void;
 }
 
 /**
@@ -23,13 +30,23 @@ export interface EnrollmentTableProps {
  * en-US: Reusable table component to list enrollments, with per-row actions.
  *        Shows standard columns (ID, Client, Course, Class, Status, Amount) and actions menu.
  */
-export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDelete, resolveAmountBRL }: EnrollmentTableProps) {
+export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDelete, resolveAmountBRL, selectedIds, onSelectChange, onSelectAllChange }: EnrollmentTableProps) {
   const amountFormatter = resolveAmountBRL || (() => '-');
+
+  const hasCheckboxes = !!selectedIds && !!onSelectChange;
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
+          {hasCheckboxes && (
+            <TableHead className="w-[50px] text-center font-bold">
+              <Checkbox
+                checked={items.length > 0 && selectedIds.size === items.length}
+                onCheckedChange={(checked) => onSelectAllChange?.(!!checked)}
+              />
+            </TableHead>
+          )}
           <TableHead>ID</TableHead>
           <TableHead>Cliente</TableHead>
           <TableHead>Curso</TableHead>
@@ -42,7 +59,7 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
       <TableBody>
         {isLoading && (
           <TableRow>
-            <TableCell colSpan={7}>
+            <TableCell colSpan={hasCheckboxes ? 8 : 7}>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Carregando matrículas...
               </div>
@@ -52,7 +69,7 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
 
         {!isLoading && items.length === 0 && (
           <TableRow>
-            <TableCell colSpan={7}>
+            <TableCell colSpan={hasCheckboxes ? 8 : 7}>
               <div className="text-muted-foreground">Nenhuma matrícula encontrada</div>
             </TableCell>
           </TableRow>
@@ -60,6 +77,14 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
 
         {!isLoading && items.map((enroll: any) => (
           <TableRow key={String(enroll.id)}>
+            {hasCheckboxes && (
+              <TableCell className="text-center">
+                <Checkbox
+                  checked={selectedIds.has(String(enroll.id))}
+                  onCheckedChange={() => onSelectChange(String(enroll.id))}
+                />
+              </TableCell>
+            )}
             <TableCell className="font-mono text-xs">{String(enroll.id)}</TableCell>
             <TableCell>{enroll.cliente_nome || enroll.student_name || enroll.name || '-'}</TableCell>
             <TableCell>{enroll.curso_nome || enroll.course_name || '-'}</TableCell>

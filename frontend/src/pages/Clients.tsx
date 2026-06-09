@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -42,7 +43,8 @@ import { useToast } from "@/hooks/use-toast";
 import * as z from "zod";
 import { 
   Plus, 
-  Search
+  Search,
+  Trash2
 } from "lucide-react";
 import { getBrazilianStates } from '@/lib/qlib';
 import { 
@@ -52,7 +54,8 @@ import {
   useDeleteClient
 } from '@/hooks/clients';
 import { generateMockClients } from '@/mocks/clients';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { clientsService } from '@/services/clientsService';
 import { ClientRecord, CreateClientInput } from '@/types/clients';
 import { ClientForm } from '@/components/clients/ClientForm';
 import { ClientsTable } from '@/components/clients/ClientsTable';
@@ -237,6 +240,7 @@ export default function Clients() {
   const [pageSize] = useState(100);
   // Filtro de lixeira (excluido=s)
   const [showTrash, setShowTrash] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -291,6 +295,18 @@ export default function Clients() {
   const createClientMutation = useCreateClient();
   const updateClientMutation = useUpdateClient();
   const deleteClientMutation = useDeleteClient();
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => clientsService.deleteMultipleClients(ids),
+    onSuccess: () => {
+      toast({ title: 'Clientes excluídos', description: 'Registros removidos.' });
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Erro ao excluir em massa', description: String(err?.message ?? 'Falha ao excluir clientes'), variant: 'destructive' });
+    },
+  });
 
   // Form setup with zod validation
   const form = useForm<ClientFormData>({
@@ -823,6 +839,17 @@ export default function Clients() {
               onDelete={handleDeleteClient}
               isLoading={useMock ? false : clientsQuery.isLoading}
               trashEnabled={showTrash}
+              selectedIds={selectedIds}
+              onToggleSelect={(id) => {
+                setSelectedIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id);
+                  else next.add(id);
+                  return next;
+                });
+              }}
+              onSelectAll={() => setSelectedIds(new Set(filteredClients.map((c) => String(c.id))))}
+              onDeselectAll={() => setSelectedIds(new Set())}
             />
           )}
           {/* Pagination */}
@@ -888,6 +915,32 @@ export default function Clients() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Barra de seleção em massa */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between border-t bg-background/95 backdrop-blur px-6 py-4 shadow-lg">
+          <span className="text-sm font-medium text-destructive">
+            {selectedIds.size} cliente(s) selecionado(s)
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => {
+                if (window.confirm(`Excluir ${selectedIds.size} cliente(s)?`)) {
+                  bulkDeleteMutation.mutate(Array.from(selectedIds));
+                }
+              }}
+            >
+              {bulkDeleteMutation.isPending ? 'Excluindo...' : `Excluir ${selectedIds.size} selecionado(s)`}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

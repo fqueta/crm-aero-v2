@@ -4,14 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Filter, Trash2 } from 'lucide-react';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { coursesService } from '@/services/coursesService';
 import { useTurmasList } from '@/hooks/turmas';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useEnrollmentsList } from '@/hooks/enrollments';
 import { toast } from '@/hooks/use-toast';
+import { enrollmentsService } from '@/services/enrollmentsService';
 import EnrollmentTable from '@/components/enrollments/EnrollmentTable';
 
 /**
@@ -32,6 +33,9 @@ export default function Interested() {
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = `${location.pathname}${location.search || ''}`;
+  const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   // Busca global
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
@@ -166,6 +170,18 @@ export default function Interested() {
   const lastPage = resp?.last_page ?? 1;
   const total = resp?.total ?? items.length;
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: (string | number)[]) => enrollmentsService.deleteMultipleEnrollments(ids),
+    onSuccess: () => {
+      toast({ title: 'Interessados excluídos', description: 'Registros removidos.' });
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['enrollments'] });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Erro ao excluir em massa', description: String(err?.message ?? 'Falha ao excluir'), variant: 'destructive' });
+    },
+  });
+
   const buildFiltersLegend = () => {
     const parts: string[] = [];
     if (selectedCourseId) {
@@ -248,6 +264,16 @@ export default function Interested() {
               items={items}
               isLoading={isLoading}
               resolveAmountBRL={(item) => resolveAmountBRL(item)}
+              selectedIds={selectedIds}
+              onSelectChange={(id) => {
+                const next = new Set(selectedIds);
+                if (next.has(id)) next.delete(id); else next.add(id);
+                setSelectedIds(next);
+              }}
+              onSelectAllChange={(checked) => {
+                if (checked) setSelectedIds(new Set(items.map((i: any) => String(i.id))));
+                else setSelectedIds(new Set());
+              }}
               /**
                * onView
                * pt-BR: Abre a visualização de proposta baseada na matrícula (id).
@@ -296,6 +322,27 @@ export default function Interested() {
           </div>
         </CardContent>
       </Card>
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between border-t bg-background/95 backdrop-blur px-6 py-4 shadow-lg">
+          <span className="text-sm font-medium">{selectedIds.size} interessado(s) selecionado(s)</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => {
+                if (window.confirm(`Excluir ${selectedIds.size} interessado(s)?`)) {
+                  bulkDeleteMutation.mutate(Array.from(selectedIds));
+                }
+              }}
+            >
+              {bulkDeleteMutation.isPending ? 'Excluindo...' : <><Trash2 className="h-4 w-4 mr-1" /> Excluir {selectedIds.size} selecionado(s)</>}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

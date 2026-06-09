@@ -52,6 +52,10 @@ class TurmasService extends GenericApiService<TurmaRecord, TurmaPayload, TurmaPa
   async deleteTurma(id: string | number): Promise<void> {
     return this.deleteById(id);
   }
+
+  async deleteMultipleTurma(ids: (string | number)[]): Promise<void> {
+    await Promise.all(ids.map((id) => this.deleteById(id)));
+  }
 }
 
 /**
