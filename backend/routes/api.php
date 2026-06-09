@@ -67,6 +67,8 @@ Route::name('api.')->prefix('v1')->middleware([
     // Public route for contract termination view
     Route::get('rescisoes/public/{token}', [\App\Http\Controllers\api\RescisaoController::class, 'publicShow']);
     Route::post('rescisoes/public/{token}/sign', [\App\Http\Controllers\api\RescisaoController::class, 'signTermo']);
+    Route::get('pdf/propostas/public/{clientId}/{matriculaId}', [\App\Http\Controllers\api\PdfController::class, 'adminProposalByClientAndEnrollment'])
+        ->name('pdf.propostas.public');
 
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
@@ -237,6 +239,7 @@ Route::name('api.')->prefix('v1')->middleware([
         Route::post('matriculas/simulador-combustivel', [\App\Http\Controllers\api\MatriculaController::class, 'simuladorCombustivelApi'])->name('matriculas.simulador-combustivel');
         Route::post('matriculas/{id}/gerar-contratos-responsavel', [\App\Http\Controllers\api\MatriculaController::class, 'contratos_responsavel_pdf'])->name('matriculas.gerar-contratos-responsavel');
         Route::post('matriculas/{id}/enviar-zapsign-responsavel', [\App\Http\Controllers\api\MatriculaController::class, 'enviar_zapsign_responsavel'])->name('matriculas.enviar-zapsign-responsavel');
+        Route::post('matriculas/{id}/testar-envio-link-assinatura-zapguru', [\App\Http\Controllers\api\MatriculaController::class, 'testar_envio_link_assinatura_zapguru'])->name('matriculas.testar-envio-link-assinatura-zapguru');
         Route::post('matriculas/{id}/enviar-whatsapp', [\App\Http\Controllers\api\MatriculaController::class, 'enviarWhatsapp'])->name('matriculas.enviar-whatsapp');
         Route::patch('matriculas/{id}/etapa', [\App\Http\Controllers\api\MatriculaController::class, 'updateStageRapid'])->name('matriculas.update-stage');
         Route::patch('matriculas/{id}/status', [\App\Http\Controllers\api\MatriculaController::class, 'updateStatusRapid'])->name('matriculas.update-status');

@@ -114,6 +114,8 @@ Route::name('api.')->prefix('api/v1')->middleware([
     // Public route for contract termination view
     Route::get('rescisoes/public/{token}', [\App\Http\Controllers\api\RescisaoController::class, 'publicShow']);
     Route::post('rescisoes/public/{token}/sign', [\App\Http\Controllers\api\RescisaoController::class, 'signTermo']);
+    Route::get('pdf/propostas/public/{clientId}/{matriculaId}', [\App\Http\Controllers\api\PdfController::class, 'adminProposalByClientAndEnrollment'])
+        ->name('pdf.propostas.public');
 
     Route::fallback(function () {
         return response()->json(['message' => 'Rota não encontrada'], 404);
@@ -183,7 +185,6 @@ Route::name('api.')->prefix('api/v1')->middleware([
         // PDF: Relatório de matrícula (tenant-aware URL)
         Route::get('pdf/matriculas/{id}', [\App\Http\Controllers\api\PdfController::class, 'matricula'])
             ->name('pdf.matriculas');
-
         // CRUD: Uploads de arquivos (posts: post_type=files_uload)
         Route::apiResource('uploads', UploadController::class, ['parameters' => [
             'uploads' => 'id'

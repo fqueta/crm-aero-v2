@@ -789,8 +789,8 @@ class ZapguruController extends Controller
         $rawPhone = $config['telefonezap'] ?? $config['Celular'] ?? $config['celular_completo'] ?? $config['celular'] ?? null;
         $user = null;
 
-        if (!empty($config['user_id'])) {
-            $user = User::find((string) $config['user_id']);
+        if (!empty($rawPhone)) {
+            $user = User::where('celular', (string) $rawPhone)->first();
         }
 
         if (!$user && $email !== '') {
@@ -803,7 +803,6 @@ class ZapguruController extends Controller
 
         $chatNumber = $this->normalizeChatNumber($rawPhone);
         $name = trim((string) ($config['nome'] ?? $config['name'] ?? ($user->name ?? 'Cliente')));
-
         return [
             'user' => $user,
             'email' => $email ?: null,
@@ -864,9 +863,10 @@ class ZapguruController extends Controller
 
         $nameParam = $name;
         if (!empty($id_cliente)) {
-            $nameParam .= ' - ' . $id_cliente . ' | CRM';
+            // $nameParam .= ' - ' . $id_cliente . ' | CRM-v2';
+            $nameParam .= ' | CRM-v2';
         } else {
-            $nameParam .= ' | CRM';
+            $nameParam .= ' | CRM-v2';
         }
 
         $postData = [

@@ -144,7 +144,7 @@ class ZapsingController extends Controller
             $arr_token = explode('_',$token);
             $id_matricula = isset($arr_token[0]) ? (int)$arr_token[0] : false;
             $tk_periodo = isset($arr_token[1]) ? $arr_token[1] : false;
-            
+
             // Verifica se é um contrato de responsável
             if (end($arr_token) === 'resp') {
                 $is_resp = true;
@@ -168,7 +168,7 @@ class ZapsingController extends Controller
             $status_doc = $d['status'] ?? 'desconhecido';
             $nome_doc = $d['name'] ?? 'Documento';
             $evento_desc = "ZapSign Webhook: Documento '{$nome_doc}' atualizado para status '{$status_doc}'";
-            
+
             \App\Models\EventLog::create([
                 'entity_type' => 'matricula',
                 'entity_id'   => (string)$id_matricula,
@@ -234,7 +234,7 @@ class ZapsingController extends Controller
         if(isset($arr_token[1])){
             $tk_periodo = $arr_token[1];
         }
-        
+
         // Verifica se é responsável
         if (end($arr_token) === 'resp') {
             $is_resp = true;
@@ -270,7 +270,7 @@ class ZapsingController extends Controller
             //salvar o array com todos o links dos contratos assinados..
             // dd($tk_periodo);
             $ret['arr'] = $arr;
-            
+
             $prefix_links = $this->campo_links;
             if ($is_resp) {
                 $prefix_links = 'salvar_links_assinados_responsavel';
@@ -536,14 +536,50 @@ class ZapsingController extends Controller
                 $processo = Qlib::lib_json_array($json_processo);
             }
         }
-        $ret['exec'] = false;
+        $ret = [
+            'exec' => false,
+            'mens' => 'Nenhum link de assinatura disponível no processo do ZapSign.',
+        ];
+        /**
+         * Normaliza textos/URLs do payload atual do ZapSign, removendo
+         * espaços extras e crases que às vezes vêm serializados no retorno.
+         */
+        $normalizeValue = function ($value) {
+            if (!is_string($value)) {
+                return $value;
+            }
+            $value = str_replace(['`', "\r", "\n", "\t"], '', $value);
+            return trim($value);
+        };
         if(isset($processo['response']['signers']) && isset($processo['response']['external_id'])){
             $webhook_zapsing = $processo['response'];
+        }elseif(isset($processo['enviar']['response']['signers']) && isset($processo['enviar']['response']['external_id'])){
+            $webhook_zapsing = $processo['enviar']['response'];
         }else{
             $webhook_zapsing = isset($d['webhook_zapsing']['enviar']['response']) ? $d['webhook_zapsing']['enviar']['response'] : false;
             if(!$webhook_zapsing){
                 $webhook_zapsing = isset($d['webhook_zapsing']) ? $d['webhook_zapsing'] : [];
             }
+        }
+        if(
+            !isset($webhook_zapsing['signers']) ||
+            !is_array($webhook_zapsing['signers']) ||
+            empty($webhook_zapsing['signers'])
+        ){
+            $zapsignError = $processo['enviar']['response_json']
+                ?? $processo['response_json']
+                ?? $processo['enviar']['response']
+                ?? $processo['response']
+                ?? null;
+            if(is_array($zapsignError)){
+                $zapsignError = json_encode($zapsignError, JSON_UNESCAPED_UNICODE);
+            }
+            if(is_string($zapsignError) && trim($zapsignError) !== ''){
+                $ret['mens'] = 'ZapSign não retornou links de assinatura. Detalhe: '.trim($zapsignError);
+                $ret['zapsign_error'] = trim($zapsignError);
+            }
+            Log::info('enviar_link_assinatura para o zapguru:', $ret);
+            return $ret;
         }
         $email = isset($d['email']) ? $d['email'] : false;
         $app = config('app.name');
@@ -551,45 +587,93 @@ class ZapsingController extends Controller
         $i = 0;
         $zgc = new ZapguruController();
         if($tk_periodo){
-            $tk = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
+            $tk = isset($webhook_zapsing['external_id']) ? $normalizeValue($webhook_zapsing['external_id']) : false;
             $arr_tk = explode('_',$tk);
             $external_id = isset($arr_tk[0]) ? $arr_tk[0] : false;
         }else{
-            $external_id = isset($webhook_zapsing['external_id']) ? $webhook_zapsing['external_id'] : false;
+            $external_id = isset($webhook_zapsing['external_id']) ? $normalizeValue($webhook_zapsing['external_id']) : false;
         }
-        $nome_doc = isset($webhook_zapsing['name']) ? $webhook_zapsing['name'] : '';
-        if(isset($webhook_zapsing['signers'][$i]['sign_url']) && is_string($webhook_zapsing['signers'][$i]['sign_url']) && ($signers=$webhook_zapsing['signers'])){
-            if(is_array($signers)){
-                foreach ($signers as $k => $signer) {
-                    $nome = isset($signer['name']) ? $signer['name'] : '';
-                    $status = isset($signer['status']) ? $signer['status'] : '';
-                    // $nome_doc = isset($signer['name']) ? $signer['name'] : '';
-                    // $email = isset($signering['email']) ? $signering['email'] : $email;
-                    $email = isset($signer['email']) ? $signer['email'] : '';
-                    $link = isset($signer['sign_url']) ? $signer['sign_url'] : '';
-                    $mens = str_replace('{nome}',$nome,$temm);
-                    $mens = str_replace('{nome_doc}',$nome_doc,$mens);
-                    $mens = str_replace('{link}',$link,$mens);
-                    $mens = str_replace('{app}',$app,$mens);
-                    $ret['signer'][$k]['name'] = $nome;
-                    $ret['signer'][$k]['email'] = $email;
-                    $ret['signer'][$k]['nome_doc'] = $nome_doc;
-                    $ret['signer'][$k]['link'] = $link;
-                    $dialog_id = '679a438a9d7c8affe47e29b5';
-                    if($k==0){
-                        $telefonezap = $zgc->get_telefonezap_by_id_matricula($id_matricula);
-                        $conf_link_zap = ['telefonezap'=>$telefonezap,'text'=>$mens,'gravar_resposta'=>false,'dialog_id'=>$dialog_id];
-                    }else{
-                        $conf_link_zap = ['email'=>$email,'text'=>$mens,'tab'=>'usuarios_sistemas','gravar_resposta'=>false,'dialog_id'=>$dialog_id];
-                    }
-                    if($status=='signed'){
-                        $ret['signer'][$k]['status'] = $status;
-                    }else{
-                        $ret['signer'][$k]['criar_chat'] = $zgc->criar_chat($conf_link_zap);
-                    }
+        $nome_doc = isset($webhook_zapsing['name']) ? $normalizeValue($webhook_zapsing['name']) : '';
+        $signers = $webhook_zapsing['signers'] ?? [];
+        if(is_array($signers) && !empty($signers)){
+            $telefoneAluno = $zgc->get_telefonezap_by_id_matricula($id_matricula);
+            $ret['total_signers'] = count($signers);
+            $ret['external_id'] = $external_id;
+            foreach ($signers as $k => $signer) {
+                if(!is_array($signer)){
+                    continue;
+                }
+                $nome = isset($signer['name']) ? $normalizeValue($signer['name']) : '';
+                $status = isset($signer['status']) ? $normalizeValue($signer['status']) : '';
+                $email = isset($signer['email']) ? $normalizeValue($signer['email']) : '';
+                $link = $normalizeValue($signer['sign_url'] ?? ($signer['signing_link'] ?? ''));
+                $signOrder = (int)($signer['sign_order'] ?? ($signer['order_group'] ?? ($k + 1)));
+                $mens = str_replace('{nome}',$nome,$temm);
+                $mens = str_replace('{nome_doc}',$nome_doc,$mens);
+                $mens = str_replace('{link}',$link,$mens);
+                $mens = str_replace('{app}',$app,$mens);
+                $ret['signer'][$k]['name'] = $nome;
+                $ret['signer'][$k]['email'] = $email;
+                $ret['signer'][$k]['nome_doc'] = $nome_doc;
+                $ret['signer'][$k]['link'] = $link;
+                $ret['signer'][$k]['status'] = $status;
+                $ret['signer'][$k]['sign_order'] = $signOrder;
+                $dialog_id = '679a438a9d7c8affe47e29b5';
+
+                if(!$link){
+                    $ret['signer'][$k]['mens'] = 'Signer sem link de assinatura no payload.';
+                    continue;
+                }
+                if($status=='signed'){
+                    $ret['signer'][$k]['mens'] = 'Documento já assinado, envio ignorado.';
+                    continue;
+                }
+
+                $isAluno = $signOrder === 1 || ($k === 0 && $telefoneAluno);
+                $phoneCountry = preg_replace('/\D/', '', (string)($signer['phone_country'] ?? ''));
+                $phoneNumber = preg_replace('/\D/', '', (string)($signer['phone_number'] ?? ''));
+                $phoneFromPayload = trim($phoneCountry.$phoneNumber);
+
+                if($isAluno && $telefoneAluno){
+                    $conf_link_zap = [
+                        'telefonezap'=>$telefoneAluno,
+                        'text'=>$mens,
+                        'gravar_resposta'=>false,
+                        'dialog_id'=>$dialog_id,
+                    ];
+                    $ret['signer'][$k]['destino'] = 'matricula';
+                }elseif($phoneFromPayload){
+                    $conf_link_zap = [
+                        'celular_completo'=>$phoneFromPayload,
+                        'text'=>$mens,
+                        'gravar_resposta'=>false,
+                        'dialog_id'=>$dialog_id,
+                    ];
+                    $ret['signer'][$k]['destino'] = 'payload_phone';
+                }elseif($email){
+                    $conf_link_zap = [
+                        'email'=>$email,
+                        'text'=>$mens,
+                        'tab'=>'usuarios_sistemas',
+                        'gravar_resposta'=>false,
+                        'dialog_id'=>$dialog_id,
+                    ];
+                    $ret['signer'][$k]['destino'] = 'email';
+                }else{
+                    $ret['signer'][$k]['mens'] = 'Signer sem telefone e sem email para envio no Zapguru.';
+                    continue;
+                }
+
+                $ret['signer'][$k]['criar_chat'] = $zgc->criar_chat($conf_link_zap);
+                if(($ret['signer'][$k]['criar_chat']['exec'] ?? false) === true){
+                    $ret['exec'] = true;
                 }
             }
-
+            if(!$ret['exec'] && isset($ret['signer']) && is_array($ret['signer'])){
+                $ret['mens'] = 'Nenhum link foi enviado ao Zapguru. Verifique os destinatários e o retorno dos signatários.';
+            }elseif($ret['exec']){
+                $ret['mens'] = 'Links de assinatura enviados ao Zapguru com sucesso.';
+            }
         }
         //Registrar um log
         Log::info('enviar_link_assinatura para o zapguru:', $ret);

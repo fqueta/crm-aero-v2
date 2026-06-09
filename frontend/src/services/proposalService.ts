@@ -16,6 +16,7 @@ export interface ProposalData {
       contrato_pdf?: Array<{
           nome_arquivo: string;
           url: string;
+          url_pdf?: string;
           nome_contrato: string;
       }>;
       [key: string]: any;
@@ -102,6 +103,11 @@ class ProposalService extends BaseApiService {
 
   async sendResponsibleToZapsign(matriculaId: string) {
     return this.post(`/matriculas/${matriculaId}/enviar-zapsign-responsavel`, {});
+  }
+
+  async testSendSignatureLinksToZapguru(matriculaId: string, tkPeriodo?: string) {
+    // pt-BR: Dispara manualmente o envio dos links já gerados pelo ZapSign para o Zapguru.
+    return this.post(`/matriculas/${matriculaId}/testar-envio-link-assinatura-zapguru`, tkPeriodo ? { tk_periodo: tkPeriodo } : {});
   }
 }
 

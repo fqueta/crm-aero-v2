@@ -48,12 +48,20 @@ class GeraPdfcontratosPnlJob implements ShouldQueue
             $response = $controller->contratos_periodos_pdf($this->id_matricula);
 
             // Log de Sucesso
-            if (class_exists('App\Models\EventLog')) {
+            if (class_exists('App\Models\EventLog') && !empty($response['exec'])) {
                 \App\Models\EventLog::create([
                     'entity_type' => 'matricula',
                     'entity_id' => $this->id_matricula,
                     'action' => 'contratos_generated',
                     'description' => 'PDFs dos Contratos gerados com sucesso pelo Job.',
+                    'payload' => ['response_payload' => $response],
+                ]);
+            } elseif (class_exists('App\Models\EventLog')) {
+                \App\Models\EventLog::create([
+                    'entity_type' => 'matricula',
+                    'entity_id' => $this->id_matricula,
+                    'action' => 'contratos_error',
+                    'description' => $response['mens'] ?? 'Nenhum contrato PDF foi gerado pelo Job.',
                     'payload' => ['response_payload' => $response],
                 ]);
             }

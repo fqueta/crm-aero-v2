@@ -704,7 +704,7 @@ export default function ProposalSignature() {
                           control={form.control}
                           name="sexo"
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem data-field="sexo">
                               <FormLabel>Sexo</FormLabel>
                                 <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || ""}>
                                 <FormControl>
@@ -735,7 +735,7 @@ export default function ProposalSignature() {
                         control={form.control}
                         name="identidade"
                         render={({ field }) => (
-                          <FormItem data-field="sexo">
+                          <FormItem>
                             <FormLabel>RG / Identidade</FormLabel>
                             <FormControl>
                               <Input {...field} />

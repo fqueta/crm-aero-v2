@@ -40,6 +40,15 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
     public function handle(): void
     {
         try {
+            // #region debug-point proposal-job-start
+            \Log::info('proposal_generation.job.start', [
+                'matricula_id' => $this->id_matricula,
+                'job' => static::class,
+                'timeout' => $this->timeout,
+                'tries' => $this->tries,
+            ]);
+            // #endregion debug-point proposal-job-start
+
              // Log do Início
              if (class_exists('App\Models\EventLog')) {
                 \App\Models\EventLog::create([
@@ -63,8 +72,23 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
                 'debug_html' => false // Generate actual PDF
             ]);
 
+            // #region debug-point proposal-job-request
+            \Log::info('proposal_generation.job.request', [
+                'matricula_id' => $this->id_matricula,
+                'request_payload' => $request->all(),
+            ]);
+            // #endregion debug-point proposal-job-request
+
             // Call the matricula method to generate the PDF
             $response = $controller->matricula($request, $this->id_matricula);
+
+            // #region debug-point proposal-job-response
+            \Log::info('proposal_generation.job.response', [
+                'matricula_id' => $this->id_matricula,
+                'response_type' => is_object($response) ? get_class($response) : gettype($response),
+                'status_code' => method_exists($response, 'getStatusCode') ? $response->getStatusCode() : null,
+            ]);
+            // #endregion debug-point proposal-job-response
 
              // Log de Sucesso
              if (class_exists('App\Models\EventLog')) {
@@ -78,6 +102,14 @@ class GeraPdfPropostasPnlJob implements ShouldQueue
             }
 
         } catch (\Throwable $e) {
+            // #region debug-point proposal-job-error
+            \Log::error('proposal_generation.job.error', [
+                'matricula_id' => $this->id_matricula,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            // #endregion debug-point proposal-job-error
             \Log::error("Error generating PDF Proposal for Matricula ID: {$this->id_matricula}: " . $e->getMessage());
             
              if (class_exists('App\Models\EventLog')) {

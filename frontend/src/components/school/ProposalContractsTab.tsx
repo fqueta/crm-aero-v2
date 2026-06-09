@@ -194,6 +194,7 @@ export default function ProposalContractsTab({
   const [isPreviewingPdf, setIsPreviewingPdf] = useState(false);
   const [isPreviewingHtml, setIsPreviewingHtml] = useState(false);
   const [isSendingZapsign, setIsSendingZapsign] = useState(false);
+  const [isTestingZapguru, setIsTestingZapguru] = useState(false);
   const [isRegeneratingResp, setIsRegeneratingResp] = useState(false);
   const [isSendingZapsignResp, setIsSendingZapsignResp] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
@@ -355,6 +356,49 @@ export default function ProposalContractsTab({
     }
   };
 
+  /**
+   * handleTestSendSignatureLinksToZapguru
+   * pt-BR: Testa manualmente o disparo dos links de assinatura já existentes para o Zapguru.
+   */
+  const handleTestSendSignatureLinksToZapguru = async () => {
+    if (!enrollmentId) return;
+    if (!hasZapsign) {
+      toast({
+        title: 'ZapSign pendente',
+        description: 'Envie a proposta para o ZapSign antes de testar o envio dos links no Zapguru.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!confirm('Deseja testar o envio dos links de assinatura para o Zapguru?')) return;
+
+    setIsTestingZapguru(true);
+    try {
+      const response: any = await proposalService.testSendSignatureLinksToZapguru(enrollmentId);
+      const signersCount = Array.isArray(response?.signer) ? response.signer.length : 0;
+      const description =
+        response?.mens ||
+        response?.message ||
+        (signersCount > 0
+          ? `Teste concluído para ${signersCount} signatário(s).`
+          : 'Teste concluído. Verifique os logs e o retorno da integração.');
+
+      toast({
+        title: response?.exec === false ? 'Teste concluído com ressalvas' : 'Teste enviado',
+        description,
+        variant: response?.exec === false ? 'destructive' : 'default',
+      });
+    } catch {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível testar o envio dos links de assinatura para o Zapguru.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsTestingZapguru(false);
+    }
+  };
+
   // ── Guards de carregamento / erro ──────────────────────────────────────────
   if (loading) {
     return (
@@ -409,6 +453,18 @@ export default function ProposalContractsTab({
                 >
                   {isSendingZapsign ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
                   {hasZapsign ? 'Reenviar ZapSign (Aluno)' : 'Enviar ZapSign (Aluno)'}
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestSendSignatureLinksToZapguru}
+                  disabled={isTestingZapguru || !hasZapsign}
+                  title={!hasZapsign ? 'Envie primeiro para o ZapSign para gerar os links de assinatura.' : 'Testar o envio dos links para o Zapguru'}
+                >
+                  {isTestingZapguru ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                  Testar Zapguru
                 </Button>
               )}
               {isAdmin && (
@@ -473,7 +529,7 @@ export default function ProposalContractsTab({
                         <div key={idx} className="p-2 border rounded bg-background space-y-2">
                           <Label className="text-[10px] text-muted-foreground">Contrato {idx + 1}</Label>
                           <Input value={contract.nome_contrato || contract.nome_arquivo} onChange={(e) => handleContractChange(idx, 'nome_contrato', e.target.value)} placeholder="Nome do Contrato" className="h-7 text-xs mb-1" />
-                          <Input value={contract.url} onChange={(e) => handleContractChange(idx, 'url', e.target.value)} placeholder="URL do PDF" className="h-7 text-xs" />
+                          <Input value={contract.url || contract.url_pdf || ''} onChange={(e) => handleContractChange(idx, 'url', e.target.value)} placeholder="URL do PDF" className="h-7 text-xs" />
                         </div>
                       ))}
                       {editableContracts.length === 0 && <p className="text-xs text-muted-foreground italic">Nenhum contrato na lista.</p>}

@@ -1524,11 +1524,11 @@ class MatriculaController extends Controller
         $matricula = Matricula::with([
                 'curso:id,nome,tipo,config',
                 'turma:id,nome',
-                'cliente:id,name,email,cpf,celular,config,preferencias,ativo,permission_id,created_at,updated_at,autor',
+                'cliente:id,name,email,cpf,celular,genero,config,preferencias,ativo,permission_id,created_at,updated_at,autor',
                 'funnel:id,name',
                 'stage:id,name,funnel_id',
                 'situacao:ID,post_title',
-                'responsavel:id,name,email,cpf,celular,config',
+                'responsavel:id,name,email,cpf,celular,genero,config',
                 'parcelamentos'
             ])
             ->findOrFail($id);
@@ -2448,6 +2448,7 @@ class MatriculaController extends Controller
             if ($request->has('sexo')) {
                 // Map sexo (Masculino/Feminino/ni) to genero (m/f/ni)
                 $sexo = strtolower($request->input('sexo'));
+                $currentConfig['sexo'] = $request->input('sexo');
                 if (in_array($sexo, ['m', 'f'])) {
                      $fillableUpdates['genero'] = $sexo;
                 } elseif (in_array($sexo, ['masculino', 'feminino'])) {
@@ -2748,7 +2749,11 @@ class MatriculaController extends Controller
             $ret['exec'] = false;
             $ret['mens'] = 'Erro ao gerar os contratos de periodos';
         }
-        $ret['exec'] = true;
+        $ret['exec'] = !empty($contratos_pdf);
+        $ret['quantidade_contratos'] = count($contratos_pdf);
+        if (!$ret['exec'] && empty($ret['mens'])) {
+            $ret['mens'] = 'Nenhum contrato PDF foi gerado para esta matrícula.';
+        }
         $ret['contratos_pdf'] = $contratos_pdf;
         return $ret;
     }
@@ -2975,6 +2980,41 @@ class MatriculaController extends Controller
             $ret['exec'] = false;
             $ret['mens'] = 'Erro ao gerar os contratos do responsável';
         }
+
+        return response()->json($ret);
+    }
+
+    /**
+     * testar_envio_link_assinatura_zapguru
+     * pt-BR: Dispara manualmente o envio dos links de assinatura para o Zapguru,
+     * reutilizando o mesmo método usado ao final do fluxo `send_to_zapSing()`.
+     */
+    public function testar_envio_link_assinatura_zapguru(Request $request, $id)
+    {
+        $dm = $this->dm($id);
+        if (!$dm || !isset($dm['id'])) {
+            return response()->json([
+                'exec' => false,
+                'mens' => 'Matrícula não encontrada para testar o envio do link de assinatura.',
+            ], 404);
+        }
+
+        $tk_periodo = (string)($request->input('tk_periodo') ?? '');
+        $ret = (new ZapsingController())->enviar_link_assinatura($id, $tk_periodo);
+
+        if (!is_array($ret)) {
+            $ret = [
+                'exec' => false,
+                'mens' => 'A integração retornou uma resposta inválida ao testar o envio do link.',
+                'response' => $ret,
+            ];
+        }
+
+        \Log::info('testar_envio_link_assinatura_zapguru:', [
+            'id_matricula' => $id,
+            'tk_periodo' => $tk_periodo,
+            'response' => $ret,
+        ]);
 
         return response()->json($ret);
     }

@@ -110,6 +110,12 @@ export default function SiteComponentsList() {
   // Navegação atualizada para novo prefixo
   const goToCreate = () => navigate('/admin/site/conteudo-site/create');
   const goToEdit = (id: string) => navigate(`/admin/site/conteudo-site/${id}/edit`);
+  /**
+   * handleRowDoubleClick
+   * pt-BR: Abre a tela de edição ao dar duplo clique em uma linha da tabela.
+   * en-US: Opens the edit screen when the user double-clicks a table row.
+   */
+  const handleRowDoubleClick = (id: string) => goToEdit(id);
   const handleDuplicate = (id: string) => {
     duplicateMutation.mutate(id, {
       onSuccess: (created) => {
@@ -207,7 +213,11 @@ export default function SiteComponentsList() {
           </TableHeader>
           <TableBody>
             {(resp?.data ?? []).map((item: ComponentRecord) => (
-              <TableRow key={item.id}>
+              <TableRow
+                key={item.id}
+                className="cursor-pointer"
+                onDoubleClick={() => handleRowDoubleClick(String(item.id))}
+              >
                 <TableCell className="font-mono">{item.id}</TableCell>
                 <TableCell>{item.nome ?? '-'}</TableCell>
                 <TableCell>{item.short_code ?? '-'}</TableCell>

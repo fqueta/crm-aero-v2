@@ -165,6 +165,45 @@ function renderPayloadSummary(log: ProposalEventLog) {
   const payload = log?.payload;
   if (!payload || typeof payload !== 'object') return null;
 
+  if (log.action === 'contratos_generated') {
+    const responsePayload = (payload?.response_payload && typeof payload.response_payload === 'object')
+      ? payload.response_payload as Record<string, unknown>
+      : payload;
+    const contracts = Array.isArray(responsePayload?.contratos_pdf) ? responsePayload.contratos_pdf : [];
+    const quantityFromPayload = responsePayload?.quantidade_contratos;
+    const quantity = Number(quantityFromPayload ?? contracts.length ?? 0);
+    const contractNames = contracts
+      .map((contract) => {
+        if (!contract || typeof contract !== 'object') return null;
+        const item = contract as Record<string, unknown>;
+        return String(item.nome_contrato || item.nome_arquivo || item.url || item.url_pdf || '').trim() || null;
+      })
+      .filter((name): name is string => Boolean(name));
+
+    if (!quantity) return null;
+
+    return (
+      <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+        <div>
+          <span className="font-semibold text-foreground">Quantidade de contratos:</span>{' '}
+          {quantity}
+        </div>
+        {contractNames.length > 0 && (
+          <div className="space-y-1">
+            <span className="font-semibold text-foreground">Contratos:</span>
+            <div className="space-y-1">
+              {contractNames.map((name, index) => (
+                <div key={`${name}-${index}`} className="truncate" title={name}>
+                  {index + 1}. {name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (log.action === 'status_changed') {
     const fromLabel = payload?.from_status_label || payload?.from_status;
     const toLabel = payload?.to_status_label || payload?.to_status;

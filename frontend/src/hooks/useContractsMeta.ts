@@ -89,10 +89,10 @@ function extractPdfs(raw: unknown, fallbackName: string): PdfItem[] {
 
   const items = toArray(raw);
   return items
-    .filter((item: any) => item?.url)
+    .filter((item: any) => item?.url || item?.url_pdf)
     .map((item: any) => ({
       name: item.nome_contrato || item.nome_arquivo || fallbackName,
-      url: item.url,
+      url: item.url || item.url_pdf,
       original: item,
     }));
 }
@@ -138,10 +138,10 @@ export function useContractsMeta(meta: any): ContractsMetaResult {
     const propostaPdfs = extractPdfs(meta?.proposta_pdf, 'Proposta Comercial (PDF)');
     const rawContratos = toArray(meta?.contrato_pdf);
     const contratoPdfs = rawContratos
-      .filter((item: any) => item?.url)
+      .filter((item: any) => item?.url || item?.url_pdf)
       .map((item: any) => ({
         name: item.nome_contrato || item.nome_arquivo || 'Contrato',
-        url: item.url,
+        url: item.url || item.url_pdf,
         original: item,
       }));
 

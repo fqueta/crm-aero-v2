@@ -1674,12 +1674,15 @@ export default function ProposalsEdit() {
 
   /**
    * handleView
-   * pt-BR: Abre a visualização da proposta em uma nova aba.
-   * en-US: Opens the proposal view in a new tab.
+   * pt-BR: Abre a visualização da proposta com recarga completa da rota
+   *        para garantir dados atualizados em toda abertura.
+   * en-US: Opens the proposal view with a full route reload to guarantee
+   *        fresh data every time the page is opened.
    */
   function handleView() {
     if (id) {
-      navigate(`/admin/sales/proposals/view/${id}`);
+      const viewUrl = `/admin/sales/proposals/view/${id}?refresh=${Date.now()}`;
+      window.location.assign(viewUrl);
     }
   }
 

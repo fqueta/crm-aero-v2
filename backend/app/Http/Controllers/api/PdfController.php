@@ -814,6 +814,18 @@ class PdfController extends Controller
         $disk = Storage::disk('public');
         $relative = $fileInfo['relative'];
 
+        // #region debug-point proposal-persist-start
+        \Log::info('proposal_generation.persist.start', [
+            'matricula_id' => $matricula['id'] ?? null,
+            'relative' => $relative,
+            'absolute' => $fileInfo['absolute'] ?? null,
+            'exists_before_persist' => $disk->exists($relative),
+            'engine' => $config['engine'] ?? null,
+            'force' => $config['force'] ?? null,
+            'no_store' => $config['no_store'] ?? null,
+        ]);
+        // #endregion debug-point proposal-persist-start
+
         $mime = 'application/pdf';
         $size = $disk->exists($relative) ? $disk->size($relative) : null;
 
@@ -835,6 +847,16 @@ class PdfController extends Controller
         $publicUrl = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
         $publicUrl = rtrim((string)$publicUrl, ", \t\n\r\0\x0B");
         $saveLink = Qlib::update_matriculameta($matricula['id'], 'proposta_pdf', $publicUrl);
+
+        // #region debug-point proposal-persist-success
+        \Log::info('proposal_generation.persist.success', [
+            'matricula_id' => $matricula['id'] ?? null,
+            'relative' => $relative,
+            'public_url' => $publicUrl,
+            'save_link' => $saveLink,
+            'file_size' => $size,
+        ]);
+        // #endregion debug-point proposal-persist-success
 
         if (class_exists('App\Models\EventLog')) {
             try {
@@ -893,6 +915,20 @@ class PdfController extends Controller
         $matricula = (new MatriculaController)->dm($id);
         $config = $this->getMatriculaPdfConfig($request);
 
+        // #region debug-point proposal-controller-start
+        \Log::info('proposal_generation.controller.start', [
+            'matricula_id' => $id,
+            'config' => [
+                'engine' => $config['engine'] ?? null,
+                'force' => $config['force'] ?? null,
+                'no_store' => $config['no_store'] ?? null,
+                'fast_dev' => $config['fast_dev'] ?? null,
+                'skip_extra_pages' => $config['skip_extra_pages'] ?? null,
+            ],
+            'request_query' => $request->query(),
+        ]);
+        // #endregion debug-point proposal-controller-start
+
         $viewData = $this->prepareMatriculaViewData($request, $matricula, $config);
         $htmlData = $this->renderMatriculaHtml($viewData, $config['engine']);
         if ($request->boolean('debug_html')) {
@@ -905,6 +941,16 @@ class PdfController extends Controller
 
         $shouldGenerate = $this->shouldGenerateMatriculaPdf($fileInfo['relative'], $config);
 
+        // #region debug-point proposal-controller-file
+        \Log::info('proposal_generation.controller.file', [
+            'matricula_id' => $id,
+            'relative' => $fileInfo['relative'] ?? null,
+            'absolute' => $fileInfo['absolute'] ?? null,
+            'should_generate' => $shouldGenerate,
+            'exists_before_generation' => Storage::disk('public')->exists($fileInfo['relative']),
+        ]);
+        // #endregion debug-point proposal-controller-file
+
         if ($shouldGenerate && $config['force'] && Storage::disk('public')->exists($fileInfo['relative'])) {
             try { Storage::disk('public')->delete($fileInfo['relative']); } catch (\Throwable $e) {}
         }
@@ -912,6 +958,13 @@ class PdfController extends Controller
         if ($shouldGenerate) {
             $pdfResponse = $this->engineGeneratePdf($config, $htmlData, $fileInfo, $matricula);
             if ($pdfResponse !== null) {
+                // #region debug-point proposal-controller-engine-response
+                \Log::info('proposal_generation.controller.engine_response', [
+                    'matricula_id' => $id,
+                    'response_type' => is_object($pdfResponse) ? get_class($pdfResponse) : gettype($pdfResponse),
+                    'status_code' => method_exists($pdfResponse, 'getStatusCode') ? $pdfResponse->getStatusCode() : null,
+                ]);
+                // #endregion debug-point proposal-controller-engine-response
                 return $pdfResponse;
             }
         }
@@ -924,6 +977,51 @@ class PdfController extends Controller
             'message' => 'Falha ao retornar o preview do PDF.',
             'error' => 'A engine de PDF nao devolveu um arquivo inline para visualizacao.',
         ], 500);
+    }
+
+    /**
+     * Gera o PDF da proposta para uma matrícula específica validando o cliente informado
+     * e redireciona o administrador para a URL pública do arquivo gerado.
+     * EN: Generates the proposal PDF for a specific enrollment validating the informed
+     * client and redirects the administrator to the generated public file URL.
+     */
+    public function adminProposalByClientAndEnrollment(Request $request, string $clientId, string $matriculaId)
+    {
+        $matricula = Matricula::query()
+            ->select('id', 'id_cliente')
+            ->where('id', $matriculaId)
+            ->first();
+
+        if (!$matricula || (string)$matricula->id_cliente !== (string)$clientId) {
+            return response()->json([
+                'message' => 'Matrícula não encontrada para o cliente informado.',
+                'client_id' => $clientId,
+                'matricula_id' => $matriculaId,
+            ], 404);
+        }
+
+        $generationRequest = Request::create(
+            $request->path(),
+            'GET',
+            array_merge($request->query(), [
+                'force' => true,
+                'no_store' => false,
+            ])
+        );
+        $generationRequest->setUserResolver(fn () => $request->user());
+
+        $response = $this->matricula($generationRequest, $matriculaId);
+
+        if ($response instanceof \Illuminate\Http\JsonResponse) {
+            $payload = $response->getData(true);
+            $generatedUrl = data_get($payload, 'data.url');
+
+            if (!empty($generatedUrl)) {
+                return redirect()->away((string)$generatedUrl);
+            }
+        }
+
+        return $response;
     }
     /**
      * Converte HTML em PDF e salva no disco público.
