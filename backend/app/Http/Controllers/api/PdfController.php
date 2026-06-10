@@ -359,7 +359,9 @@ class PdfController extends Controller
         $shortcode = ($matricula['curso_tipo'] ?? null) == 2
             ? 'fundo-proposta-pratico'
             : 'fundo-proposta-teorico';
-
+        if($matricula['curso_tipo']==4){
+            $shortcode = 'fundo-proposta-plano';
+        }
         $galerias = Qlib::get_post_by_shortcode($shortcode, $matricula['id_curso']);
         $listaPaginas = [];
         // Normaliza o retorno de Qlib
@@ -850,7 +852,6 @@ class PdfController extends Controller
         $headerHtml = $htmlData['header'];
         $footerHtml = $htmlData['footer'];
         $bodyHtml = $htmlData['body'];
-
         /** @var \Barryvdh\Snappy\PdfWrapper $pdf */
         $pdf = app('snappy.pdf.wrapper');
         $pdf->loadHTML($bodyHtml)
@@ -888,7 +889,7 @@ class PdfController extends Controller
         if (trim((string)$footerHtml) !== '') {
             $pdf->setOption('footer-html', $footerHtml);
         }
-
+        // dd($pdf->getOptions(),$config);
         if ($config['no_store']) {
             return $pdf->inline($fileInfo['filename']);
         } else {

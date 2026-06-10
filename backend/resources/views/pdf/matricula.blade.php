@@ -325,7 +325,7 @@
                     </div>
                 @elseif($idx === 1)
                     @if($pdf_show_course_name ?? true)
-                    <div style="position: absolute; top: 18px; right: 28px; color: #fff; font-size: 24px; font-weight: 800; text-align: right; text-transform: uppercase; z-index: 50;">
+                    <div style="position: absolute; top: 15px; right: 28px; width: 65%; color: #fff; font-size: 18px; line-height: 1.2; font-weight: 800; text-align: right; text-transform: uppercase; z-index: 50;">
                         {{ $curso ?? '' }}
                     </div>
                     @endif
