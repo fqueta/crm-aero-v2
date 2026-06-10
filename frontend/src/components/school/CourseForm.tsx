@@ -297,6 +297,7 @@ export function CourseForm({
         pdf_show_budget: z.boolean().optional(),
         pdf_show_notes: z.boolean().optional(),
         pdf_show_payment: z.boolean().optional(),
+        pdf_show_course_name: z.boolean().optional(),
     }).optional(),
   });
 
@@ -336,6 +337,7 @@ export function CourseForm({
         pdf_show_budget: true,
         pdf_show_notes: true,
         pdf_show_payment: true,
+        pdf_show_course_name: true,
       },
       inscricao: '0,00',
       valor: '0,00',
@@ -562,6 +564,7 @@ export function CourseForm({
         pdf_show_budget: c.config?.pdf_show_budget ?? true,
         pdf_show_notes: c.config?.pdf_show_notes ?? true,
         pdf_show_payment: c.config?.pdf_show_payment ?? true,
+        pdf_show_course_name: c.config?.pdf_show_course_name ?? true,
       },
       aeronaves: c.aeronaves ?? [],
       modulos: c.modulos ?? [],
@@ -1530,6 +1533,7 @@ export function CourseForm({
                   { key: 'pdf_show_budget', label: 'Orçamento (módulos, taxas, totais)' },
                   { key: 'pdf_show_notes', label: 'Observações' },
                   { key: 'pdf_show_payment', label: 'Parcelamento' },
+                  { key: 'pdf_show_course_name', label: 'Nome do curso no cabeçalho' },
                 ].map((page) => (
                   <div
                     key={page.key}

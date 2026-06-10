@@ -96,6 +96,11 @@ export interface CourseConfig {
   pdf_show_budget?: boolean;
   pdf_show_notes?: boolean;
   pdf_show_payment?: boolean;
+  /**
+   * pdf_show_course_name
+   * pt-BR: Controla se o nome do curso aparece no cabeçalho do PDF.
+   */
+  pdf_show_course_name?: boolean;
 }
 
 /**

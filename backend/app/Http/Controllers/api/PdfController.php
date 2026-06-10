@@ -654,6 +654,7 @@ class PdfController extends Controller
             'pdf_show_budget' => !isset($cursoPdfConfig['pdf_show_budget']) || $cursoPdfConfig['pdf_show_budget'] !== false,
             'pdf_show_notes'  => !isset($cursoPdfConfig['pdf_show_notes'])  || $cursoPdfConfig['pdf_show_notes'] !== false,
             'pdf_show_payment'=> !isset($cursoPdfConfig['pdf_show_payment'])|| $cursoPdfConfig['pdf_show_payment'] !== false,
+            'pdf_show_course_name'=> !isset($cursoPdfConfig['pdf_show_course_name'])|| $cursoPdfConfig['pdf_show_course_name'] !== false,
         ];
     }
 

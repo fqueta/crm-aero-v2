@@ -324,8 +324,12 @@
                         @endif
                     </div>
                 @elseif($idx === 1)
+                    @if($pdf_show_course_name ?? true)
+                    <div style="position: absolute; top: 18px; right: 28px; color: #fff; font-size: 24px; font-weight: 800; text-align: right; text-transform: uppercase; z-index: 50;">
+                        {{ $curso ?? '' }}
+                    </div>
+                    @endif
                     <div class="budget-auto-shrink cover-content-2" style="margin-top: 15mm; overflow: hidden;">
-                        <!-- HEADER BAR REMOVIDO -->
 
                         @php
                             $modulos = $orc['modulos'] ?? [];
