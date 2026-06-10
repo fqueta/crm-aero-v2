@@ -624,6 +624,22 @@ class PdfController extends Controller
         $cursoPdfConfig = $matricula['curso']['config'] ?? [];
         if (is_string($cursoPdfConfig)) $cursoPdfConfig = json_decode($cursoPdfConfig, true) ?: [];
 
+        $orcArr = is_array($matricula['orc'] ?? null) ? $matricula['orc'] : [];
+        $parcelamento = $orcArr['parcelamento'] ?? [];
+
+        // Check if there is actual content for Notes (Observações)
+        $obsProposta = $cursoPdfConfig['obs_proposta'] ?? null;
+        $hasNotesContent = !empty(trim(strip_tags((string)$obsProposta)));
+
+        // Check if there is actual content for Payment (Parcelamento)
+        $linhasParcelamento = $parcelamento['linhas'] ?? [];
+        $textoDesconto = $parcelamento['texto_desconto'] ?? ($parcelamento['texto_preview_html'] ?? '');
+        $hasPaymentContent = !empty($linhasParcelamento) || !empty(trim(strip_tags((string)$textoDesconto)));
+
+        // Combine config flag with content check
+        $pdfShowNotes = (!isset($cursoPdfConfig['pdf_show_notes']) || $cursoPdfConfig['pdf_show_notes'] !== false) && $hasNotesContent;
+        $pdfShowPayment = (!isset($cursoPdfConfig['pdf_show_payment']) || $cursoPdfConfig['pdf_show_payment'] !== false) && $hasPaymentContent;
+
         return [
             'cliente_nome' => $matricula['cliente']['name'] ?? ($matricula['cliente']['nome'] ?? ''),
             'cliente_email' => $matricula['cliente']['email'] ?? '',
@@ -654,8 +670,8 @@ class PdfController extends Controller
             'matricula' => $matricula,
             'pdf_show_cover'  => !isset($cursoPdfConfig['pdf_show_cover'])  || $cursoPdfConfig['pdf_show_cover'] !== false,
             'pdf_show_budget' => !isset($cursoPdfConfig['pdf_show_budget']) || $cursoPdfConfig['pdf_show_budget'] !== false,
-            'pdf_show_notes'  => !isset($cursoPdfConfig['pdf_show_notes'])  || $cursoPdfConfig['pdf_show_notes'] !== false,
-            'pdf_show_payment'=> !isset($cursoPdfConfig['pdf_show_payment'])|| $cursoPdfConfig['pdf_show_payment'] !== false,
+            'pdf_show_notes'  => $pdfShowNotes,
+            'pdf_show_payment'=> $pdfShowPayment,
             'pdf_show_course_name'=> !isset($cursoPdfConfig['pdf_show_course_name'])|| $cursoPdfConfig['pdf_show_course_name'] !== false,
         ];
     }
