@@ -11,6 +11,7 @@ import { Settings, Save, Palette, Link } from "lucide-react";
 import { systemSettingsService, AdvancedSystemSettings } from "@/services/systemSettingsService";
 import { useApiOptions } from "@/hooks/useApiOptions";
 import { useFunnelsList, useStagesList } from "@/hooks/funnels";
+import { ImageUpload } from "@/components/lib/ImageUpload";
 
 /**
  * Página de configurações do sistema
@@ -115,6 +116,8 @@ export default function SystemSettings() {
       theme: "default",
       compactMode: true,
       showAnimations: true,
+      logoUrl: "",
+      faviconUrl: "",
     };
   });
 
@@ -249,6 +252,17 @@ export default function SystemSettings() {
     } else {
       document.body.classList.remove('no-animations');
     }
+    
+    // Aplicar favicon
+    if (settings.faviconUrl) {
+      let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = settings.faviconUrl;
+    }
   };
 
   /**
@@ -257,6 +271,7 @@ export default function SystemSettings() {
   const handleSaveAppearanceSettings = () => {
     localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
     applyAppearanceSettings(appearanceSettings);
+    window.dispatchEvent(new Event('appearanceSettingsUpdated'));
     toast.success('Configurações de aparência salvas!');
   };
 
@@ -666,6 +681,47 @@ export default function SystemSettings() {
                 <Button onClick={handleSaveAppearanceSettings} className="flex items-center space-x-2">
                   <Save className="h-4 w-4" />
                   <span>Salvar Aparência</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card de Identidade Visual */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Palette className="h-5 w-5" />
+                <span>Identidade Visual</span>
+              </CardTitle>
+              <CardDescription>
+                Faça o upload da logo e do ícone do navegador (favicon) para a plataforma.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <ImageUpload
+                  name="logoUrl"
+                  label="Logo do Sistema (Sidebar)"
+                  value={appearanceSettings.logoUrl}
+                  onChange={(val) => handleAppearanceChange('logoUrl', val || '')}
+                  maxSize={2}
+                  acceptedTypes={['image/jpeg', 'image/png', 'image/svg+xml', 'image/webp']}
+                />
+                
+                <ImageUpload
+                  name="faviconUrl"
+                  label="Ícone do Navegador (Favicon)"
+                  value={appearanceSettings.faviconUrl}
+                  onChange={(val) => handleAppearanceChange('faviconUrl', val || '')}
+                  maxSize={1}
+                  acceptedTypes={['image/jpeg', 'image/png', 'image/svg+xml', 'image/x-icon']}
+                />
+              </div>
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button onClick={handleSaveAppearanceSettings} className="flex items-center space-x-2">
+                  <Save className="h-4 w-4" />
+                  <span>Salvar Identidade Visual</span>
                 </Button>
               </div>
             </CardContent>

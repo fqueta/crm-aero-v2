@@ -186,6 +186,46 @@ export function AppSidebar() {
       return next;
     });
   };
+  const [logoUrl, setLogoUrl] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem('appearanceSettings');
+      if (saved) {
+        const settings = JSON.parse(saved);
+        if (settings.logoUrl) return settings.logoUrl;
+      }
+    } catch {}
+    return "/aeroclube-logo.svg";
+  });
+
+  React.useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'appearanceSettings') {
+        try {
+          const settings = JSON.parse(e.newValue || '{}');
+          setLogoUrl(settings.logoUrl || "/aeroclube-logo.svg");
+        } catch {}
+      }
+    };
+    
+    const handleCustomEvent = () => {
+      try {
+        const saved = localStorage.getItem('appearanceSettings');
+        if (saved) {
+          const settings = JSON.parse(saved);
+          setLogoUrl(settings.logoUrl || "/aeroclube-logo.svg");
+        }
+      } catch {}
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('appearanceSettingsUpdated', handleCustomEvent);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('appearanceSettingsUpdated', handleCustomEvent);
+    };
+  }, []);
+
   return (
     <Sidebar className={collapsed ? "w-14" : "w-64"} collapsible="icon">
       {/* Rail para indicar área do menu quando colapsado */}
@@ -195,10 +235,10 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-border print:hidden">
         <Link to="/admin/aero-dashboard" className="flex items-center gap-2 px-4 py-3">
           <img
-            src="/aeroclube-logo.svg"
+            src={logoUrl}
             onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/placeholder.svg"; }}
             alt="Logo"
-            className="h-6 w-auto"
+            className="h-6 w-auto max-w-[150px] object-contain"
           />
           {!collapsed && (
             <div className="flex flex-col">

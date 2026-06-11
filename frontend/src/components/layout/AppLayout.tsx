@@ -84,15 +84,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           <header className="sticky top-0 z-40 h-14 border-b border-border bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-4 lg:px-6">
             <div className="flex items-center gap-4">
               <SidebarTrigger data-lov-name="SidebarTrigger" />
-              <div className="hidden md:flex items-center gap-2">
-                <img
-                  src="/aeroclube-logo.svg"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/placeholder.svg"; }}
-                  alt="Logo"
-                  className="h-6 w-auto"
-                />
-                <span className="hidden lg:block text-sm text-muted-foreground">CRM • Aeroclube</span>
-              </div>
             </div>
 
             <div className="flex items-center gap-2">
