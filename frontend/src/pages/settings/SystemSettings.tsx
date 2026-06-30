@@ -12,6 +12,7 @@ import { systemSettingsService, AdvancedSystemSettings } from "@/services/system
 import { useApiOptions } from "@/hooks/useApiOptions";
 import { useFunnelsList, useStagesList } from "@/hooks/funnels";
 import { ImageUpload } from "@/components/lib/ImageUpload";
+import { useTheme } from "@/contexts/ThemeContext";
 
 /**
  * Página de configurações do sistema
@@ -19,6 +20,8 @@ import { ImageUpload } from "@/components/lib/ImageUpload";
  * Cada aba possui cards com diferentes tipos de configurações
  */
 export default function SystemSettings() {
+  const { fetchAndApplyApiThemeSettings } = useTheme();
+  
   // Estado da aba ativa
   const [activeTab, setActiveTab] = useState("basic");
   
@@ -340,6 +343,7 @@ export default function SystemSettings() {
       }
       const success = await saveMultipleOptions(dataToSave);
       if (success) {
+        await fetchAndApplyApiThemeSettings();
         toast.success('Configurações de funcionalidade salvas com sucesso!');
       } else {
         toast.error('Erro ao salvar configurações de funcionalidade');

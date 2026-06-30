@@ -84,7 +84,7 @@ class MatriculaController extends Controller
         $query = Matricula::join('cursos', 'matriculas.id_curso', '=', 'cursos.id')
             ->leftJoin('turmas', 'matriculas.id_turma', '=', 'turmas.id')
             ->leftJoin('users', 'matriculas.id_cliente', '=', 'users.id')
-            ->leftJoin('posts', 'matriculas.situacao_id', '=', 'posts.id')
+            ->leftJoin('posts', 'matriculas.situacao_id', '=', 'posts.ID')
            ->select('matriculas.*', 'cursos.nome as curso_nome','cursos.tipo as curso_tipo', 'turmas.nome as turma_nome', 'users.name as cliente_nome', 'posts.post_title as situacao')
             ->orderBy($orderByQualified, $order);
 
@@ -121,6 +121,12 @@ class MatriculaController extends Controller
         }
         if ($stageFilter !== null) {
             $query->where('matriculas.stage_id', $stageFilter);
+        }
+
+        // Filtro por Período (para Cursos do tipo 4 - Planos de Formação)
+        if ($request->filled('periodo_id')) {
+            $periodoId = $request->input('periodo_id');
+            $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id')) = ?", [(string) $periodoId]);
         }
 
         // Filtro genérico por descrição da matrícula
@@ -2030,6 +2036,9 @@ class MatriculaController extends Controller
      */
     private function mapClientNodeOutput($client): array
     {
+        if (is_null($client)) {
+            return [];
+        }
         // Base em array para manipulação
         $data = is_array($client) ? $client : $client->toArray();
 

@@ -50,6 +50,7 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
           <TableHead>ID</TableHead>
           <TableHead>Cliente</TableHead>
           <TableHead>Curso</TableHead>
+          <TableHead>Período (PF)</TableHead>
           <TableHead>Turma</TableHead>
           <TableHead>Situação</TableHead>
           <TableHead>Valor (BRL)</TableHead>
@@ -88,6 +89,17 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
             <TableCell className="font-mono text-xs">{String(enroll.id)}</TableCell>
             <TableCell>{enroll.cliente_nome || enroll.student_name || enroll.name || '-'}</TableCell>
             <TableCell>{enroll.curso_nome || enroll.course_name || '-'}</TableCell>
+            <TableCell className="text-sm text-muted-foreground">
+              {(() => {
+                if (String(enroll.curso_tipo) !== '4') return '-';
+                try {
+                  const config = typeof enroll.config === 'string' ? JSON.parse(enroll.config) : (enroll.config || {});
+                  return config?.orc?.modulos?.[0]?.nome || '-';
+                } catch {
+                  return '-';
+                }
+              })()}
+            </TableCell>
             <TableCell className="text-sm text-muted-foreground">{enroll.turma_nome ?? enroll?.turma?.nome ?? '-'}</TableCell>
             <TableCell>
               {enroll.situacao || enroll.status || enroll?.config?.situacao ? (

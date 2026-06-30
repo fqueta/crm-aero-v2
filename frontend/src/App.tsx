@@ -1,4 +1,6 @@
 import { Toaster } from "@/components/ui/toaster";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { PageTracker } from "@/components/analytics/PageTracker";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -154,9 +156,11 @@ const App = () => {
         <AuthProvider>
           <UserPrefsProvider>
             <TooltipProvider>
+            <GoogleAnalytics />
             <Toaster />
             <Sonner />
           <BrowserRouter>
+            <PageTracker />
             <Routes>
               {/* Rotas públicas */}
               <Route path="/"  element={<LandingPage linkLoja={link_loja} />} />

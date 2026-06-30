@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 
 interface ThemeContextType {
   applyThemeSettings: () => void;
+  fetchAndApplyApiThemeSettings: () => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -130,13 +131,60 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       }
       
     } catch (error) {
-      console.error('Erro ao aplicar configurações de tema:', error);
+      console.error('Erro ao aplicar configurações de tema locais:', error);
+    }
+  };
+
+  /**
+   * Busca e aplica configurações de tema diretamente da API (banco de dados)
+   */
+  const fetchAndApplyApiThemeSettings = async () => {
+    try {
+      // Import dinâmico para não quebrar a ordem de imports no topo (ou importar GenericApiService)
+      const { GenericApiService } = await import('@/services/GenericApiService');
+      const apiService = new GenericApiService('/options');
+      const response = await apiService.get<any>('/options/all');
+      
+      if (response && response.data && response.data.data) {
+        const options = response.data.data;
+        const getVal = (key: string) => {
+          const opt = options.find((o: any) => o.url === key);
+          return opt ? opt.value : null;
+        };
+
+        const primary = getVal('app_primary_color');
+        const primaryText = getVal('app_primary_text_color');
+        const secondary = getVal('app_secondary_color');
+        const secondaryText = getVal('app_secondary_text_color');
+        const hover = getVal('app_hover_color');
+        const isDark = String(getVal('app_dark_mode_default')).toLowerCase() === 'true';
+
+        // Tema escuro (força baseado na API)
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+
+        // Variáveis de cor CSS
+        if (primary) document.documentElement.style.setProperty('--primary', hexToHsl(primary));
+        if (primaryText) document.documentElement.style.setProperty('--primary-foreground', hexToHsl(primaryText));
+        if (secondary) document.documentElement.style.setProperty('--secondary', hexToHsl(secondary));
+        if (secondaryText) document.documentElement.style.setProperty('--secondary-foreground', hexToHsl(secondaryText));
+        if (hover) {
+          document.documentElement.style.setProperty('--accent', hexToHsl(hover));
+          // Algumas partes usam muted para hover, também podemos alinhar
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar configurações de tema da API:', error);
     }
   };
   
   // Aplica as configurações quando o componente é montado
   useEffect(() => {
-    applyThemeSettings();
+    applyThemeSettings(); // local fallback
+    fetchAndApplyApiThemeSettings(); // overriding with DB
   }, []);
   
   // Escuta mudanças no localStorage para aplicar configurações em tempo real
@@ -155,7 +203,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   }, []);
   
   const value = {
-    applyThemeSettings
+    applyThemeSettings,
+    fetchAndApplyApiThemeSettings
   };
   
   return (

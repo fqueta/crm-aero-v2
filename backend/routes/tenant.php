@@ -462,6 +462,9 @@ Route::name('api.')->prefix('api/v1')->middleware([
         ]]);
         Route::post('dashboard-metrics/import-aeroclube', [MetricasController::class, 'importFromAeroclube'])->name('dashboard-metrics.import-aeroclube');
 
+        // Rota de Importação
+        Route::post('import', [\App\Http\Controllers\api\ImportController::class, 'importData'])->name('import.data');
+
         // Route::apiResource('clients', ClientController::class,['parameters' => [
         //     'clients' => 'id'
         // ]]);

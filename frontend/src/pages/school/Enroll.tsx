@@ -41,6 +41,7 @@ import { useTurmasList } from '@/hooks/turmas';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useEnrollmentsList, useDeleteEnrollment, useUpdateEnrollment } from '@/hooks/enrollments';
 import { useEnrollmentSituationsList } from '@/hooks/enrollmentSituations';
+import { usePeriodsList } from '@/hooks/periods';
 import { toast } from '@/hooks/use-toast';
 import EnrollmentTable from '@/components/enrollments/EnrollmentTable';
 
@@ -73,8 +74,10 @@ export default function Enroll() {
   // Filtros via Combobox
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
   const [courseSearch, setCourseSearch] = useState('');
   const [classSearch, setClassSearch] = useState('');
+  const [periodSearch, setPeriodSearch] = useState('');
   /**
    * selectedSituationId
    * pt-BR: ID da situação para filtro de listagem. Inicial vazio (todas as situações).
@@ -163,10 +166,12 @@ export default function Enroll() {
     setSelectedClassId('');
     setCourseSearch('');
     setClassSearch('');
+    setPeriodSearch('');
     setStudentFilter('');
     setSearch('');
     // Reset para visualizar todas as situações
     setSelectedSituationId('');
+    setSelectedPeriodId('');
     setPage(1);
   };
 
@@ -181,11 +186,12 @@ export default function Enroll() {
     search: debouncedSearch || undefined,
     id_curso: selectedCourseId ? Number(selectedCourseId) : undefined,
     id_turma: selectedClassId ? Number(selectedClassId) : undefined,
+    periodo_id: selectedPeriodId ? Number(selectedPeriodId) : undefined,
     student: studentFilter || undefined,
     // pt-BR: usa `situacao_id` ao invés de `situacao`
     // en-US: use `situacao_id` instead of `situacao`
     situacao_id: selectedSituationId || undefined,
-  }), [page, perPage, debouncedSearch, selectedCourseId, selectedClassId, studentFilter, selectedSituationId]);
+  }), [page, perPage, debouncedSearch, selectedCourseId, selectedClassId, selectedPeriodId, studentFilter, selectedSituationId]);
 
   /**
    * useEnrollmentsList
@@ -309,6 +315,18 @@ export default function Enroll() {
   const classItems = (classesQuery.data?.data || classesQuery.data?.items || []) as any[];
   const classOptions = useComboboxOptions(classItems, 'id', 'nome', undefined, (t: any) => String(t?.token || ''));
 
+  /**
+   * periodsQuery
+   * pt-BR: Lista de períodos para o combobox de filtros.
+   */
+  const periodsQuery = usePeriodsList({ page: 1, per_page: 200, search: periodSearch }, {
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const periodItems = (periodsQuery.data?.data || periodsQuery.data?.items || []) as any[];
+  const periodOptions = useComboboxOptions(periodItems, 'id', 'post_title', undefined);
+
   const enrollments = useMemo(() => enrollmentsResp?.data || enrollmentsResp?.items || [], [enrollmentsResp]);
   const currentPage = enrollmentsResp?.current_page ?? 1;
   const lastPage = enrollmentsResp?.last_page ?? 1;
@@ -334,6 +352,10 @@ export default function Enroll() {
     if (selectedClassId) {
       const className = (classItems.find((c: any) => String(c.id) === String(selectedClassId))?.nome) || 'Turma selecionada';
       parts.push(`Turma: ${className}`);
+    }
+    if (selectedPeriodId) {
+      const periodName = (periodItems.find((c: any) => String(c.id) === String(selectedPeriodId))?.post_title) || 'Período selecionado';
+      parts.push(`Período: ${periodName}`);
     }
     if (studentFilter?.trim()) {
       parts.push(`Aluno: ${studentFilter.trim()}`);
@@ -380,7 +402,7 @@ export default function Enroll() {
               <Filter className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Filtros</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
               {/* Situação (Select)
                  pt-BR: inicia vazio para visualizar todas as situações, exibindo o placeholder.
                  en-US: starts empty to show all situations; placeholder is visible. */}
@@ -440,6 +462,20 @@ export default function Enroll() {
                 searchTerm={classSearch}
                 debounceMs={250}
               />
+              {/* Período (Combobox) */}
+              <Combobox
+                options={periodOptions}
+                value={selectedPeriodId}
+                onValueChange={(val) => { setSelectedPeriodId(val); setPage(1); }}
+                placeholder="Período (PF)"
+                searchPlaceholder="Pesquisar período..."
+                emptyText={periodItems.length === 0 ? 'Nenhum período' : 'Digite para filtrar'}
+                disabled={periodsQuery.isLoading}
+                loading={periodsQuery.isLoading || periodsQuery.isFetching}
+                onSearch={setPeriodSearch}
+                searchTerm={periodSearch}
+                debounceMs={250}
+              />
               {/* Aluno (Input) */}
               <Input placeholder="Aluno" value={studentFilter} onChange={(e) => setStudentFilter(e.target.value)} />
             </div>
@@ -447,7 +483,7 @@ export default function Enroll() {
           {/* Legenda dos filtros aplicados */}
           <div className="mt-2 flex items-center justify-between">
             <span className="text-xs text-muted-foreground">{buildFiltersLegend()}</span>
-            {(selectedSituationId || selectedCourseId || selectedClassId || studentFilter || search) && (
+            {(selectedSituationId || selectedCourseId || selectedClassId || selectedPeriodId || studentFilter || search) && (
               <Button variant="ghost" size="sm" className="h-7 px-2" onClick={clearFilters}>
                 Limpar filtros e busca
               </Button>

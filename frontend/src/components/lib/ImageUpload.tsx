@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
 import { Upload, X, User, Camera } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -147,13 +147,13 @@ export function ImageUpload({
   };
 
   return (
-    <FormItem className={className}>
+    <div className={cn("space-y-2", className)}>
       {label && (
-        <FormLabel className="text-sm font-medium text-gray-700">
+        <Label className="text-sm font-medium text-gray-700">
           {label}
-        </FormLabel>
+        </Label>
       )}
-      <FormControl>
+      <div>
         <div className="space-y-4">
           {/* Preview da imagem */}
           {value && (
@@ -231,16 +231,14 @@ export function ImageUpload({
             value=""
           />
         </div>
-      </FormControl>
+      </div>
       
       {/* Mensagem de erro */}
       {error && (
-        <div className="text-sm text-red-600 mt-1">
+        <div className="text-sm font-medium text-destructive mt-1">
           {error}
         </div>
       )}
-      
-      <FormMessage />
-    </FormItem>
+    </div>
   );
 }

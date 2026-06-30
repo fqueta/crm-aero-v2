@@ -16,7 +16,17 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@lovable_dev" />
     <meta name="twitter:image" content="https://aeroclubejf.com.br/wp-content/uploads/2024/06/cropped-AEROCLUBE-DE-JUIZ-DE-FORA-270x270.png" />
+
+    <!-- Google Analytics 4 (gtag.js) — loaded only when VITE_GA_MEASUREMENT_ID is set -->
+    <script>
+      // Inline bootstrap: creates gtag/dataLayer early so calls before
+      // the async script arrives are queued instead of dropped.
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+    </script>
   </head>
+
 
   <body>
     <div id="root"></div>
