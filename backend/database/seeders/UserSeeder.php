@@ -44,7 +44,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Programador',
                 'email' => 'quetafernando1@gmail.com',
-                'password' => Hash::make('programador'),
+                'password' => Hash::make('programar'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
@@ -58,7 +58,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Programador sandbox',
                 'email' => 'suporte1@maisaqui.com.br',
-                'password' => Hash::make('sandbox'),
+                'password' => Hash::make('sandx'),
                 'celular' => '(32)99999-9999',
                 'status' => 'actived',
                 'verificado' => 'n',
@@ -75,7 +75,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Leandro Lopardi',
                 'email' => 'contato@aeroclubejf.com.br',
-                'password' => Hash::make('leandro'),
+                'password' => Hash::make('learo'),
                 'celular' => '(32)99148-0920',
                 'status' => 'actived',
                 'verificado' => 'n',
@@ -90,7 +90,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Monique Ribeiro',
                 'email' => 'monique@aeroclubejf.com.br',
-                'password' => Hash::make('monique'),
+                'password' => Hash::make('monue'),
                 'celular' => '(21)99572-9494',
                 'status' => 'actived',
                 'verificado' => 'n',
@@ -105,7 +105,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Maria Luiza da Silva Sanches',
                 'email' => 'luiza@aeroclubejf.com.br',
-                'password' => Hash::make('luiza'),
+                'password' => Hash::make('luza'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
@@ -134,7 +134,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Francis Oliveira',
                 'email' => 'fran@aeroclubejf.com.br',
-                'password' => Hash::make('fran'),
+                'password' => Hash::make('frn23'),
                 'celular' => '(32)99845-1557',
                 'status' => 'actived',
                 'verificado' => 'n',
@@ -149,7 +149,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Júlia Zanovello Borges',
                 'email' => 'julia@aeroclubejf.com.br',
-                'password' => Hash::make('julia'),
+                'password' => Hash::make('julia456'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
@@ -163,7 +163,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Gabriella Fernandes',
                 'email' => 'gabriela@aeroclubejf.com.br',
-                'password' => Hash::make('gabriella'),
+                'password' => Hash::make('gabriella97'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
@@ -177,7 +177,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Deborah Pacheco',
                 'email' => 'deborah@aeroclubejf.com.br',
-                'password' => Hash::make('deborah'),
+                'password' => Hash::make('deborah23'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
@@ -191,7 +191,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Assessoria Matgo',
                 'email' => 'diagnostico@assessoriamatgo.com',
-                'password' => Hash::make('matgo'),
+                'password' => Hash::make('mat1212go'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
@@ -207,7 +207,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Renan Coimbra',
                 'email' => 'renan@aeroclubejf.com.br',
-                'password' => Hash::make('renan'),
+                'password' => Hash::make('ren21an'),
                 'celular' => '(32)98855-2280',
                 'status' => 'actived',
                 'verificado' => 'n',
@@ -222,7 +222,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Rayane Moreira',
                 'email' => 'comercial04@aeroclubejf.com.br',
-                'password' => Hash::make('rayane'),
+                'password' => Hash::make('ray21ane'),
                 'celular' => '(32)99926-6912',
                 'status' => 'actived',
                 'verificado' => 'n',
@@ -237,7 +237,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Pedro Lucas de Sá Cunha',
                 'email' => 'pcunhq334@gmail.com',
-                'password' => Hash::make('pedro'),
+                'password' => Hash::make('ped1ro'),
                 'celular' => '(32)98442-8672',
                 'status' => 'actived',
                 'verificado' => 'n',
@@ -252,7 +252,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Igor Sell',
                 'email' => 'igsellr@gmail.com',
-                'password' => Hash::make('igor'),
+                'password' => Hash::make('igo22r'),
                 'celular' => '(32)98426-2973',
                 'status' => 'actived',
                 'verificado' => 'n',
@@ -267,7 +267,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Lenin Ferreira Francisco',
                 'email' => 'lenin@aeroclubejf.com.br',
-                'password' => Hash::make('lenin'),
+                'password' => Hash::make('len1in'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
@@ -283,7 +283,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Lazaro Pancoti',
                 'email' => 'lazaro@aeroclubejf.com.br',
-                'password' => Hash::make('lazaro'),
+                'password' => Hash::make('lazar21o'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
