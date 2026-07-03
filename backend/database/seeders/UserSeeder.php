@@ -59,7 +59,7 @@ class UserSeeder extends Seeder
                 'name' => 'Programador sandbox',
                 'email' => 'suporte1@maisaqui.com.br',
                 'password' => Hash::make('sandbox'),
-                'celular' => '(32)99164-8202',
+                'celular' => '(32)99999-9999',
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
