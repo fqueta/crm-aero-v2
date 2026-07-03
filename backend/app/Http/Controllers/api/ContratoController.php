@@ -316,10 +316,9 @@ class ContratoController extends Controller
      */
     public function destroy($id)
     {
-        $post = Post::ofType('contratos')->findOrFail($id);
-        $post->delete = 's';
-        $post->save();
-        return response()->json(['message' => 'Contrato movido para lixeira.']);
+        $post = Post::withoutGlobalScopes()->ofType('contratos')->findOrFail($id);
+        $post->delete();
+        return response()->json(['message' => 'Contrato excluído permanentemente.']);
     }
 
     /**
@@ -343,12 +342,13 @@ class ContratoController extends Controller
     }
 
     /**
-     * Restore a trashed contract (sets `delete` flag to 'n').
+     * Restore a trashed contract (sets `excluido` and `deletado` flags to 'n').
      */
     public function restore($id)
     {
-        $post = Post::withoutGlobalScopes()->ofType('contratos')->where('delete', 's')->findOrFail($id);
-        $post->delete = 'n';
+        $post = Post::withoutGlobalScopes()->ofType('contratos')->where('excluido', 's')->findOrFail($id);
+        $post->excluido = 'n';
+        $post->deletado = 'n';
         $post->save();
         return response()->json(['message' => 'Contrato restaurado com sucesso.']);
     }

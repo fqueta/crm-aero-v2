@@ -766,6 +766,40 @@ export function CourseForm({
     await periodsQuery.refetch();
   }
 
+  async function handleRemoveContractFromPeriod(periodId: string | number, contractId: string | number, currentContracts: (string | number)[]) {
+    if (!confirm('Deseja remover este contrato do período?')) return;
+    const nextIds = currentContracts.filter(id => String(id) !== String(contractId));
+    try {
+      await handleUpdatePeriodContracts(periodId, nextIds);
+      toast({ title: 'Sucesso', description: 'Contrato removido do período.' });
+    } catch (err: any) {
+      toast({ title: 'Erro', description: 'Erro ao remover contrato.', variant: 'destructive' });
+    }
+  }
+
+  async function handleClearPeriodContracts(periodId: string | number) {
+    if (!confirm('Deseja remover TODOS os contratos deste período?')) return;
+    try {
+      await handleUpdatePeriodContracts(periodId, []);
+      toast({ title: 'Sucesso', description: 'Todos os contratos foram removidos do período.' });
+    } catch (err: any) {
+      toast({ title: 'Erro', description: 'Erro ao limpar contratos.', variant: 'destructive' });
+    }
+  }
+
+  async function handleDeletePeriod(periodId: string | number) {
+    if (!confirm('Deseja realmente excluir este período?\n\nATENÇÃO: Os dados serão excluídos permanentemente.')) return;
+    try {
+      await periodsService.deletePeriod(periodId);
+      toast({ title: 'Sucesso', description: 'Período excluído com sucesso.' });
+      queryClient.invalidateQueries({ queryKey: ['periodos'] });
+      queryClient.invalidateQueries({ queryKey: ['periods'] });
+      await periodsQuery.refetch();
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message || 'Erro ao excluir período.', variant: 'destructive' });
+    }
+  }
+
   /**
    * restorePeriodViewport
    * pt-BR: Mantém o usuário próximo ao período atualizado, restaurando a rolagem
@@ -907,8 +941,31 @@ export function CourseForm({
                         <PencilLine className="mr-1 h-3 w-3" />
                         Editar contrato
                       </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleRemoveContractFromPeriod(period.id, contract.id, period.id_contratos || [])}
+                        title="Remover contrato deste período"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
                   ))}
+                  {getPeriodContracts(period).length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 self-center"
+                      onClick={() => handleClearPeriodContracts(period.id)}
+                      title="Remover todos os contratos deste período"
+                    >
+                      <Trash2 className="mr-1 h-3 w-3" />
+                      Remover todos
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground italic">Nenhum contrato vinculado a este período.</p>
@@ -937,6 +994,16 @@ export function CourseForm({
           >
             <PencilLine className="mr-1.5 h-3.5 w-3.5" />
             Editar
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => handleDeletePeriod(period.id)}
+            className="h-8 w-8 p-0 ml-1"
+            title="Excluir período"
+          >
+            <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </div>

@@ -353,4 +353,159 @@ class PeriodoController extends Controller
         }
         return response()->json(['message' => 'Período removido com sucesso']);
     }
+
+    /**
+     * enrolledStudents
+     * pt-BR: Lista alunos matriculados num período específico (tipo 4).
+     *        Usa JSON_EXTRACT em orc->modulos[0].id para identificar a matrícula do período.
+     *        Aceita parâmetro situacao_slug (ou situacao_id) para definir qual situação
+     *        representa "pronto para avançar".
+     * en-US: Lists students enrolled in a specific period (tipo 4).
+     *        Uses JSON_EXTRACT on orc->modulos[0].id to identify the period enrollment.
+     *        Accepts situacao_slug (or situacao_id) to define the "ready to advance" situation.
+     *
+     * @param  Request $request
+     * @param  int|string $id  ID do período
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function enrolledStudents(Request $request, $id)
+    {
+        // 1. Carrega o período
+        $periodo = Post::ofType('periodos')->findOrFail($id);
+        $idCurso = $periodo->config['id_curso'] ?? $periodo->post_parent ?? null;
+
+        // 2. Resolve critério de "pronto para avançar" (situação configurável)
+        $situacaoSlug = $request->input('situacao_slug', null);
+        $situacaoId   = $request->input('situacao_id', null);
+        $situacaoAvancar = null;
+
+        if ($situacaoSlug || $situacaoId) {
+            $sitQuery = DB::table('posts')->where('post_type', 'situacao_matricula');
+            if ($situacaoId) {
+                $sitQuery->where('ID', (int)$situacaoId);
+            } elseif ($situacaoSlug) {
+                $sitQuery->where('post_name', $situacaoSlug);
+            }
+            $sit = $sitQuery->first();
+            if ($sit) {
+                $situacaoAvancar = ['slug' => $sit->post_name, 'label' => $sit->post_title];
+                $situacaoSlug    = $sit->post_name; // garante o slug para comparação abaixo
+            }
+        }
+
+        // 3. Busca matrículas do período com dados do aluno e situação atual
+        $matriculasRaw = DB::table('matriculas')
+            ->leftJoin('users', 'matriculas.id_cliente', '=', 'users.id')
+            ->leftJoin('posts as sit', function ($join) {
+                $join->on('matriculas.situacao_id', '=', 'sit.ID')
+                     ->where('sit.post_type', '=', 'situacao_matricula');
+            })
+            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id')) = ?", [(string)$id])
+            ->where(function ($q) {
+                $q->whereNull('matriculas.excluido')->orWhere('matriculas.excluido', '!=', 's');
+            })
+            ->where(function ($q) {
+                $q->whereNull('matriculas.deletado')->orWhere('matriculas.deletado', '!=', 's');
+            })
+            ->select(
+                'matriculas.id as matricula_id',
+                'matriculas.id_cliente as aluno_id',
+                'matriculas.status',
+                'matriculas.data',
+                'users.name as aluno_nome',
+                'sit.post_name as situacao_slug',
+                'sit.post_title as situacao_label'
+            )
+            ->orderByDesc('matriculas.data')
+            ->get();
+
+        // 4. Busca o próximo período (mesmo curso, menu_order imediatamente superior)
+        $proximoPeriodo = $this->getProximoPeriodo($periodo, $idCurso);
+
+        // 5. Para cada aluno, verifica se já tem matrícula ativa no próximo período
+        $alunoIds = $matriculasRaw->pluck('aluno_id')->filter()->unique()->values()->all();
+        $jaMatriculadosNoProximo = [];
+
+        if ($proximoPeriodo && !empty($alunoIds)) {
+            $proxId = (string)$proximoPeriodo->ID;
+            $rows = DB::table('matriculas')
+                ->whereIn('id_cliente', $alunoIds)
+                ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(orc, '$.modulos[0].id')) = ?", [$proxId])
+                ->where(function ($q) { $q->whereNull('excluido')->orWhere('excluido', '!=', 's'); })
+                ->where(function ($q) { $q->whereNull('deletado')->orWhere('deletado', '!=', 's'); })
+                ->pluck('id_cliente')
+                ->all();
+            foreach ($rows as $uid) {
+                $jaMatriculadosNoProximo[(string)$uid] = true;
+            }
+        }
+
+        // 6. Monta resposta
+        $matriculados = [];
+        $prontosCount = 0;
+
+        foreach ($matriculasRaw as $m) {
+            $prontoParaAvancar = $situacaoSlug
+                ? ($m->situacao_slug === $situacaoSlug)
+                : false;
+
+            if ($prontoParaAvancar) {
+                $prontosCount++;
+            }
+
+            $matriculados[] = [
+                'matricula_id'              => (int)$m->matricula_id,
+                'aluno_id'                  => (string)$m->aluno_id,
+                'aluno_nome'                => $m->aluno_nome ?? 'Aluno #' . $m->aluno_id,
+                'status'                    => $m->status ?? 'a',
+                'situacao_slug'             => $m->situacao_slug,
+                'situacao_label'            => $m->situacao_label,
+                'pronto_para_avancar'       => $prontoParaAvancar,
+                'data'                      => $m->data,
+                'proximo_periodo_id'        => $proximoPeriodo ? $proximoPeriodo->ID : null,
+                'proximo_periodo_nome'      => $proximoPeriodo ? $proximoPeriodo->post_title : null,
+                'ja_matriculado_no_proximo' => isset($jaMatriculadosNoProximo[(string)$m->aluno_id]),
+            ];
+        }
+
+        return response()->json([
+            'periodo' => [
+                'id'         => $periodo->ID,
+                'nome'       => $periodo->post_title,
+                'slug'       => $periodo->post_name,
+                'id_curso'   => $idCurso,
+                'valor'      => $periodo->config['valor'] ?? null,
+                'h_praticas' => $periodo->config['h_praticas'] ?? null,
+                'h_teoricas' => $periodo->config['h_teoricas'] ?? null,
+                'status'     => $periodo->post_status,
+            ],
+            'situacao_avancar'     => $situacaoAvancar,
+            'matriculados'         => $matriculados,
+            'total'                => count($matriculados),
+            'prontos_para_avancar' => $prontosCount,
+        ]);
+    }
+
+    /**
+     * getProximoPeriodo
+     * pt-BR: Retorna o próximo período do mesmo curso (menu_order imediatamente superior).
+     * en-US: Returns the next period of the same course (immediately higher menu_order).
+     *
+     * @param  Post $periodo  Período atual
+     * @param  int|string|null $idCurso  ID do curso
+     * @return Post|null
+     */
+    private function getProximoPeriodo(Post $periodo, $idCurso): ?Post
+    {
+        if (!$idCurso) return null;
+
+        return Post::ofType('periodos')
+            ->where(function ($q) use ($idCurso) {
+                $q->where('config->id_curso', (int)$idCurso)
+                  ->orWhere('post_parent', (int)$idCurso);
+            })
+            ->where('menu_order', '>', (int)$periodo->menu_order)
+            ->orderBy('menu_order')
+            ->first();
+    }
 }

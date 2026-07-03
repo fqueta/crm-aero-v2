@@ -102,6 +102,13 @@ export default function ProposalsCreate() {
   const navState = (location?.state || {}) as { returnTo?: string; funnelId?: string; stageId?: string };
   const [searchParams] = useSearchParams();
   const idClienteFromUrl = searchParams.get('id_cliente') || '';
+  /**
+   * idCursoFromUrl
+   * pt-BR: ID do curso pré-selecionado via query string (?id_curso=128).
+   * en-US: Pre-selected course ID from query string (?id_curso=128).
+   */
+  const idCursoFromUrl = searchParams.get('id_curso') || '';
+
   const [clientSearch, setClientSearch] = useState('');
   // Termos de busca para autocompletes
   // Search terms for autocompletes
@@ -338,7 +345,8 @@ export default function ProposalsCreate() {
     resolver: zodResolver(proposalSchema),
     defaultValues: {
       id_cliente: idClienteFromUrl || '',
-      id_curso: '',
+      id_curso: idCursoFromUrl || '',
+
       id_turma: '',
       // pt-BR: Campo opcional para vincular uma tabela de parcelamento.
       // en-US: Optional field to link an installment table.
@@ -405,6 +413,26 @@ export default function ProposalsCreate() {
   });
   const selectedCourseId = form.watch('id_curso');
   const selectedClientId = form.watch('id_cliente');
+
+  /**
+   * Pré-popula o campo de busca do curso quando vem da URL (?id_curso=X).
+   * Assim o Combobox exibe o nome do curso selecionado em vez de ficar em branco.
+   * Pre-populates the course search term from URL param so the Combobox shows the label.
+   */
+  useEffect(() => {
+    if (!idCursoFromUrl) return;
+    const coursesList: any[] =
+      (courses as any)?.data ||
+      (courses as any)?.items ||
+      (Array.isArray(courses) ? courses : []);
+    const found = coursesList.find((c: any) => String(c.id) === String(idCursoFromUrl));
+    if (found) {
+      const label = found.nome || found.titulo || '';
+      if (label) setCourseSearch(label);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courses, idCursoFromUrl]);
+
   // Turmas: busca remota filtrando por curso selecionado
   // Classes: remote search filtered by selected course
   const { data: classes, isLoading: isLoadingClasses } = useQuery({
@@ -1241,8 +1269,14 @@ export default function ProposalsCreate() {
 
   /**
    * handleBack
-   * pt-BR: Volta ao funil de vendas de origem, usando o estado de navegação.
-   * en-US: Returns to the originating sales funnel, using navigation state.
+   * pt-BR: Volta à página de origem, priorizando:
+   *   1. `navState.returnTo` (passado via `navigate(..., { state: { returnTo } })`)
+   *   2. Funil de vendas via `navState.funnelId`
+   *   3. Fallback para /admin/sales
+   * en-US: Returns to the originating page, prioritizing:
+   *   1. `navState.returnTo` (passed via navigate state)
+   *   2. Sales funnel via `navState.funnelId`
+   *   3. Fallback to /admin/sales
    */
   function handleBack() {
     if (navState?.returnTo && typeof navState.returnTo === 'string') {
@@ -1255,6 +1289,23 @@ export default function ProposalsCreate() {
     }
     navigate('/admin/sales');
   }
+
+  /**
+   * backLabel
+   * pt-BR: Rótulo dinâmico do botão Voltar baseado na origem da navegação.
+   * en-US: Dynamic label for the Back button based on navigation origin.
+   */
+  const backLabel = (() => {
+    const returnTo = navState?.returnTo;
+    if (!returnTo) return 'Voltar ao funil';
+    if (returnTo.includes('formation-control')) return 'Controle de Formação';
+    if (returnTo.includes('school/enroll'))     return 'Matrículas';
+    if (returnTo.includes('school/'))           return 'Escola';
+    if (returnTo.includes('clients/'))          return 'Clientes';
+    if (returnTo.includes('sales'))             return 'Vendas';
+    return 'Voltar';
+  })();
+
 
   // Modules list for preview (Type 2)
   const previewModules = useMemo(() => {
@@ -1272,7 +1323,7 @@ export default function ProposalsCreate() {
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center">
         <Button variant="ghost" size="sm" onClick={handleBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao funil
+          <ArrowLeft className="h-4 w-4 mr-2" /> {backLabel}
         </Button>
       </div>
       <Card>
@@ -1592,7 +1643,10 @@ export default function ProposalsCreate() {
                       name="gera_valor"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Gerar Valor</FormLabel>
+                          <FormLabel>
+                            {selectedCourseNormalized?.tipo === '4' ? 'Selecionar período' : 'Gerar Valor'}
+                          </FormLabel>
+
                           <SelectGeraValor
                             course={selectedCourseNormalized}
                             value={field.value}

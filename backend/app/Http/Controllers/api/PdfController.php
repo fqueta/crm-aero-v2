@@ -25,6 +25,43 @@ use Illuminate\Support\Facades\Bus;
 class PdfController extends Controller
 {
     /**
+     * Reporta eventos de depuracao do PDF para o Debug Server sem alterar a logica de negocio.
+     */
+    private function reportPdfMissingImageDebug(string $hypothesisId, string $location, string $msg, array $data = []): void
+    {
+        // #region debug-point A:debug-server-report
+        try {
+            $envPath = base_path('.dbg/pdf-missing-image.env');
+            $serverUrl = 'http://127.0.0.1:7777/event';
+            $sessionId = 'pdf-missing-image';
+
+            if (is_file($envPath)) {
+                $envLines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+                foreach ($envLines as $line) {
+                    if (str_starts_with($line, 'DEBUG_SERVER_URL=')) {
+                        $serverUrl = trim((string)substr($line, strlen('DEBUG_SERVER_URL=')));
+                    }
+                    if (str_starts_with($line, 'DEBUG_SESSION_ID=')) {
+                        $sessionId = trim((string)substr($line, strlen('DEBUG_SESSION_ID=')));
+                    }
+                }
+            }
+
+            Http::asJson()->timeout(2)->post($serverUrl, [
+                'sessionId' => $sessionId,
+                'runId' => 'pre-fix',
+                'hypothesisId' => $hypothesisId,
+                'location' => $location,
+                'msg' => '[DEBUG] ' . $msg,
+                'data' => $data,
+                'ts' => round(microtime(true) * 1000),
+            ]);
+        } catch (\Throwable $e) {
+        }
+        // #endregion
+    }
+
+    /**
      * Converte uma URL de imagem em Data URI (base64) para embutir no CSS.
      * EN: Convert an image URL into a Data URI (base64) for CSS embedding.
      */
@@ -494,6 +531,27 @@ class PdfController extends Controller
             ]]);
         }
 
+        // #region debug-point B:resolved-background-pages
+        $this->reportPdfMissingImageDebug('B', 'PdfController::resolveBackgroundPages', 'Resolved proposal background pages', [
+            'matricula_id' => $matricula['id'] ?? null,
+            'curso_id' => $matricula['id_curso'] ?? null,
+            'curso_tipo' => $matricula['curso_tipo'] ?? null,
+            'shortcode' => $shortcode ?? null,
+            'skip_extras' => $skipExtras,
+            'background_url' => $backgroundUrl,
+            'gallery_pages_count' => is_countable($listaPaginas ?? null) ? count($listaPaginas) : 0,
+            'extra_pages_count' => is_countable($extraPages ?? null) ? count($extraPages) : 0,
+            'extra_pages_backgrounds' => array_map(static function ($page, $index) {
+                return [
+                    'index' => $index,
+                    'background_url' => $page['background_url'] ?? null,
+                    'has_data_uri' => !empty($page['background_data_uri'] ?? null),
+                    'html_length' => strlen((string)($page['html'] ?? '')),
+                ];
+            }, $extraPages, array_keys($extraPages)),
+        ]);
+        // #endregion
+
         return ['extraPages' => $extraPages, 'backgroundUrl' => $backgroundUrl];
     }
 
@@ -640,6 +698,18 @@ class PdfController extends Controller
         $pdfShowNotes = (!isset($cursoPdfConfig['pdf_show_notes']) || $cursoPdfConfig['pdf_show_notes'] !== false) && $hasNotesContent;
         $pdfShowPayment = (!isset($cursoPdfConfig['pdf_show_payment']) || $cursoPdfConfig['pdf_show_payment'] !== false) && $hasPaymentContent;
 
+        // #region debug-point C:view-data-background
+        $this->reportPdfMissingImageDebug('C', 'PdfController::prepareMatriculaViewData', 'Prepared proposal view data', [
+            'matricula_id' => $matricula['id'] ?? null,
+            'curso_id' => $matricula['id_curso'] ?? null,
+            'engine' => $config['engine'] ?? null,
+            'background_url' => $resolvedPages['backgroundUrl'] ?? null,
+            'extra_pages_count' => is_countable($resolvedPages['extraPages'] ?? null) ? count($resolvedPages['extraPages']) : 0,
+            'cover_page_background' => $resolvedPages['extraPages'][0]['background_url'] ?? null,
+            'budget_page_background' => $resolvedPages['extraPages'][1]['background_url'] ?? null,
+        ]);
+        // #endregion
+
         return [
             'cliente_nome' => $matricula['cliente']['name'] ?? ($matricula['cliente']['nome'] ?? ''),
             'cliente_email' => $matricula['cliente']['email'] ?? '',
@@ -695,6 +765,18 @@ class PdfController extends Controller
             $footerHtml = $this->prepareHtml($footerHtml, true, $engine);
         }
         $html = $this->prepareHtml($html, false, $engine);
+
+        // #region debug-point D:rendered-html-background
+        $this->reportPdfMissingImageDebug('D', 'PdfController::renderMatriculaHtml', 'Rendered PDF HTML and background markers', [
+            'engine' => $engine,
+            'has_background' => $hasBackground,
+            'background_url' => $viewData['background_url'] ?? null,
+            'contains_page_bg_tag' => str_contains($html, 'class="page-bg"'),
+            'contains_background_image_css' => str_contains($html, 'background-image: url('),
+            'contains_background_url_literal' => !empty($viewData['background_url']) ? str_contains($html, (string)$viewData['background_url']) : false,
+            'html_length' => strlen($html),
+        ]);
+        // #endregion
 
         return [
             'body' => $html,

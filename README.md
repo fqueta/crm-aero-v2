@@ -204,6 +204,7 @@ Motores suportados:
 
 ## Documentação Relacionada
 
+- `PEDIDOS_RECORRENTES.md`
 - `CONTEXTO_DO_PROJETO.md`
 - `backend/README-deploy.md`
 - `.trae/documents/Contexto do Projeto.md`

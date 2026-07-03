@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from '@/components/ui/table';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus, Copy, Zap, CheckCircle2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Plus, Copy, Zap, CheckCircle2, Trash2 } from 'lucide-react';
 import { contractsService } from '@/services/contractsService';
 import { coursesService } from '@/services/coursesService';
 import { toast } from 'sonner';
@@ -30,7 +31,9 @@ export default function ContractsList() {
   const status = (searchParams.get('status') || '') as ContractStatus | '';
   const tipo = searchParams.get('tipo') || '';
   const page = Number(searchParams.get('page')) || 1;
-  const perPage = 20;
+  const [perPage, setPerPage] = useState(Number(searchParams.get('per_page')) || 20);
+  
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Sync status to URL
   const setStatus = (newStatus: ContractStatus | '') => {
@@ -156,8 +159,44 @@ export default function ContractsList() {
    * en-US: Confirms and executes item deletion.
    */
   const handleDelete = (item: ContractRecord) => {
-    if (!confirm(`Excluir contrato "${item.nome}"?`)) return;
+    if (!confirm(`Excluir contrato "${item.nome}"?\n\nATENÇÃO: Os dados serão excluídos permanentemente.`)) return;
     deleteMutation.mutate(String(item.id));
+  };
+
+  /**
+   * handleBulkDelete
+   * pt-BR: Exclui múltiplos contratos.
+   * en-US: Deletes multiple contracts.
+   */
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Tem certeza que deseja excluir ${selectedIds.size} contrato(s)?\n\nATENÇÃO: Os dados serão excluídos permanentemente.`)) return;
+    
+    try {
+      // Exclui um por um e invalida no final
+      const promises = Array.from(selectedIds).map(id => contractsService.deleteContract(String(id)));
+      await Promise.all(promises);
+      toast.success(`${selectedIds.size} contrato(s) excluído(s) com sucesso`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['contracts', 'list'] });
+    } catch (error) {
+      toast.error('Erro ao excluir contratos');
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(items.map(i => String(i.id))));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
   };
 
   /**
@@ -184,6 +223,12 @@ export default function ContractsList() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Contratos</h1>
         <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <Button variant="destructive" onClick={handleBulkDelete}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Excluir {selectedIds.size}
+            </Button>
+          )}
           <Button onClick={() => navigate('/admin/school/contracts/create')}>Novo <Plus className="ml-1 h-4 w-4" /></Button>
         </div>
       </div>
@@ -237,6 +282,12 @@ export default function ContractsList() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                <TableHead className="w-[50px] text-center">
+                  <Checkbox 
+                    checked={items.length > 0 && selectedIds.size === items.length}
+                    onCheckedChange={(c) => handleSelectAll(!!c)}
+                  />
+                </TableHead>
                 <TableHead className="w-[30%]">Nome</TableHead>
                 <TableHead>Slug</TableHead>
                 <TableHead>Tipo</TableHead>
@@ -248,16 +299,22 @@ export default function ContractsList() {
             <TableBody>
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10">Carregando...</TableCell>
+                  <TableCell colSpan={7} className="text-center py-10">Carregando...</TableCell>
                 </TableRow>
               )}
               {!isLoading && items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">Nenhum contrato encontrado.</TableCell>
+                  <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">Nenhum contrato encontrado.</TableCell>
                 </TableRow>
               )}
               {!isLoading && items.map((c) => (
                 <TableRow key={String(c.id)}>
+                  <TableCell className="text-center">
+                    <Checkbox 
+                      checked={selectedIds.has(String(c.id))}
+                      onCheckedChange={() => toggleSelect(String(c.id))}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium text-slate-900">{c.nome}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{c.slug || '-'}</TableCell>
                   <TableCell>
@@ -310,14 +367,42 @@ export default function ContractsList() {
           </Table>
         </div>
 
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            <ChevronLeft className="mr-1 h-4 w-4" />Anterior
-          </Button>
-          <span className="text-sm">Página {currentPage} de {lastPage}</span>
-          <Button variant="outline" disabled={currentPage >= lastPage} onClick={() => setPage((p) => p + 1)}>
-            Próxima<ChevronRight className="ml-1 h-4 w-4" />
-          </Button>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-muted-foreground">
+            <span>
+              {data?.total !== undefined ? `Total: ${data.total} registro(s)` : ''}
+            </span>
+            <div className="flex items-center gap-2">
+              <span>Itens por página:</span>
+              <Select 
+                value={String(perPage)} 
+                onValueChange={(val) => {
+                  setPerPage(Number(val));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[80px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="999999">Tudo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              <ChevronLeft className="mr-1 h-4 w-4" />Anterior
+            </Button>
+            <span className="text-sm">Página {currentPage} de {lastPage}</span>
+            <Button variant="outline" disabled={currentPage >= lastPage} onClick={() => setPage((p) => p + 1)}>
+              Próxima<ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </Card>
     </div>

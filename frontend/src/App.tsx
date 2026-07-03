@@ -106,7 +106,9 @@ import PeriodCreate from "./pages/school/PeriodCreate";
 import PeriodEdit from "./pages/school/PeriodEdit";
 import PeriodDetail from "./pages/school/PeriodDetail";
 import EnrollmentSituationPage from "./pages/school/EnrollmentSituation";
+import FormationControl from "./pages/school/FormationControl";
 import Interested from "./pages/school/Interested";
+
 import SiteComponentsList from "./pages/SiteComponentsList";
 import SiteComponentsForm from "./pages/SiteComponentsForm";
 
@@ -337,6 +339,14 @@ const App = () => {
                 <AdminProtectedRoute>
                   <AppLayout>
                     <Termination />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              {/* Escola / Controle de Formação */}
+              <Route path="/admin/school/formation-control" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <FormationControl />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

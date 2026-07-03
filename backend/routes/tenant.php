@@ -438,6 +438,9 @@ Route::name('api.')->prefix('api/v1')->middleware([
             'periodos' => 'id'
         ]]);
         Route::post('periodos/reorder', [PeriodoController::class, 'reorder'])->name('periodos.reorder');
+        // Controle de Formação — Tipo 4
+        Route::get('periodos/{id}/alunos-matriculados', [PeriodoController::class, 'enrolledStudents'])->name('periodos.enrolledStudents');
+        Route::get('cursos/{id}/periodos-flow', [CursoController::class, 'periodsFlow'])->name('cursos.periodsFlow');
 
          // Rotas para service-units
          Route::apiResource('service-units', ServiceUnitController::class,['parameters' => [

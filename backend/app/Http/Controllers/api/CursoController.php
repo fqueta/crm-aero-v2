@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCursoRequest;
 use App\Http\Requests\UpdateCursoRequest;
 use App\Models\Curso;
+use App\Models\Post;
 use App\Services\PermissionService;
 use App\Services\Qlib;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
 
 class CursoController extends Controller
 {
@@ -327,5 +330,106 @@ class CursoController extends Controller
         return response()->json([
             'message' => 'Curso excluído permanentemente com sucesso',
         ], 200);
+    }
+
+    /**
+     * periodsFlow
+     * pt-BR: Retorna o fluxo de períodos de um curso tipo 4 com contagem de matriculados e prontos.
+     *        Aceita situacao_slug para calcular quem está "pronto para avançar".
+     * en-US: Returns the periods flow for a tipo 4 course with enrolled and ready-to-advance counts.
+     *        Accepts situacao_slug to compute who is "ready to advance".
+     *
+     * @param  Request $request
+     * @param  int|string $id  ID do curso
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function periodsFlow(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+
+        // Valida que o curso existe
+        $curso = Curso::findOrFail($id);
+
+        // Resolve slug da situação de avanço (opcional)
+        $situacaoSlug = $request->input('situacao_slug', null);
+
+        // Busca todos os períodos do curso ordenados por menu_order
+        $periodos = Post::ofType('periodos')
+            ->where(function ($q) use ($id) {
+                $q->where('config->id_curso', (int)$id)
+                  ->orWhere('post_parent', (int)$id);
+            })
+            ->orderBy('menu_order')
+            ->orderBy('ID')
+            ->get();
+
+        if ($periodos->isEmpty()) {
+            return response()->json([
+                'curso_id'   => (int)$id,
+                'curso_nome' => $curso->titulo ?: $curso->nome,
+                'periodos'   => [],
+            ]);
+        }
+
+        // Para cada período, conta matriculados e prontos para avançar
+        $periodosIds = $periodos->pluck('ID')->map(fn($v) => (string)$v)->all();
+
+        // Uma query só para contar todas as matrículas dos períodos do curso
+        $countRows = DB::table('matriculas')
+            ->leftJoin('posts as sit', function ($join) {
+                $join->on('matriculas.situacao_id', '=', 'sit.ID')
+                     ->where('sit.post_type', '=', 'situacao_matricula');
+            })
+            ->whereIn(
+                DB::raw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id'))"),
+                $periodosIds
+            )
+            ->where(function ($q) {
+                $q->whereNull('matriculas.excluido')->orWhere('matriculas.excluido', '!=', 's');
+            })
+            ->where(function ($q) {
+                $q->whereNull('matriculas.deletado')->orWhere('matriculas.deletado', '!=', 's');
+            })
+            ->select(
+                DB::raw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id')) as periodo_id"),
+                'sit.post_name as situacao_slug'
+            )
+            ->get();
+
+        // Agrupa contagens por periodo_id
+        $totalPorPeriodo = [];
+        $prontosPorPeriodo = [];
+        foreach ($countRows as $row) {
+            $pid = (string)$row->periodo_id;
+            $totalPorPeriodo[$pid] = ($totalPorPeriodo[$pid] ?? 0) + 1;
+            if ($situacaoSlug && $row->situacao_slug === $situacaoSlug) {
+                $prontosPorPeriodo[$pid] = ($prontosPorPeriodo[$pid] ?? 0) + 1;
+            }
+        }
+
+        $result = $periodos->map(function ($p) use ($totalPorPeriodo, $prontosPorPeriodo) {
+            $pid = (string)$p->ID;
+            $cfg = is_array($p->config) ? $p->config : [];
+            return [
+                'id'                   => $p->ID,
+                'nome'                 => $p->post_title,
+                'menu_order'           => $p->menu_order,
+                'valor'                => $cfg['valor'] ?? null,
+                'h_praticas'           => $cfg['h_praticas'] ?? null,
+                'h_teoricas'           => $cfg['h_teoricas'] ?? null,
+                'status'               => $p->post_status,
+                'total_matriculados'   => $totalPorPeriodo[$pid] ?? 0,
+                'prontos_para_avancar' => $prontosPorPeriodo[$pid] ?? 0,
+            ];
+        })->values();
+
+        return response()->json([
+            'curso_id'   => (int)$id,
+            'curso_nome' => $curso->titulo ?: $curso->nome,
+            'periodos'   => $result,
+        ]);
     }
 }

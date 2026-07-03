@@ -319,13 +319,13 @@ export default function Enroll() {
    * periodsQuery
    * pt-BR: Lista de períodos para o combobox de filtros.
    */
-  const periodsQuery = usePeriodsList({ page: 1, per_page: 200, search: periodSearch }, {
+  const periodsQuery = usePeriodsList({ page: 1, per_page: 200, search: periodSearch, id_curso: selectedCourseId ? Number(selectedCourseId) : undefined }, {
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
   const periodItems = (periodsQuery.data?.data || periodsQuery.data?.items || []) as any[];
-  const periodOptions = useComboboxOptions(periodItems, 'id', 'post_title', undefined);
+  const periodOptions = useComboboxOptions(periodItems, 'id', 'nome', undefined);
 
   const enrollments = useMemo(() => enrollmentsResp?.data || enrollmentsResp?.items || [], [enrollmentsResp]);
   const currentPage = enrollmentsResp?.current_page ?? 1;
@@ -436,6 +436,8 @@ export default function Enroll() {
                     setSelectedCourseId(val); 
                     setSelectedClassId(''); 
                     setClassSearch(''); 
+                    setSelectedPeriodId(''); 
+                    setPeriodSearch(''); 
                     setPage(1); 
                   }}
                   placeholder="Curso"
@@ -511,6 +513,9 @@ export default function Enroll() {
               */
               onEdit={(enroll: any) => {
                 navigate(`/admin/sales/proposals/edit/${String(enroll.id)}`, { state: { returnTo } });
+              }}
+              onRowDoubleClick={(enroll: any) => {
+                navigate(`/admin/sales/proposals/view/${String(enroll.id)}`, { state: { returnTo } });
               }}
               onDelete={(enroll: any) => { setSelected(enroll); setDeleteOpen(true); }}
               selectedIds={selectedIds}

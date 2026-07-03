@@ -14,6 +14,7 @@ export interface EnrollmentTableProps {
   onView?: (item: any) => void;
   onEdit?: (item: any) => void;
   onDelete?: (item: any) => void;
+  onRowDoubleClick?: (item: any) => void;
   resolveAmountBRL?: (item: any) => string;
   /** IDs selecionadas para exclusão em massa */
   selectedIds?: Set<string>;
@@ -30,7 +31,7 @@ export interface EnrollmentTableProps {
  * en-US: Reusable table component to list enrollments, with per-row actions.
  *        Shows standard columns (ID, Client, Course, Class, Status, Amount) and actions menu.
  */
-export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDelete, resolveAmountBRL, selectedIds, onSelectChange, onSelectAllChange }: EnrollmentTableProps) {
+export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDelete, onRowDoubleClick, resolveAmountBRL, selectedIds, onSelectChange, onSelectAllChange }: EnrollmentTableProps) {
   const amountFormatter = resolveAmountBRL || (() => '-');
 
   const hasCheckboxes = !!selectedIds && !!onSelectChange;
@@ -77,7 +78,7 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
         )}
 
         {!isLoading && items.map((enroll: any) => (
-          <TableRow key={String(enroll.id)}>
+          <TableRow key={String(enroll.id)} onDoubleClick={() => onRowDoubleClick?.(enroll)} className="cursor-pointer">
             {hasCheckboxes && (
               <TableCell className="text-center">
                 <Checkbox
@@ -93,8 +94,8 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
               {(() => {
                 if (String(enroll.curso_tipo) !== '4') return '-';
                 try {
-                  const config = typeof enroll.config === 'string' ? JSON.parse(enroll.config) : (enroll.config || {});
-                  return config?.orc?.modulos?.[0]?.nome || '-';
+                  const orc = typeof enroll.orc === 'string' ? JSON.parse(enroll.orc) : (enroll.orc || {});
+                  return orc?.modulos?.[0]?.nome || '-';
                 } catch {
                   return '-';
                 }

@@ -29,7 +29,8 @@
       { "title": "Todas turmas", "url": "/school/classes" },
       { "title": "Rescisões", "url": "/school/termination" },
       { "title": "Ganhos", "url": "/school/ganhos" },
-      { "title": "Situações", "url": "/school/enrollment-situation" }
+      { "title": "Situações", "url": "/school/enrollment-situation" },
+      { "title": "Controle de Formação", "url": "/school/formation-control" }
     ]
   },
   {

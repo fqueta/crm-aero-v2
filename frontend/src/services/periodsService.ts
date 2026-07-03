@@ -1,6 +1,7 @@
 import { BaseApiService } from './BaseApiService';
 import { ApiResponse, PaginatedResponse } from '@/types/index';
-import { PeriodRecord, CreatePeriodInput, UpdatePeriodInput, PeriodsListParams, SimplePeriodPayload } from '@/types/periods';
+import { PeriodRecord, CreatePeriodInput, UpdatePeriodInput, PeriodsListParams, SimplePeriodPayload, PeriodEnrolledStudentsResponse } from '@/types/periods';
+
 
 /**
  * PeriodsService
@@ -150,6 +151,24 @@ class PeriodsService extends BaseApiService {
    */
   async deleteById(id: string): Promise<void> {
     await this.deletePeriod(id);
+  }
+
+  /**
+   * getEnrolledStudents
+   * pt-BR: Busca alunos matriculados num período específico com status de avanço.
+   *        Aceita parâmetro opcional situacao_slug para definir o critério de "pronto para avançar".
+   * en-US: Fetches students enrolled in a specific period with advancement status.
+   *        Accepts optional situacao_slug to define the "ready to advance" criterion.
+   */
+  async getEnrolledStudents(
+    periodId: string | number,
+    params?: { situacao_slug?: string; situacao_id?: number | string }
+  ): Promise<PeriodEnrolledStudentsResponse> {
+    const response = await this.get<PeriodEnrolledStudentsResponse>(
+      `${this.endpoint}/${periodId}/alunos-matriculados`,
+      params
+    );
+    return response;
   }
 }
 

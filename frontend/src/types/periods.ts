@@ -204,3 +204,65 @@ export interface PeriodsListParams {
   status?: PeriodStatus;
   search?: string;
 }
+
+/**
+ * PeriodEnrolledStudent
+ * pt-BR: Representa um aluno matriculado em um período específico (tipo 4).
+ * en-US: Represents a student enrolled in a specific period (tipo 4 course).
+ */
+export interface PeriodEnrolledStudent {
+  matricula_id: number;
+  aluno_id: string;
+  aluno_nome: string;
+  /** status CRM: 'a'=Atendimento, 'g'=Ganho, 'p'=Perda */
+  status: 'a' | 'g' | 'p';
+  situacao_slug?: string | null;
+  situacao_label?: string | null;
+  /** True quando a situação da matrícula coincide com a situação de avanço configurada */
+  pronto_para_avancar: boolean;
+  data?: string | null;
+  proximo_periodo_id?: number | null;
+  proximo_periodo_nome?: string | null;
+  ja_matriculado_no_proximo: boolean;
+}
+
+/**
+ * PeriodEnrolledStudentsResponse
+ * pt-BR: Resposta do endpoint GET /periodos/{id}/alunos-matriculados.
+ * en-US: Response from GET /periodos/{id}/alunos-matriculados endpoint.
+ */
+export interface PeriodEnrolledStudentsResponse {
+  periodo: PeriodRecord;
+  situacao_avancar?: { slug: string; label: string } | null;
+  matriculados: PeriodEnrolledStudent[];
+  total: number;
+  prontos_para_avancar: number;
+}
+
+/**
+ * CoursePeriodsFlowItem
+ * pt-BR: Resumo de um período no fluxo do curso (para o Controle de Formação).
+ * en-US: Summary of a period in the course flow (for Formation Control).
+ */
+export interface CoursePeriodsFlowItem {
+  id: number;
+  nome: string;
+  menu_order: number;
+  valor?: number | string | null;
+  h_praticas?: number | null;
+  h_teoricas?: number | null;
+  status: PeriodStatus;
+  total_matriculados: number;
+  prontos_para_avancar: number;
+}
+
+/**
+ * CoursePeriodsFlowResponse
+ * pt-BR: Resposta do endpoint GET /cursos/{id}/periodos-flow.
+ * en-US: Response from GET /cursos/{id}/periodos-flow endpoint.
+ */
+export interface CoursePeriodsFlowResponse {
+  curso_id: number;
+  curso_nome: string;
+  periodos: CoursePeriodsFlowItem[];
+}

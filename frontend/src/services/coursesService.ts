@@ -1,6 +1,8 @@
 import { GenericApiService } from './GenericApiService';
 import { CourseRecord, CoursePayload, CoursesListParams } from '@/types/courses';
 import { PaginatedResponse } from '@/types/index';
+import { CoursePeriodsFlowResponse } from '@/types/periods';
+
 
 /**
  * CoursesService — serviço de CRUD para cursos
@@ -51,6 +53,20 @@ class CoursesService extends GenericApiService<CourseRecord, CoursePayload, Cour
 
   async deleteMultipleCourses(ids: (string | number)[]): Promise<void> {
     await Promise.all(ids.map((id) => this.deleteById(id)));
+  }
+
+  /**
+   * getPeriodsFlow
+   * pt-BR: Busca o fluxo de períodos de um curso tipo 4, com contagem de matriculados e prontos.
+   *        Aceita parâmetro opcional situacao_slug para calcular "prontos para avançar".
+   * en-US: Fetches the periods flow for a tipo 4 course, with enrolled and ready counts.
+   *        Accepts optional situacao_slug to compute "ready to advance" count.
+   */
+  async getPeriodsFlow(
+    courseId: string | number,
+    params?: { situacao_slug?: string }
+  ): Promise<CoursePeriodsFlowResponse> {
+    return this.get<CoursePeriodsFlowResponse>(`/cursos/${courseId}/periodos-flow`, params);
   }
 }
 

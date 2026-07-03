@@ -123,6 +123,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const logout = async (): Promise<void> => {
+    const wasLoggedIn = !!localStorage.getItem(TOKEN_KEY) || !!state.user;
     try {
       await authService.logout();
     } catch (error) {
@@ -130,10 +131,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       updateAuthState(null, null, [], []);
       setUserPointsBalance(null);
-      toast({
-        title: "Logout realizado",
-        description: "Você foi desconectado com sucesso.",
-      });
+      if (wasLoggedIn) {
+        toast({
+          title: "Logout realizado",
+          description: "Você foi desconectado com sucesso.",
+        });
+      }
     }
   };
 
