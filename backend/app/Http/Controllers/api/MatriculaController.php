@@ -162,8 +162,24 @@ class MatriculaController extends Controller
         // Anexar metacampos a cada item paginado
         $items->getCollection()->transform(function ($item) {
             $item->meta = $this->getAllMatriculaMeta($item->id);
+            
+            // Resolve o nome do período para cursos tipo 4 legados que não possuem o nome no JSON 'orc'
+            if ($item->curso_tipo == '4') {
+                $orc = is_string($item->orc) ? json_decode($item->orc, true) : (array)$item->orc;
+                if (empty($orc['modulos'][0]['nome']) && empty($orc['modulos'][0]['titulo'])) {
+                    $periodoId = $orc['modulos'][0]['id'] ?? $item->meta['gera_valor'] ?? null;
+                    if ($periodoId) {
+                        $periodo = \App\Models\Post::find($periodoId);
+                        if ($periodo) {
+                            $item->periodo_nome = $periodo->post_title;
+                        }
+                    }
+                }
+            }
+            
             return $item;
         });
+
         return response()->json($items);
     }
 

@@ -93,9 +93,10 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
             <TableCell className="text-sm text-muted-foreground">
               {(() => {
                 if (String(enroll.curso_tipo) !== '4') return '-';
+                if (enroll.periodo_nome) return enroll.periodo_nome;
                 try {
                   const orc = typeof enroll.orc === 'string' ? JSON.parse(enroll.orc) : (enroll.orc || {});
-                  return orc?.modulos?.[0]?.nome || '-';
+                  return orc?.modulos?.[0]?.nome || orc?.modulos?.[0]?.titulo || '-';
                 } catch {
                   return '-';
                 }
