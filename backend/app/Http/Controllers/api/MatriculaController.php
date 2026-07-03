@@ -126,7 +126,11 @@ class MatriculaController extends Controller
         // Filtro por Período (para Cursos do tipo 4 - Planos de Formação)
         if ($request->filled('periodo_id')) {
             $periodoId = $request->input('periodo_id');
-            $query->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id')) = ?", [(string) $periodoId]);
+            $query->where(function ($q) use ($periodoId) {
+                $q->whereRaw("JSON_CONTAINS(JSON_EXTRACT(matriculas.orc, '$.modulos[*].id'), ?)", [(string)$periodoId])
+                  ->orWhereRaw("JSON_CONTAINS(JSON_EXTRACT(matriculas.orc, '$.modulos.*.id'), ?)", [(string)$periodoId])
+                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id')) = ?", [(string)$periodoId]);
+            });
         }
 
         // Filtro genérico por descrição da matrícula

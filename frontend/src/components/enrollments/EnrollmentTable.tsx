@@ -96,7 +96,14 @@ export default function EnrollmentTable({ items, isLoading, onView, onEdit, onDe
                 if (enroll.periodo_nome) return enroll.periodo_nome;
                 try {
                   const orc = typeof enroll.orc === 'string' ? JSON.parse(enroll.orc) : (enroll.orc || {});
-                  return orc?.modulos?.[0]?.nome || orc?.modulos?.[0]?.titulo || '-';
+                  const modulos = orc?.modulos;
+                  if (modulos && typeof modulos === 'object') {
+                    const firstKey = Object.keys(modulos)[0];
+                    if (firstKey) {
+                      return modulos[firstKey]?.nome || modulos[firstKey]?.titulo || '-';
+                    }
+                  }
+                  return '-';
                 } catch {
                   return '-';
                 }

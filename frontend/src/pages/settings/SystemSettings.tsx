@@ -1211,7 +1211,7 @@ export default function SystemSettings() {
                          id={`api-option-${option.id}`}
                          type="text"
                          name={option.url}
-                         value={getCurrentOptionValue(option)}
+                         value={getCurrentOptionValue(option) || ''}
                          onChange={(e) => handleApiOptionChange(option.id, e.target.value)}
                          placeholder={`Digite ${option.name.toLowerCase()}`}
                          className="w-full"
@@ -1323,7 +1323,7 @@ export default function SystemSettings() {
                           id={`func-option-${option.id}`}
                           type="text"
                           name={option.url}
-                          value={getCurrentOptionValue(option)}
+                          value={getCurrentOptionValue(option) || ''}
                           onChange={(e) => handleApiOptionChange(option.id, e.target.value)}
                           placeholder={`Digite ${option.name.toLowerCase()}`}
                           className="w-full"

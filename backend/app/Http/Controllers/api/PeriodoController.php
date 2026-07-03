@@ -393,14 +393,14 @@ class PeriodoController extends Controller
             }
         }
 
-        // 3. Busca matrículas do período com dados do aluno e situação atual
-        $matriculasRaw = DB::table('matriculas')
+        // 3. Busca matrículas do curso com dados do aluno e situação atual
+        $todasMatriculasCurso = DB::table('matriculas')
             ->leftJoin('users', 'matriculas.id_cliente', '=', 'users.id')
             ->leftJoin('posts as sit', function ($join) {
                 $join->on('matriculas.situacao_id', '=', 'sit.ID')
                      ->where('sit.post_type', '=', 'situacao_matricula');
             })
-            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id')) = ?", [(string)$id])
+            ->where('matriculas.id_curso', $idCurso)
             ->where(function ($q) {
                 $q->whereNull('matriculas.excluido')->orWhere('matriculas.excluido', '!=', 's');
             })
@@ -412,12 +412,29 @@ class PeriodoController extends Controller
                 'matriculas.id_cliente as aluno_id',
                 'matriculas.status',
                 'matriculas.data',
+                'matriculas.orc',
                 'users.name as aluno_nome',
                 'sit.post_name as situacao_slug',
                 'sit.post_title as situacao_label'
             )
             ->orderByDesc('matriculas.data')
             ->get();
+
+        // 3.1 Filtra em PHP apenas as matrículas cujo PRIMEIRO módulo é o período atual ($id)
+        $matriculasFiltradas = [];
+        foreach ($todasMatriculasCurso as $m) {
+            if (!$m->orc) continue;
+            $orc = is_string($m->orc) ? json_decode($m->orc, true) : $m->orc;
+            if (!is_array($orc) || empty($orc['modulos'])) continue;
+            
+            $primeiroModulo = is_array($orc['modulos']) ? reset($orc['modulos']) : null;
+            if (!$primeiroModulo || empty($primeiroModulo['id'])) continue;
+            
+            if ((string)$primeiroModulo['id'] === (string)$id) {
+                $matriculasFiltradas[] = $m;
+            }
+        }
+        $matriculasRaw = collect($matriculasFiltradas);
 
         // 4. Busca o próximo período (mesmo curso, menu_order imediatamente superior)
         $proximoPeriodo = $this->getProximoPeriodo($periodo, $idCurso);

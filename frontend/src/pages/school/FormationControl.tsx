@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Sheet,
   SheetContent,
@@ -41,6 +42,7 @@ import {
   Loader2,
   Info,
   FilePlus2,
+  Search,
 } from 'lucide-react';
 
 
@@ -69,6 +71,7 @@ export default function FormationControl() {
   // ─── Sheet lateral ────────────────────────────────────────────────────────
   const [openPeriodId, setOpenPeriodId] = useState<number | null>(null);
   const [sheetTab, setSheetTab] = useState<'all' | 'ready' | 'pending'>('all');
+  const [modalSearch, setModalSearch] = useState('');
 
   // ─── Cursos tipo 4 ────────────────────────────────────────────────────────
   const coursesQuery = useQuery({
@@ -137,10 +140,16 @@ export default function FormationControl() {
   const allStudents: PeriodEnrolledStudent[] = studentsData?.matriculados || [];
 
   const filteredStudents = useMemo(() => {
-    if (sheetTab === 'ready') return allStudents.filter(s => s.pronto_para_avancar);
-    if (sheetTab === 'pending') return allStudents.filter(s => !s.pronto_para_avancar);
-    return allStudents;
-  }, [allStudents, sheetTab]);
+    let list = allStudents;
+    if (sheetTab === 'ready') list = list.filter(s => s.pronto_para_avancar);
+    else if (sheetTab === 'pending') list = list.filter(s => !s.pronto_para_avancar);
+    
+    if (modalSearch.trim() !== '') {
+      const q = modalSearch.toLowerCase().trim();
+      list = list.filter(s => s.aluno_nome?.toLowerCase().includes(q) || String(s.aluno_id).includes(q) || String(s.matricula_id).includes(q));
+    }
+    return list;
+  }, [allStudents, sheetTab, modalSearch]);
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   const formatValor = useCallback((val?: number | string | null): string => {
@@ -164,10 +173,11 @@ export default function FormationControl() {
   const openPeriodData = periodos.find(p => p.id === openPeriodId);
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
-  const handleOpenPeriod = (periodId: number) => {
+  const handleOpenPeriod = useCallback((periodId: number) => {
     setOpenPeriodId(periodId);
     setSheetTab('all');
-  };
+    setModalSearch('');
+  }, []);
 
   const handleNewEnrollment = (student: PeriodEnrolledStudent) => {
     const params = new URLSearchParams();
@@ -473,6 +483,16 @@ export default function FormationControl() {
                 </TabsTrigger>
               </TabsList>
             </Tabs>
+            
+            <div className="mt-3 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+              <Input
+                placeholder="Buscar aluno por nome ou ID..."
+                value={modalSearch}
+                onChange={(e) => setModalSearch(e.target.value)}
+                className="pl-9 h-9 text-sm rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800"
+              />
+            </div>
           </div>
 
           {/* Lista de alunos */}

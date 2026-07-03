@@ -2093,7 +2093,9 @@ export default function ProposalsEdit() {
                         name="gera_valor"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block mb-2">Comportamento de Preço</FormLabel>
+                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block mb-2">
+                              {selectedCourse?.tipo === '4' ? 'Selecionar período' : 'Comportamento de Preço'}
+                            </FormLabel>
                             <SelectGeraValor
                               course={selectedCourse}
                               value={field.value}

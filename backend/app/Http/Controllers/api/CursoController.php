@@ -383,10 +383,7 @@ class CursoController extends Controller
                 $join->on('matriculas.situacao_id', '=', 'sit.ID')
                      ->where('sit.post_type', '=', 'situacao_matricula');
             })
-            ->whereIn(
-                DB::raw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id'))"),
-                $periodosIds
-            )
+            ->where('matriculas.id_curso', $id)
             ->where(function ($q) {
                 $q->whereNull('matriculas.excluido')->orWhere('matriculas.excluido', '!=', 's');
             })
@@ -394,7 +391,7 @@ class CursoController extends Controller
                 $q->whereNull('matriculas.deletado')->orWhere('matriculas.deletado', '!=', 's');
             })
             ->select(
-                DB::raw("JSON_UNQUOTE(JSON_EXTRACT(matriculas.orc, '$.modulos[0].id')) as periodo_id"),
+                'matriculas.orc',
                 'sit.post_name as situacao_slug'
             )
             ->get();
@@ -402,11 +399,25 @@ class CursoController extends Controller
         // Agrupa contagens por periodo_id
         $totalPorPeriodo = [];
         $prontosPorPeriodo = [];
+        $periodosIdsMap = array_flip($periodosIds);
+
         foreach ($countRows as $row) {
-            $pid = (string)$row->periodo_id;
-            $totalPorPeriodo[$pid] = ($totalPorPeriodo[$pid] ?? 0) + 1;
-            if ($situacaoSlug && $row->situacao_slug === $situacaoSlug) {
-                $prontosPorPeriodo[$pid] = ($prontosPorPeriodo[$pid] ?? 0) + 1;
+            if (!$row->orc) continue;
+            
+            $orc = is_string($row->orc) ? json_decode($row->orc, true) : $row->orc;
+            if (!is_array($orc) || empty($orc['modulos'])) continue;
+            
+            // Pega o ID do primeiro módulo listado, independente se é array posicional ou associativo
+            $primeiroModulo = is_array($orc['modulos']) ? reset($orc['modulos']) : null;
+            if (!$primeiroModulo || empty($primeiroModulo['id'])) continue;
+            
+            $pid = (string)$primeiroModulo['id'];
+            
+            if (isset($periodosIdsMap[$pid])) {
+                $totalPorPeriodo[$pid] = ($totalPorPeriodo[$pid] ?? 0) + 1;
+                if ($situacaoSlug && $row->situacao_slug === $situacaoSlug) {
+                    $prontosPorPeriodo[$pid] = ($prontosPorPeriodo[$pid] ?? 0) + 1;
+                }
             }
         }
 
