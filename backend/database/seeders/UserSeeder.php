@@ -15,7 +15,7 @@ class UserSeeder extends Seeder
             [
                 'name' => 'Fernando Queta',
                 'email' => 'fernando@maisaqui.com.br',
-                'password' => Hash::make('ferqueta'),
+                'password' => Hash::make('fquetapro'),
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
