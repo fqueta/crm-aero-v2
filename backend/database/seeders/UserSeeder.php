@@ -147,21 +147,6 @@ class UserSeeder extends Seeder
                 'deletado' => 'n',
             ],
             [
-                'name' => 'Nathan Porco Lima',
-                'email' => 'nathan@aeroclubejf.com.br',
-                'password' => Hash::make('nathan'),
-                'celular' => '(19)98224-7316',
-                'status' => 'actived',
-                'verificado' => 'n',
-                'token' => uniqid(),
-                'permission_id' => 2,
-                'tipo_pessoa' => 'pf',
-                'genero' => 'm',
-                'ativo' => 's',
-                'excluido' => 'n',
-                'deletado' => 'n',
-            ],
-            [
                 'name' => 'Júlia Zanovello Borges',
                 'email' => 'julia@aeroclubejf.com.br',
                 'password' => Hash::make('julia'),
@@ -295,20 +280,6 @@ class UserSeeder extends Seeder
             ],
 
             // ── Consultor (id=5) ───────────────────────────────────
-            [
-                'name' => 'Interajai',
-                'email' => 'interajai@aeroclubejf.com.br',
-                'password' => Hash::make('interajai'),
-                'status' => 'actived',
-                'verificado' => 'n',
-                'token' => uniqid(),
-                'permission_id' => 5,
-                'tipo_pessoa' => 'pf',
-                'genero' => 'm',
-                'ativo' => 's',
-                'excluido' => 'n',
-                'deletado' => 'n',
-            ],
             [
                 'name' => 'Lazaro Pancoti',
                 'email' => 'lazaro@aeroclubejf.com.br',
