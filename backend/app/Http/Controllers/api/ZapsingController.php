@@ -618,7 +618,7 @@ class ZapsingController extends Controller
                 $ret['signer'][$k]['link'] = $link;
                 $ret['signer'][$k]['status'] = $status;
                 $ret['signer'][$k]['sign_order'] = $signOrder;
-                $dialog_id = '679a438a9d7c8affe47e29b5';
+                $dialog_id = Qlib::qoption('zapguru_dialog_id') ?: '';
 
                 if(!$link){
                     $ret['signer'][$k]['mens'] = 'Signer sem link de assinatura no payload.';
@@ -633,6 +633,7 @@ class ZapsingController extends Controller
                 $phoneCountry = preg_replace('/\D/', '', (string)($signer['phone_country'] ?? ''));
                 $phoneNumber = preg_replace('/\D/', '', (string)($signer['phone_number'] ?? ''));
                 $phoneFromPayload = trim($phoneCountry.$phoneNumber);
+                $hasValidPhone = strlen($phoneFromPayload) > 4;
 
                 if($isAluno && $telefoneAluno){
                     $conf_link_zap = [
@@ -642,7 +643,7 @@ class ZapsingController extends Controller
                         'dialog_id'=>$dialog_id,
                     ];
                     $ret['signer'][$k]['destino'] = 'matricula';
-                }elseif($phoneFromPayload){
+                }elseif($hasValidPhone){
                     $conf_link_zap = [
                         'celular_completo'=>$phoneFromPayload,
                         'text'=>$mens,
