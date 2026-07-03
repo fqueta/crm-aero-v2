@@ -1,4 +1,54 @@
-# Contexto do Projeto — Rescisão de Contratos (School Termination)
+# Contexto do Projeto — Importação de dados legados + Rescisão de Contratos (School Termination)
+
+## Importação de dados (ImportController)
+
+`backend/app/Http/Controllers/api/ImportController.php`
+
+### Bugfixes aplicados
+
+| Bug | Causa | Fix |
+|-----|-------|-----|
+| `imported_count: 0` para `clientes` | `importData()` não tinha `elseif ($importType === 'clientes')` — `importClientes()` era dead code | Adicionado dispatch para `clientes` em `ImportController.php:94` |
+| `imported_count: 0` para `matriculas` | API legada não retorna `cpf_aluno` no export de matrículas → CPF é sempre null → `continue` | Fallback: buscar user por `config->legacy_client_id` quando CPF não disponível |
+
+### Fluxo corrigido — Matrículas
+
+1. **Importar clientes primeiro** (`import_type: clientes`): armazena `config->legacy_client_id` no User
+2. **Importar matrículas** (`import_type: matriculas`): tenta buscar user por:
+   - `cpf_aluno` (se existir no payload) → `findOrCreateUser()`
+   - Fallback: `User::where('config->legacy_client_id', $item['id_cliente'])` → first()
+
+### Payload da API legada — Matrículas
+
+`GET /api/v1/matriculas/exportar?tipo_curso=4&formato=json`
+
+```json
+{"exec":true,"status":200,"total":389,"data":[
+  {"id":2388,"id_cliente":1896,"id_curso":97,"id_turma":"563",
+   "data":"2022-01-21","aluno":"Pedro veras","Descricao":null,
+   "status":4,"config":null,"valor":129600,"situacao":"a",
+   "data_matricula":"2023-01-11 00:00:00","contrato":"",
+   "parcelamento":36,"valor_parcela":3600,"token":"61eae54fb33eb",
+   "tag":"[\"lead_quente\"]","obs":"...","atualizado":"...",
+   "historico":"..."}
+]}
+```
+
+Campos **ausentes** (todos tratados com `?? null`/`?? 0`): `cpf_aluno`, `orc`, `nome_curso`, `desconto`, `combustivel`, `subtotal`, `total`, `metacampos`, `reg_inscricao`, `reg_pagamento`, `rescisao`, `orc_encerrado`
+
+### Endpoint de importação
+
+`POST /api/v1/import` — corpo esperado:
+```json
+{
+  "url": "https://api.aeroclubejf.com.br/api/v1/{recurso}/exportar?tipo_curso=4&formato=json",
+  "method": "GET",
+  "headers": [{"key": "Authorization", "value": "Bearer {token}"}, {"key": "Accept", "value": "application/json"}],
+  "import_type": "clientes|matriculas|contratos|turmas"
+}
+```
+
+## Contexto do Projeto — Rescisão de Contratos (School Termination)
 
 ## Pagina Admin
 `/admin/school/termination` → `frontend/src/pages/school/Termination.tsx`

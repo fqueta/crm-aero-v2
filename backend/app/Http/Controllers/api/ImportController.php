@@ -245,13 +245,19 @@ class ImportController extends Controller
                 continue;
             }
 
+            // 1. User (cliente) — tenta por CPF, depois por legacy_client_id
             $cpf = $this->cleanCpf($item['cpf_aluno'] ?? null);
-            if (!$cpf) {
-                continue;
+            $user = null;
+            if ($cpf) {
+                $user = $this->findOrCreateUser($item, $cpf);
             }
-
-            // 1. User (cliente)
-            $user = $this->findOrCreateUser($item, $cpf);
+            if (!$user) {
+                // Fallback: busca pelo id_cliente legado (já importado via importClientes)
+                $legacyClientId = $item['id_cliente'] ?? null;
+                if ($legacyClientId) {
+                    $user = \App\Models\User::where('config->legacy_client_id', $legacyClientId)->first();
+                }
+            }
             if (!$user) {
                 continue;
             }
@@ -754,6 +760,16 @@ class ImportController extends Controller
             // Mapeia ou cria o usuário usando a rotina robusta que implementamos
             $user = $this->findOrCreateUser($item, $cpf);
             if ($user) {
+                // Armazena legacy_client_id no config do usuário para lookup futuro (ex: matrículas)
+                $legacyId = $item['id'] ?? null;
+                if ($legacyId) {
+                    $userConfig = $user->config ?: [];
+                    if (($userConfig['legacy_client_id'] ?? null) != $legacyId) {
+                        $userConfig['legacy_client_id'] = $legacyId;
+                        $user->config = $userConfig;
+                        $user->save();
+                    }
+                }
                 $count++;
             }
         }
