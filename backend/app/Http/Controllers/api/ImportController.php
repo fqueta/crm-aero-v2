@@ -91,6 +91,8 @@ class ImportController extends Controller
                 $importedCount = $this->importMatriculas($responseData);
             } elseif ($importType === 'turmas') {
                 $importedCount = $this->importTurmas($responseData);
+            } elseif ($importType === 'clientes') {
+                $importedCount = $this->importClientes($responseData);
             }
 
             return response()->json([
