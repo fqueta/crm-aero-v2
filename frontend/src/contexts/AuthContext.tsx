@@ -123,7 +123,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const logout = async (): Promise<void> => {
-    const wasLoggedIn = !!localStorage.getItem(TOKEN_KEY) || !!state.user;
+    const wasLoggedIn = !!localStorage.getItem('auth_token') || !!state.user;
     try {
       await authService.logout();
     } catch (error) {
