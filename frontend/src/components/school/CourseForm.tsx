@@ -915,56 +915,67 @@ export function CourseForm({
                   Valor não informado
                 </Badge>
               )}
+              
+              <Badge variant="outline" className="text-slate-600 bg-slate-50 border-slate-200 font-medium">
+                {getPeriodContracts(period).length} documento(s)
+              </Badge>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-3 w-full">
               {contractsQueryByCourse.isLoading || contractsQueryByCourse.isFetching ? (
                 <p className="text-xs text-muted-foreground animate-pulse">Carregando contratos...</p>
               ) : getPeriodContracts(period).length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-col gap-2 w-full">
                   {getPeriodContracts(period).map((contract) => (
                     <div
                       key={`${period.id}-${contract.id}`}
-                      className="inline-flex items-center gap-1 rounded-md border bg-background px-1.5 py-1 shadow-sm"
+                      className="flex items-center justify-between gap-3 rounded-md border bg-slate-50/50 px-3 py-2 shadow-sm hover:bg-slate-50 transition-colors"
                     >
-                      <Badge variant="outline" className="text-xs font-normal">
-                        {contract.label}
-                      </Badge>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={() => handleEditContractFromPeriod(contract.id)}
-                        title={`Editar contrato ${contract.label}`}
-                      >
-                        <PencilLine className="mr-1 h-3 w-3" />
-                        Editar contrato
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => handleRemoveContractFromPeriod(period.id, contract.id, period.id_contratos || [])}
-                        title="Remover contrato deste período"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></div>
+                        <span className="text-sm font-medium text-slate-700 truncate" title={contract.label}>
+                          {contract.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => handleEditContractFromPeriod(contract.id)}
+                          title={`Editar contrato ${contract.label}`}
+                        >
+                          <PencilLine className="mr-1.5 h-3.5 w-3.5" />
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleRemoveContractFromPeriod(period.id, contract.id, period.id_contratos || [])}
+                          title="Remover contrato deste período"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                   {getPeriodContracts(period).length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 self-center"
-                      onClick={() => handleClearPeriodContracts(period.id)}
-                      title="Remover todos os contratos deste período"
-                    >
-                      <Trash2 className="mr-1 h-3 w-3" />
-                      Remover todos
-                    </Button>
+                    <div className="flex justify-end mt-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-3 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleClearPeriodContracts(period.id)}
+                        title="Remover todos os contratos deste período"
+                      >
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        Remover todos ({getPeriodContracts(period).length})
+                      </Button>
+                    </div>
                   )}
                 </div>
               ) : (
