@@ -14,23 +14,24 @@ export function getTenantIdFromSubdomain(): string | null {
  * pt-BR: Retorna a base da API do tenant, SEM versão. Ex.: "http://{tenant_id}.localhost:8000/api".
  * en-US: Returns tenant API base, WITHOUT version. E.g.: "http://{tenant_id}.localhost:8000/api".
  */
+// Mapa de exceções: tenant_id → domínio da API (sem protocolo, sem /api)
+// Usado quando o padrão "api-{tenant_id}" não se aplica
+const API_DOMAIN_MAP: Record<string, string> = {
+  'crm-v2': 'api-crm.aeroclubejf.com.br',
+};
+
 export function getTenantApiUrl(): string {
-  // 1. Prefer VITE_TENANT_API_URL (per-tenant override via env)
-  const envUrl =
-    (import.meta.env as any).VITE_TENANT_API_URL ||
-    (import.meta.env as any).VITE_API_URL;
-
-  if (envUrl) {
-    const tenant_id = getTenantIdFromSubdomain() || 'default';
-    return envUrl.replace('{tenant_id}', tenant_id).replace(/\/+$/, '');
-  }
-
-  // 2. Derive from hostname (automatic for simple cases, e.g. sandbox → api-sandbox)
   const host = window.location.hostname;
   const parts = host.split('.');
   const protocol = window.location.protocol;
   const tenant_id = getTenantIdFromSubdomain() || 'default';
 
+  // 1. Verifica se há mapeamento explícito para este tenant
+  if (API_DOMAIN_MAP[tenant_id]) {
+    return `${protocol}//${API_DOMAIN_MAP[tenant_id]}/api`;
+  }
+
+  // 2. Derive from hostname (ex: sandbox → api-sandbox)
   if (parts.length <= 1) {
     // No subdomain (localhost, 127.0.0.1)
     return `${protocol}//api-${tenant_id}.localhost:8000/api`;
