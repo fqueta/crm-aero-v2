@@ -36,6 +36,7 @@ return [
     */
     'allowed_origins' => [
         'https://crm-v2.aeroclubejf.com.br',
+        'https://sandbox.aeroclubejf.com.br',
         'https://api-crm.aeroclubejf.com.br',
         // Dev/local origins
         'http://crm.localhost:3000',

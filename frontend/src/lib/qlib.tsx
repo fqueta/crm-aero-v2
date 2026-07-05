@@ -15,6 +15,17 @@ export function getTenantIdFromSubdomain(): string | null {
  * en-US: Returns tenant API base, WITHOUT version. E.g.: "http://{tenant_id}.localhost:8000/api".
  */
 export function getTenantApiUrl(): string {
+  // 1. Prefer VITE_TENANT_API_URL (per-tenant override via env)
+  const envUrl =
+    (import.meta.env as any).VITE_TENANT_API_URL ||
+    (import.meta.env as any).VITE_API_URL;
+
+  if (envUrl) {
+    const tenant_id = getTenantIdFromSubdomain() || 'default';
+    return envUrl.replace('{tenant_id}', tenant_id).replace(/\/+$/, '');
+  }
+
+  // 2. Derive from hostname (automatic for simple cases, e.g. sandbox → api-sandbox)
   const host = window.location.hostname;
   const parts = host.split('.');
   const protocol = window.location.protocol;
