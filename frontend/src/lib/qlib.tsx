@@ -15,30 +15,18 @@ export function getTenantIdFromSubdomain(): string | null {
  * en-US: Returns tenant API base, WITHOUT version. E.g.: "http://{tenant_id}.localhost:8000/api".
  */
 export function getTenantApiUrl(): string {
-  // Prefer VITE_TENANT_API_URL; fallback to VITE_API_URL; otherwise use sensible default
-  const raw =
-    (import.meta.env as any).VITE_TENANT_API_URL ||
-    (import.meta.env as any).VITE_API_URL ||
-    'http://api-{tenant_id}.localhost:8000/api';
-
+  const host = window.location.hostname;
+  const parts = host.split('.');
+  const protocol = window.location.protocol;
   const tenant_id = getTenantIdFromSubdomain() || 'default';
-  const replaced = raw.replace('{tenant_id}', tenant_id);//raw.includes('{tenant_id}') ? raw.replace('{tenant_id}', tenant_id) : raw;
-  
-  // console.log('getTenantApiUrl', replaced);
-  // Normalize: remove trailing slashes to avoid double slashes when concatenating version
-  let base = replaced.replace(/\/+$/, '');
-  // Dev fallback: if using *.localhost and DNS doesn't resolve, prefer 127.0.0.1
-  // Ex.: http://api-crm.localhost:8002/api -> http://127.0.0.1:8002/api
-  /*
-  if ((import.meta.env as any).DEV) {
-    const currentHost = window.location.hostname;
-    const shouldForceIp = currentHost === '127.0.0.1' || currentHost === 'localhost';
-    base = base.replace(/^https?:\/\/[^/]*\.localhost:(\d+)(\/.*)?$/i, (_m, port, path = '') => {
-      return shouldForceIp ? `http://127.0.0.1:${port}${path}` : `http://localhost:${port}${path}`;
-    });
+
+  if (parts.length <= 1) {
+    // No subdomain (localhost, 127.0.0.1)
+    return `${protocol}//api-${tenant_id}.localhost:8000/api`;
   }
-  */
-  return base;
+
+  const rest = parts.slice(1).join('.');
+  return `${protocol}//api-${tenant_id}.${rest}/api`;
 }
 
 /**
