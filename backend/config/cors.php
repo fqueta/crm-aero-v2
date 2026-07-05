@@ -34,34 +34,20 @@ return [
     | Exemplo: ['http://localhost:3000', 'https://meusite.com']
     |
     */
-    'allowed_origins' => [
-        'https://crm-v2.aeroclubejf.com.br',
-        'https://sandbox.aeroclubejf.com.br',
-        'https://api-crm.aeroclubejf.com.br',
-        // Dev/local origins
-        'http://crm.localhost:3000',
-        'http://localhost:8000',
-        'http://maisaqui1.localhost:8080',
-        'http://api-crm.localhost:8001',
-        'http://crm.localhost:5173',
-    ],
+    // Origens fixas (fallback caso o middleware dinâmico não seja aplicado)
+    'allowed_origins' => [],
 
     /*
     |--------------------------------------------------------------------------
     | Allowed Origins Patterns
     |--------------------------------------------------------------------------
     |
-    | Você pode usar regex para liberar origens.
+    | NOTA: O middleware DynamicCors agora gerencia as origens dinamicamente.
+    |       Este array é mantido para compatibilidade com o HandleCors nativo
+    |       caso seja reativado.
     |
     */
-    'allowed_origins_patterns' => [
-        // Allow any subdomain of localhost on any port (dev)
-        '/^https?:\\/\\/.*\\.localhost(:\\d+)?$/',
-        // Allow any subdomain of aeroclubejf.com.br (prod)
-        '/^https:\\/\\/.*\\.aeroclubejf\\.com\\.br$/',
-        // Allow localhost with any port
-        '/^http:\\/\\/localhost:.*$/',
-    ],
+    'allowed_origins_patterns' => [],
 
     /*
     |--------------------------------------------------------------------------

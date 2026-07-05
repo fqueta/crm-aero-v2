@@ -17,14 +17,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
-        // Registra HandleCors globalmente para garantir cabeçalhos em quaisquer respostas (inclui erros)
+        // CORS dinâmico: permite qualquer origem que corresponda aos padrões configurados
         $middleware->use([
-            \Illuminate\Http\Middleware\HandleCors::class,
+            \App\Http\Middleware\DynamicCors::class,
         ]);
 
         // Aplicar CORS globalmente para todas as rotas da API
         $middleware->api(prepend: [
-            \Illuminate\Http\Middleware\HandleCors::class,
+            \App\Http\Middleware\DynamicCors::class,
         ]);
 
         // Alias para middlewares customizados
