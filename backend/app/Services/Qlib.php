@@ -161,7 +161,7 @@ class Qlib
                    ->where('ativo','=','s')
                    ->select('value')
                    ->first();
-                   
+
                 $resultValue = isset($result['value']) ? $result['value'] : null;
                 self::$optionsCache[$valor] = $resultValue;
             }
@@ -2905,7 +2905,7 @@ class Qlib
     // verifica se o tenant é do crm do aeroclubejf ou seja se o id do tenant atual é = api-crm
     static function is_crm_aero(){
         $tenant_id = tenant('id');
-        if($tenant_id == 'api-crm'){
+        if($tenant_id == 'api-crm' || $tenant_id == 'api-sandbox'){
             return true;
         }else{
             return false;
