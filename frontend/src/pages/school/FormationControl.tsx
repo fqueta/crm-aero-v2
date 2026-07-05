@@ -213,7 +213,7 @@ export default function FormationControl() {
 
       {/* Filtros */}
       <Card className="p-5 border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm rounded-2xl bg-white dark:bg-zinc-950">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="flex flex-col gap-5">
           {/* Curso */}
           <div className="space-y-2">
             <Label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
