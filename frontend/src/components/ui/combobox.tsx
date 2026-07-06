@@ -117,7 +117,7 @@ export function Combobox({
       </PopoverTrigger>
       {/* Ajusta a largura do popover para igualar ao input/trigger */}
       {/* Adjust popover width to match input/trigger width */}
-      <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start">
+      <PopoverContent className="p-0" style={{ width: 'var(--radix-popover-trigger-width)' }} align="start">
         <Command>
           <CommandInput 
             placeholder={searchPlaceholder}

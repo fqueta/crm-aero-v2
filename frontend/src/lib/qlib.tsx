@@ -21,17 +21,26 @@ const API_DOMAIN_MAP: Record<string, string> = {
 };
 
 export function getTenantApiUrl(): string {
+  const tenant_id = getTenantIdFromSubdomain() || 'default';
+
+  // 1. Em dev, usa VITE_TENANT_API_URL do .env com {tenant_id}
+  if (import.meta.env.DEV) {
+    const envUrl = (import.meta.env as any).VITE_TENANT_API_URL;
+    if (envUrl) {
+      return envUrl.replace('{tenant_id}', tenant_id);
+    }
+  }
+
   const host = window.location.hostname;
   const parts = host.split('.');
   const protocol = window.location.protocol;
-  const tenant_id = getTenantIdFromSubdomain() || 'default';
 
-  // 1. Verifica se há mapeamento explícito para este tenant
+  // 2. Verifica se há mapeamento explícito para este tenant
   if (API_DOMAIN_MAP[tenant_id]) {
     return `${protocol}//${API_DOMAIN_MAP[tenant_id]}/api`;
   }
 
-  // 2. Derive from hostname (ex: sandbox → api-sandbox)
+  // 3. Derive from hostname (ex: sandbox → api-sandbox)
   if (parts.length <= 1) {
     // No subdomain (localhost, 127.0.0.1)
     return `${protocol}//api-${tenant_id}.localhost:8000/api`;

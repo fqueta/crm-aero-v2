@@ -142,7 +142,7 @@ export default function ProposalsCreate() {
   const [quickName, setQuickName] = useState('');
   const [quickEmail, setQuickEmail] = useState('');
   const [quickPhone, setQuickPhone] = useState('');
-  const [quickConsultantId, setQuickConsultantId] = useState('');
+  const [quickConsultantId, setQuickConsultantId] = useState(user?.id?.toString() || '');
   const [quickClientLoading, setQuickClientLoading] = useState(false);
   const [isQuickResponsibleOpen, setIsQuickResponsibleOpen] = useState(false);
   const [quickResponsibleData, setQuickResponsibleData] = useState(createEmptyQuickResponsibleData());

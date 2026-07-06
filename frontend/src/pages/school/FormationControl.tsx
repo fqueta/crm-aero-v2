@@ -242,11 +242,11 @@ export default function FormationControl() {
             />
           </div>
 
-          {/* Situação de Avanço */}
+          {/* Filtro de Situação */}
           <div className="space-y-2">
             <Label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5">
               <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
-              Situação "Pronto para Avançar"
+              Filtrar por Situação (Opcional)
             </Label>
             <Combobox
               options={situacaoOptions}
@@ -267,12 +267,6 @@ export default function FormationControl() {
               debounceMs={200}
               className="h-10 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800"
             />
-            {!situacaoSlug && (
-              <p className="text-[10px] text-amber-500 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                Selecione uma situação para ver quem está pronto para avançar
-              </p>
-            )}
           </div>
         </div>
       </Card>
@@ -333,17 +327,15 @@ export default function FormationControl() {
           {/* Cards do pipeline */}
           <div className="flex flex-nowrap gap-4 overflow-x-auto pb-3 snap-x snap-mandatory">
             {periodos.map((periodo, idx) => {
-              const hasReady = periodo.prontos_para_avancar > 0;
+              const hasStudents = periodo.total_matriculados > 0;
               const fillPct = maxMatriculados > 0 ? Math.round((periodo.total_matriculados / maxMatriculados) * 100) : 0;
               const isLast = idx === periodos.length - 1;
 
-              const borderColor = hasReady
-                ? 'border-emerald-300 dark:border-emerald-700'
-                : periodo.total_matriculados > 0
+              const borderColor = hasStudents
                   ? 'border-blue-200 dark:border-blue-800'
                   : 'border-zinc-200 dark:border-zinc-800';
 
-              const dotColor = hasReady ? 'bg-emerald-500' : periodo.total_matriculados > 0 ? 'bg-blue-500' : 'bg-zinc-300 dark:bg-zinc-600';
+              const dotColor = hasStudents ? 'bg-blue-500' : 'bg-zinc-300 dark:bg-zinc-600';
 
               return (
                 <div key={periodo.id} className="flex items-start gap-3 snap-start flex-shrink-0">
@@ -352,7 +344,7 @@ export default function FormationControl() {
                     onClick={() => handleOpenPeriod(periodo.id)}
                   >
                     {/* Topo colorido */}
-                    <div className={`h-1.5 w-full ${hasReady ? 'bg-gradient-to-r from-emerald-400 to-teal-400' : periodo.total_matriculados > 0 ? 'bg-gradient-to-r from-blue-400 to-indigo-400' : 'bg-zinc-200 dark:bg-zinc-800'}`} />
+                    <div className={`h-1.5 w-full ${hasStudents ? 'bg-gradient-to-r from-blue-400 to-indigo-400' : 'bg-zinc-200 dark:bg-zinc-800'}`} />
 
                     <div className="p-4 space-y-3">
                       {/* Header do card */}
@@ -382,7 +374,7 @@ export default function FormationControl() {
                       <div className="space-y-1">
                         <div className="h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${hasReady ? 'bg-gradient-to-r from-emerald-400 to-teal-400' : 'bg-gradient-to-r from-blue-400 to-indigo-400'}`}
+                            className={`h-full rounded-full transition-all duration-500 ${hasStudents ? 'bg-gradient-to-r from-blue-400 to-indigo-400' : ''}`}
                             style={{ width: `${fillPct}%` }}
                           />
                         </div>
@@ -397,12 +389,6 @@ export default function FormationControl() {
                           </span>
                         </div>
 
-                        {situacaoSlug && (
-                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${hasReady ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-800'}`}>
-                            <CheckCircle2 className="w-3 h-3" />
-                            {periodo.prontos_para_avancar} prontos
-                          </div>
-                        )}
                       </div>
 
                       {/* Botão Ver */}
@@ -431,12 +417,8 @@ export default function FormationControl() {
           {/* Legenda */}
           <div className="flex flex-wrap items-center gap-4 px-1 pt-2 text-[10px] text-zinc-400 font-medium uppercase tracking-wider">
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              Com alunos prontos para avançar
-            </div>
-            <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-blue-500" />
-              Com alunos em andamento
+              Com matrículas
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-zinc-300 dark:bg-zinc-600" />
@@ -460,31 +442,14 @@ export default function FormationControl() {
                 </SheetTitle>
                 <SheetDescription className="text-[10px] text-zinc-500 mt-0.5">
                   {studentsData?.total ?? '—'} matriculado{(studentsData?.total ?? 0) !== 1 ? 's' : ''}
-                  {situacaoSlug && studentsData && (
-                    <> · <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{studentsData.prontos_para_avancar} prontos para avançar</span></>
-                  )}
                 </SheetDescription>
               </div>
             </div>
           </SheetHeader>
 
-          {/* Tabs */}
+          {/* Busca no Modal */}
           <div className="px-6 pt-4 flex-shrink-0">
-            <Tabs value={sheetTab} onValueChange={(v) => setSheetTab(v as any)}>
-              <TabsList className="w-full rounded-xl bg-zinc-100 dark:bg-zinc-900 p-1">
-                <TabsTrigger value="all" className="flex-1 text-xs rounded-lg">
-                  Todos ({allStudents.length})
-                </TabsTrigger>
-                <TabsTrigger value="ready" className="flex-1 text-xs rounded-lg">
-                  Prontos ({allStudents.filter(s => s.pronto_para_avancar).length})
-                </TabsTrigger>
-                <TabsTrigger value="pending" className="flex-1 text-xs rounded-lg">
-                  Demais ({allStudents.filter(s => !s.pronto_para_avancar).length})
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-            
-            <div className="mt-3 relative">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <Input
                 placeholder="Buscar aluno por nome ou ID..."

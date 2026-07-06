@@ -429,7 +429,8 @@ class PeriodoController extends Controller
             
             $primeiroModulo = is_array($orc['modulos']) ? reset($orc['modulos']) : null;
             if (!$primeiroModulo || empty($primeiroModulo['id'])) continue;
-            
+            if ($situacaoSlug && $m->situacao_slug !== $situacaoSlug) continue;
+
             if ((string)$primeiroModulo['id'] === (string)$id) {
                 $matriculasFiltradas[] = $m;
             }
@@ -459,17 +460,8 @@ class PeriodoController extends Controller
 
         // 6. Monta resposta
         $matriculados = [];
-        $prontosCount = 0;
 
         foreach ($matriculasRaw as $m) {
-            $prontoParaAvancar = $situacaoSlug
-                ? ($m->situacao_slug === $situacaoSlug)
-                : false;
-
-            if ($prontoParaAvancar) {
-                $prontosCount++;
-            }
-
             $matriculados[] = [
                 'matricula_id'              => (int)$m->matricula_id,
                 'aluno_id'                  => (string)$m->aluno_id,
@@ -477,7 +469,6 @@ class PeriodoController extends Controller
                 'status'                    => $m->status ?? 'a',
                 'situacao_slug'             => $m->situacao_slug,
                 'situacao_label'            => $m->situacao_label,
-                'pronto_para_avancar'       => $prontoParaAvancar,
                 'data'                      => $m->data,
                 'proximo_periodo_id'        => $proximoPeriodo ? $proximoPeriodo->ID : null,
                 'proximo_periodo_nome'      => $proximoPeriodo ? $proximoPeriodo->post_title : null,
@@ -499,7 +490,6 @@ class PeriodoController extends Controller
             'situacao_avancar'     => $situacaoAvancar,
             'matriculados'         => $matriculados,
             'total'                => count($matriculados),
-            'prontos_para_avancar' => $prontosCount,
         ]);
     }
 

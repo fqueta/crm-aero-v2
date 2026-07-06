@@ -33,9 +33,9 @@ class OptionController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        if (!$this->permissionService->isHasPermission('view')) {
-            return response()->json(['error' => 'Acesso negado'], 403);
-        }
+        // if (!$this->permissionService->isHasPermission('view')) {
+        //     return response()->json(['error' => 'Acesso negado'], 403);
+        // }
 
 
         $perPage = $request->input('per_page', 100);

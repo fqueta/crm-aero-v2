@@ -398,10 +398,11 @@ class CursoController extends Controller
 
         // Agrupa contagens por periodo_id
         $totalPorPeriodo = [];
-        $prontosPorPeriodo = [];
         $periodosIdsMap = array_flip($periodosIds);
 
         foreach ($countRows as $row) {
+            if ($situacaoSlug && $row->situacao_slug !== $situacaoSlug) continue;
+            
             if (!$row->orc) continue;
             
             $orc = is_string($row->orc) ? json_decode($row->orc, true) : $row->orc;
@@ -415,13 +416,10 @@ class CursoController extends Controller
             
             if (isset($periodosIdsMap[$pid])) {
                 $totalPorPeriodo[$pid] = ($totalPorPeriodo[$pid] ?? 0) + 1;
-                if ($situacaoSlug && $row->situacao_slug === $situacaoSlug) {
-                    $prontosPorPeriodo[$pid] = ($prontosPorPeriodo[$pid] ?? 0) + 1;
-                }
             }
         }
 
-        $result = $periodos->map(function ($p) use ($totalPorPeriodo, $prontosPorPeriodo) {
+        $result = $periodos->map(function ($p) use ($totalPorPeriodo) {
             $pid = (string)$p->ID;
             $cfg = is_array($p->config) ? $p->config : [];
             return [
@@ -433,7 +431,6 @@ class CursoController extends Controller
                 'h_teoricas'           => $cfg['h_teoricas'] ?? null,
                 'status'               => $p->post_status,
                 'total_matriculados'   => $totalPorPeriodo[$pid] ?? 0,
-                'prontos_para_avancar' => $prontosPorPeriodo[$pid] ?? 0,
             ];
         })->values();
 

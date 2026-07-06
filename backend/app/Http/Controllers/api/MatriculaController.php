@@ -88,6 +88,11 @@ class MatriculaController extends Controller
            ->select('matriculas.*', 'cursos.nome as curso_nome','cursos.tipo as curso_tipo', 'turmas.nome as turma_nome', 'users.name as cliente_nome', 'posts.post_title as situacao')
             ->orderBy($orderByQualified, $order);
 
+        // Restrição de visualização baseada na permissão
+        if ($user->permission_id > 3) {
+            $query->where('matriculas.id_consultor', $user->id);
+        }
+
         // Mapear alias de filtro: 'etapa' -> 'stage_id'
         $stageFilter = $request->filled('stage_id')
             ? $request->input('stage_id')

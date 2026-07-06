@@ -1,4 +1,4 @@
-import { ChevronUp, ChevronDown, User, Wrench } from "lucide-react";
+import { ChevronUp, ChevronDown, User, Wrench, Search } from "lucide-react";
 import * as React from "react";
 import { NavLink, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,10 +84,15 @@ export function AppSidebar() {
 
   /**
    * isGroupCollapsed
-   * pt-BR: Verifica se o grupo está recolhido (persistido).
-   * en-US: Check if group is collapsed (persisted).
+   * pt-BR: Verifica se o grupo está recolhido (persistido). Sempre aberto se houver busca ativa.
+   * en-US: Check if group is collapsed (persisted). Always open if there is an active search.
    */
-  const isGroupCollapsed = (title: string) => !!collapsedGroups[getGroupKey(title)];
+  const [menuQuery, setMenuQuery] = React.useState('');
+  
+  const isGroupCollapsed = (title: string) => {
+    if (menuQuery.trim().length > 0) return false;
+    return !!collapsedGroups[getGroupKey(title)];
+  };
 
   /**
    * toggleGroup
@@ -158,6 +164,23 @@ export function AppSidebar() {
 
   // Filter by can_view access
   const menuItems = filterMenuByViewAccess(baseMenu);
+
+  // Filter by search query
+  const filteredMenuItems = React.useMemo(() => {
+    if (!menuQuery.trim()) return menuItems;
+    const lowerQuery = menuQuery.toLowerCase();
+    return menuItems.map((item: any) => {
+      const itemMatches = item.title.toLowerCase().includes(lowerQuery);
+      const matchingChildren = item.items?.filter((sub: any) => sub.title.toLowerCase().includes(lowerQuery));
+      
+      if (itemMatches) {
+        return item;
+      } else if (matchingChildren && matchingChildren.length > 0) {
+        return { ...item, items: matchingChildren };
+      }
+      return null;
+    }).filter(Boolean);
+  }, [menuItems, menuQuery]);
 
   const isActive = (path: string) => currentPath === resolveUrl(path);
   const hasActiveChild = (items: any[]) => 
@@ -251,6 +274,19 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
+          {!collapsed && (
+            <div className="px-3 pb-2 pt-1">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Filtrar menu..."
+                  value={menuQuery}
+                  onChange={(e) => setMenuQuery(e.target.value)}
+                  className="pl-8 h-8 bg-sidebar-accent/50 border-sidebar-border text-sm focus-visible:ring-1 focus-visible:ring-sidebar-ring shadow-none rounded-md"
+                />
+              </div>
+            </div>
+          )}
           {/*
            * SidebarGroupLabel color override
            * pt-BR: Força cor do rótulo para o foreground do sidebar, evitando aparência clara.
@@ -260,7 +296,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <TooltipProvider>
               <SidebarMenu>
-                {menuItems.map((item) => (
+                {filteredMenuItems.map((item: any) => (
                   <SidebarMenuItem key={item.title}>
                     {item.items ? (
                       // Menu with submenu

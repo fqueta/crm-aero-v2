@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 import { Label } from '@/components/ui/label';
 import { Tooltip as MetricTooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -234,6 +235,9 @@ export default function AeroclubeDashboard() {
   const [financialOverview, setFinancialOverview] = useState<FinancialDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  
+  const { user } = useAuth();
+  const showFinancial = user && user.permission_id <= 3;
 
   /**
    * Carrega os dados principais do dashboard a partir dos relatórios existentes.
@@ -551,12 +555,14 @@ export default function AeroclubeDashboard() {
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <Button asChild variant="secondary">
-                  <Link to="/admin/financial">
-                    Financeiro
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
+                {showFinancial && (
+                  <Button asChild variant="secondary">
+                    <Link to="/admin/financial">
+                      Financeiro
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -564,7 +570,7 @@ export default function AeroclubeDashboard() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <Card>
+        <Card onClick={() => navigate('/admin/school/interested')} className="cursor-pointer hover:bg-slate-50 transition-colors">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Users className="h-4 w-4 text-primary" />
@@ -577,7 +583,7 @@ export default function AeroclubeDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card onClick={() => navigate('/admin/school/enrollments')} className="cursor-pointer hover:bg-slate-50 transition-colors">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Target className="h-4 w-4 text-primary" />
@@ -600,7 +606,7 @@ export default function AeroclubeDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card onClick={() => navigate('/admin/reports/relatorio-vendas')} className="cursor-pointer hover:bg-slate-50 transition-colors">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Percent className="h-4 w-4 text-primary" />
@@ -613,88 +619,94 @@ export default function AeroclubeDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <TrendingUp className="h-4 w-4 text-emerald-600" />
-              Negociado no mes
-            </CardTitle>
-            <CardDescription>Total das propostas ganhas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.negotiatedAmount)}</div>
-          </CardContent>
-        </Card>
+        {showFinancial && (
+          <>
+            <Card onClick={() => navigate('/admin/reports/relatorio-vendas')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <TrendingUp className="h-4 w-4 text-emerald-600" />
+                  Negociado no mes
+                </CardTitle>
+                <CardDescription>Total das propostas ganhas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.negotiatedAmount)}</div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              Recebido no mes
-            </CardTitle>
-            <CardDescription>Recebimentos vinculados aos ganhos</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.paidAmount)}</div>
-          </CardContent>
-        </Card>
+            <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  Recebido no mes
+                </CardTitle>
+                <CardDescription>Recebimentos vinculados aos ganhos</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.paidAmount)}</div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <DollarSign className="h-4 w-4 text-amber-600" />
-              Saldo em aberto
-            </CardTitle>
-            <CardDescription>Restante a receber dos ganhos do mes</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.remainingAmount)}</div>
-          </CardContent>
-        </Card>
+            <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <DollarSign className="h-4 w-4 text-amber-600" />
+                  Saldo em aberto
+                </CardTitle>
+                <CardDescription>Restante a receber dos ganhos do mes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.remainingAmount)}</div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Card className={Number(financialSummary?.overdueReceivables ?? 0) > 0 ? 'border-amber-300 bg-amber-50/60' : ''}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              Recebiveis vencidos
-            </CardTitle>
-            <CardDescription>Saldo vencido dentro do mes de referencia</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.overdueReceivables ?? 0))}</div>
-          </CardContent>
-        </Card>
+      {showFinancial && (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className={`cursor-pointer transition-colors hover:border-amber-400 hover:bg-amber-100/60 ${Number(financialSummary?.overdueReceivables ?? 0) > 0 ? 'border-amber-300 bg-amber-50/60' : 'hover:bg-slate-50'}`}>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                Recebiveis vencidos
+              </CardTitle>
+              <CardDescription>Saldo vencido dentro do mes de referencia</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.overdueReceivables ?? 0))}</div>
+            </CardContent>
+          </Card>
 
-        <Card className={Number(financialSummary?.overduePayables ?? 0) > 0 ? 'border-rose-300 bg-rose-50/60' : ''}>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Clock3 className="h-4 w-4 text-rose-600" />
-              Pagaveis vencidos
-            </CardTitle>
-            <CardDescription>Compromissos vencidos no mesmo recorte</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.overduePayables ?? 0))}</div>
-          </CardContent>
-        </Card>
+          <Card onClick={() => navigate('/admin/finance/accounts-payable')} className={`cursor-pointer transition-colors hover:border-rose-400 hover:bg-rose-100/60 ${Number(financialSummary?.overduePayables ?? 0) > 0 ? 'border-rose-300 bg-rose-50/60' : 'hover:bg-slate-50'}`}>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Clock3 className="h-4 w-4 text-rose-600" />
+                Pagaveis vencidos
+              </CardTitle>
+              <CardDescription>Compromissos vencidos no mesmo recorte</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.overduePayables ?? 0))}</div>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <DollarSign className="h-4 w-4 text-emerald-600" />
-              Caixa liquido
-            </CardTitle>
-            <CardDescription>Entradas pagas menos saidas pagas no mes</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.cashBalance ?? 0))}</div>
-          </CardContent>
-        </Card>
-      </div>
+          <Card onClick={() => navigate('/admin/finance/cash-flow')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <DollarSign className="h-4 w-4 text-emerald-600" />
+                Caixa liquido
+              </CardTitle>
+              <CardDescription>Entradas pagas menos saidas pagas no mes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.cashBalance ?? 0))}</div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className={`grid gap-6 ${showFinancial ? 'xl:grid-cols-2' : 'xl:grid-cols-1'}`}>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -730,26 +742,28 @@ export default function AeroclubeDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Financeiro dos ganhos</CardTitle>
-            <CardDescription>Negociado, recebido e saldo das propostas ganhas no mesmo periodo.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={monthlyFinancial}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis tickFormatter={(value) => `R$ ${Math.round(Number(value) / 1000)}k`} />
-                <Tooltip formatter={(value: number) => formatCurrency(Number(value))} />
-                <Legend />
-                <Bar dataKey="negotiatedAmount" name="Negociado" fill="#0f766e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="paidAmount" name="Recebido" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                <Line type="monotone" dataKey="remainingAmount" name="Saldo" stroke="#f97316" strokeWidth={2} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {showFinancial && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Financeiro dos ganhos</CardTitle>
+              <CardDescription>Negociado, recebido e saldo das propostas ganhas no mesmo periodo.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={monthlyFinancial}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis tickFormatter={(value) => `R$ ${Math.round(Number(value) / 1000)}k`} />
+                  <Tooltip formatter={(value: number) => formatCurrency(Number(value))} />
+                  <Legend />
+                  <Bar dataKey="negotiatedAmount" name="Negociado" fill="#0f766e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="paidAmount" name="Recebido" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="remainingAmount" name="Saldo" stroke="#f97316" strokeWidth={2} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

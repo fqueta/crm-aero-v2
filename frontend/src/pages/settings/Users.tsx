@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Pencil, Trash2, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,12 +34,23 @@ import { UserRecord } from '@/types/users';
 export default function Users() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState('10');
   const [deletingUser, setDeletingUser] = useState<UserRecord | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const { data: usersData, isLoading, error } = useUsersList({ 
     page, 
-    per_page: 10 
+    per_page: perPage === 'all' ? 1000 : Number(perPage),
+    search: debouncedSearch
   });
 
   const { data: permissionsData } = usePermissionsList();
@@ -49,20 +61,7 @@ export default function Users() {
   const users = usersData?.data || [];
   const totalPages = usersData?.last_page || 1;
 
-  // Client-side filtering (optional, if API supports search better use that)
-  const filteredUsers = useMemo(() => {
-    if (!search.trim()) return users;
-    const searchLower = search.toLowerCase();
-    return users.filter((user) => {
-      const normalizedName = String(user.name ?? '').toLowerCase();
-      const normalizedEmail = String(user.email ?? '').toLowerCase();
-
-      return (
-        normalizedName.includes(searchLower) ||
-        normalizedEmail.includes(searchLower)
-      );
-    });
-  }, [users, search]);
+  // Backend já faz o filtro, não precisamos de filtragem no cliente
 
   const handleDelete = async () => {
     if (deletingUser) {
@@ -140,8 +139,8 @@ export default function Users() {
           <CardDescription>
             Configure os usuários do sistema
           </CardDescription>
-          <div className="flex items-center space-x-2">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 max-w-sm min-w-[200px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Buscar usuários..."
@@ -150,10 +149,22 @@ export default function Users() {
                 className="pl-10"
               />
             </div>
+            <Select value={perPage} onValueChange={(val) => { setPerPage(val); setPage(1); }}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Por página" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 por página</SelectItem>
+                <SelectItem value="20">20 por página</SelectItem>
+                <SelectItem value="50">50 por página</SelectItem>
+                <SelectItem value="100">100 por página</SelectItem>
+                <SelectItem value="all">Ver Todos</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>
-          {filteredUsers.length === 0 ? (
+          {users.length === 0 ? (
             <div className="text-center py-6">
               {search.trim() ? (
                 <p className="text-muted-foreground">
@@ -186,7 +197,7 @@ export default function Users() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
+                  {users.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell className="font-medium">
                         {user.name}

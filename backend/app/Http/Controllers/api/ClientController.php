@@ -76,7 +76,11 @@ class ClientController extends Controller
                 $q->where('email', 'like', '%' . $search . '%')
                   ->orWhere('cpf', 'like', '%' . $search . '%')
                   ->orWhere('cnpj', 'like', '%' . $search . '%')
-                  ->orWhere('name', 'like', '%' . $search . '%');
+                  ->orWhere('name', 'like', '%' . $search . '%')
+                  ->orWhere('celular', 'like', '%' . $search . '%')
+                  ->orWhere('config->celular', 'like', '%' . $search . '%')
+                  ->orWhere('config->phone', 'like', '%' . $search . '%')
+                  ->orWhere('id', $search);
             });
         }
         if ($request->filled('email')) {

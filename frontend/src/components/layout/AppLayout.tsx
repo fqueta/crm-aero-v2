@@ -1,6 +1,6 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { Bell, Search, LogOut, Sun, Moon } from "lucide-react";
+import { Bell, Command, LogOut, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -26,6 +26,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import React from "react";
+import { QuickClientSearch } from "@/components/clients/QuickClientSearch";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -87,8 +88,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={() => setCmdOpen(true)} title="Pesquisar (Ctrl+K)">
-                <Search className="h-4 w-4" />
+              <QuickClientSearch />
+              <Button variant="ghost" size="icon" onClick={() => setCmdOpen(true)} title="Navegação Global (Ctrl+K)">
+                <Command className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" onClick={toggleTheme} title="Alternar tema">
                 {/* Mostra sol/lua conforme classe dark no documento */}

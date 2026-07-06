@@ -124,6 +124,12 @@ class MenuPermissionSeeder extends Seeder
             51 => false,  // Importação de Dados
         ];
 
+        $group4Permissions = [
+            1  => true,   // Dashboard
+            2  => true,   // Vendas e Propostas
+            4  => true,   // Clientes
+        ];
+
         DB::table('menu_permission')->delete();
 
         foreach ($menus as $menu) {
@@ -132,6 +138,7 @@ class MenuPermissionSeeder extends Seeder
                     1 => true,  // Master: tudo true
                     2 => $group2Permissions[$menu->id] ?? false,
                     3 => $group3Permissions[$menu->id] ?? false,
+                    4 => $group4Permissions[$menu->id] ?? false,
                     default => false,
                 };
 

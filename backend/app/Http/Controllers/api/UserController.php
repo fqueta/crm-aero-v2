@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 // Removido import indevido de função do PHPUnit; usar nativo is_array
 use App\Models\EventLog;
@@ -82,6 +83,13 @@ class UserController extends Controller
         }
         if ($request->filled('cnpj')) {
             $query->where('cnpj', 'like', '%' . $request->input('cnpj') . '%');
+        }
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('email', 'like', '%' . $search . '%');
+            });
         }
         //**Adicionar filtros extras  */
         //se existir um campo consultores for true então filtrar todos com permissão maior ou igual a dele
@@ -588,5 +596,19 @@ class UserController extends Controller
         } catch (\Throwable $e) {}
 
         return response()->json($userToUpdate);
+    }
+
+    public function changePassword(Request $request)
+    {
+        $validated = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'new_password' => ['required', Password::defaults(), 'confirmed'],
+        ]);
+
+        $request->user()->update([
+            'password' => Hash::make($validated['new_password']),
+        ]);
+
+        return response()->json(['message' => 'Senha alterada com sucesso!']);
     }
 }
