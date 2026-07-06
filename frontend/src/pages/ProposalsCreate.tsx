@@ -1014,7 +1014,9 @@ export default function ProposalsCreate() {
       // Fluxo “Salvar e Finalizar”: voltar para origem/lista
       try { queryClient.invalidateQueries(); } catch {}
       if (navState?.returnTo && typeof navState.returnTo === 'string') {
-        navigate(navState.returnTo);
+        const url = new URL(navState.returnTo, window.location.origin);
+        if (idStr) url.searchParams.set('highlight_matricula', idStr);
+        navigate(url.pathname + url.search);
       } else if (navState?.funnelId) {
         navigate(`/admin/sales?funnel=${navState.funnelId}`);
       } else {

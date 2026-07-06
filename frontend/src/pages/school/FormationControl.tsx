@@ -69,7 +69,12 @@ export default function FormationControl() {
   const [situacaoSearch, setSituacaoSearch] = useState('');
 
   // ─── Sheet lateral ────────────────────────────────────────────────────────
-  const [openPeriodId, setOpenPeriodId] = useState<number | null>(null);
+  const highlightPeriod = searchParams.get('highlight_period');
+  const highlightMatricula = searchParams.get('highlight_matricula');
+  
+  const [openPeriodId, setOpenPeriodId] = useState<number | null>(() => {
+    return highlightPeriod ? Number(highlightPeriod) : null;
+  });
   const [sheetTab, setSheetTab] = useState<'all' | 'ready' | 'pending'>('all');
   const [modalSearch, setModalSearch] = useState('');
 
@@ -81,7 +86,7 @@ export default function FormationControl() {
     refetchOnWindowFocus: false,
   });
   const courseItems = (coursesQuery.data?.data || coursesQuery.data?.items || []) as any[];
-  const courseOptions = useComboboxOptions(courseItems, 'id', 'nome', undefined, (c: any) => String(c?.titulo || ''));
+  const courseOptions = useComboboxOptions(courseItems, 'id', 'nome');
 
   // ─── Situações de matrícula ───────────────────────────────────────────────
   const situacoesQuery = useQuery({
@@ -138,6 +143,19 @@ export default function FormationControl() {
   });
   const studentsData = studentsQuery.data;
   const allStudents: PeriodEnrolledStudent[] = studentsData?.matriculados || [];
+
+  // Scroll automático para a matrícula destacada quando os alunos carregam
+  useEffect(() => {
+    if (highlightMatricula && !studentsQuery.isLoading && openPeriodId) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`matricula-${highlightMatricula}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightMatricula, studentsQuery.isLoading, openPeriodId]);
 
   const filteredStudents = useMemo(() => {
     let list = allStudents;
@@ -479,11 +497,15 @@ export default function FormationControl() {
             {!studentsQuery.isLoading && filteredStudents.map((student) => {
               const st = statusConfig[student.status] || statusConfig['a'];
               const StatusIcon = st.icon;
+              const isHighlighted = highlightMatricula === String(student.matricula_id);
 
               return (
                 <div
                   key={student.matricula_id}
-                  className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-3.5 space-y-2.5 hover:border-zinc-200 dark:hover:border-zinc-700 transition-colors duration-150 shadow-sm"
+                  id={`matricula-${student.matricula_id}`}
+                  className={`rounded-xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-3.5 space-y-2.5 hover:border-zinc-200 dark:hover:border-zinc-700 transition-colors duration-150 shadow-sm ${
+                    isHighlighted ? 'ring-2 ring-violet-500 animate-[pulse_2s_ease-in-out_3]' : ''
+                  }`}
                 >
                   {/* Nome + status */}
                   <div className="flex items-start justify-between gap-2">
@@ -565,7 +587,7 @@ export default function FormationControl() {
                             `/admin/sales/proposals/view/${student.matricula_id}`,
                             {
                               state: {
-                                returnTo: `/admin/school/formation-control?id_curso=${selectedCourseId}${situacaoSlug ? `&situacao_slug=${situacaoSlug}` : ''}`,
+                                returnTo: `/admin/school/formation-control?id_curso=${selectedCourseId}${situacaoSlug ? `&situacao_slug=${situacaoSlug}` : ''}&highlight_period=${openPeriodId}`,
                               },
                             }
                           )
@@ -586,7 +608,7 @@ export default function FormationControl() {
                               `/admin/sales/proposals/create?id_cliente=${student.aluno_id}&id_curso=${selectedCourseId}`,
                               {
                                 state: {
-                                  returnTo: `/admin/school/formation-control?id_curso=${selectedCourseId}${situacaoSlug ? `&situacao_slug=${situacaoSlug}` : ''}`,
+                                  returnTo: `/admin/school/formation-control?id_curso=${selectedCourseId}${situacaoSlug ? `&situacao_slug=${situacaoSlug}` : ''}&highlight_period=${student.proximo_periodo_id}`,
                                 },
                               }
                             )

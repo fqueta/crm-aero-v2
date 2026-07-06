@@ -15,6 +15,7 @@ import ResponsibleInfoCard from '@/components/school/ResponsibleInfoCard';
 import ProposalAttendanceCard from '@/components/school/ProposalAttendanceCard';
 import ProposalContractsTab from './ProposalContractsTab';
 import ProposalLogsTab from './ProposalLogsTab';
+import CourseOtherProposalsPanel from './CourseOtherProposalsPanel';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -500,6 +501,14 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                       parcelamento={parcelamento}
                       emissionDate={emissionDate}
                   />
+
+                  {(Number(course?.tipo) === 4 || Number((enrollment as any)?.curso_tipo) === 4) && clientId && courseId && (
+                    <CourseOtherProposalsPanel
+                      clientId={clientId}
+                      courseId={courseId}
+                      currentEnrollmentId={id}
+                    />
+                  )}
 
                </div>
 

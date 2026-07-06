@@ -71,13 +71,23 @@ export function Combobox({
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [searchValue, setSearchValue] = React.useState(searchTerm || "")
+  const [triggerWidth, setTriggerWidth] = React.useState<number | undefined>(undefined)
+  const onSearchRef = React.useRef(onSearch)
+  const triggerRef = React.useRef<HTMLButtonElement>(null)
 
   const selectedOption = options.find((option) => option.value === value)
 
-  const onSearchRef = React.useRef(onSearch)
+  // Sincroniza a ref com a prop onSearch
   React.useEffect(() => {
     onSearchRef.current = onSearch
   }, [onSearch])
+
+  // Ajusta a largura do popover
+  React.useEffect(() => {
+    if (open && triggerRef.current) {
+      setTriggerWidth(triggerRef.current.offsetWidth)
+    }
+  }, [open])
 
   /**
    * Efeito de debounce para disparar busca remota suavemente
@@ -93,6 +103,7 @@ export function Combobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          ref={triggerRef}
           variant="outline"
           role="combobox"
           aria-expanded={open}
@@ -115,10 +126,13 @@ export function Combobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      {/* Ajusta a largura do popover para igualar ao input/trigger */}
-      {/* Adjust popover width to match input/trigger width */}
-      <PopoverContent className="p-0" style={{ width: 'var(--radix-popover-trigger-width)' }} align="start">
-        <Command>
+      {/* Ajusta a largura do popover baseando-se no triggerWidth medido */}
+      <PopoverContent 
+        className="p-0 overflow-hidden" 
+        style={{ width: triggerWidth ? `${triggerWidth}px` : 'auto', maxWidth: triggerWidth ? `${triggerWidth}px` : 'auto' }} 
+        align="start"
+      >
+        <Command className="overflow-hidden">
           <CommandInput 
             placeholder={searchPlaceholder}
             value={searchValue}
