@@ -137,4 +137,6 @@ export interface ClientsListParams {
    * en-US: Optional filter by client's permission ID (e.g., 8).
    */
   permission_id?: number;
+  date_start?: string;
+  date_end?: string;
 }

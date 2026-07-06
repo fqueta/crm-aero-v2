@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import * as z from "zod";
 import { 
@@ -243,6 +243,9 @@ export default function Clients() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const date_start = searchParams.get('date_start') || undefined;
+  const date_end = searchParams.get('date_end') || undefined;
   const queryClient = useQueryClient();
   const debouncedSearchTerm = useDebounce(searchTerm, 400);
   // React Query: fetch clients with pagination and debounced search
@@ -258,6 +261,8 @@ export default function Clients() {
       per_page: pageSize,
       search: debouncedSearchTerm,
       excluido: showTrash ? 's' : undefined,
+      date_start,
+      date_end,
     },
     {
       staleTime: 0,

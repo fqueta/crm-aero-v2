@@ -513,7 +513,7 @@ export default function AeroclubeDashboard() {
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                       <SelectTrigger
                         id="dashboard-month"
-                        className="min-w-[180px] border-white/20 bg-white/10 text-white"
+                        className="w-full flex-1 border-white/20 bg-white/10 text-white"
                       >
                         <SelectValue placeholder="Selecione o mês" />
                       </SelectTrigger>
@@ -542,21 +542,21 @@ export default function AeroclubeDashboard() {
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button asChild variant="secondary">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                <Button asChild variant="secondary" className="w-full sm:w-auto justify-between sm:justify-center">
                   <Link to="/admin/reports/relatorio-geral">
                     Relatorio geral
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <Button asChild variant="secondary">
+                <Button asChild variant="secondary" className="w-full sm:w-auto justify-between sm:justify-center">
                   <Link to="/admin/reports/relatorio-vendas">
                     Relatorio de ganhos
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
                 {showFinancial && (
-                  <Button asChild variant="secondary">
+                  <Button asChild variant="secondary" className="w-full sm:w-auto justify-between sm:justify-center">
                     <Link to="/admin/financial">
                       Financeiro
                       <ArrowRight className="ml-2 h-4 w-4" />
@@ -570,7 +570,13 @@ export default function AeroclubeDashboard() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <Card onClick={() => navigate('/admin/school/interested')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+        <Card onClick={() => {
+          const [year, month] = selectedMonth.split('-');
+          const start = `${year}-${month}-01`;
+          const lastDay = new Date(Number(year), Number(month), 0).getDate();
+          const end = `${year}-${month}-${lastDay}`;
+          navigate(`/admin/clients?date_start=${start}&date_end=${end}`);
+        }} className="cursor-pointer hover:bg-slate-50 transition-colors">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Users className="h-4 w-4 text-primary" />

@@ -102,6 +102,14 @@ class ClientController extends Controller
             });
         }
 
+        // Filtro por periodo de criacao
+        if ($request->filled('date_start')) {
+            $query->whereDate('created_at', '>=', $request->input('date_start'));
+        }
+        if ($request->filled('date_end')) {
+            $query->whereDate('created_at', '<=', $request->input('date_end'));
+        }
+
         // Filtro por funil (funnel_id ou funnelId) derivado via stage_id
         if ($request->filled('funnel_id') || $request->filled('funnelId')) {
             $funnelId = (int) ($request->input('funnel_id') ?? $request->input('funnelId'));
