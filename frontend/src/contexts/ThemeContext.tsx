@@ -143,7 +143,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       // Import dinâmico para não quebrar a ordem de imports no topo (ou importar GenericApiService)
       const { GenericApiService } = await import('@/services/GenericApiService');
       const apiService = new GenericApiService('/options');
-      const response = await apiService.get<any>('/options/all');
+      const response = await apiService.get<any>('/options/theme');
       
       if (response && response.data && response.data.data) {
         const options = response.data.data;

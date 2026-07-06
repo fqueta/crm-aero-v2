@@ -117,6 +117,9 @@ Route::name('api.')->prefix('api/v1')->middleware([
     Route::get('pdf/propostas/public/{clientId}/{matriculaId}', [\App\Http\Controllers\api\PdfController::class, 'adminProposalByClientAndEnrollment'])
         ->name('pdf.propostas.public');
 
+    // Public theme route
+    Route::get('options/theme', [\App\Http\Controllers\api\OptionController::class, 'publicTheme']);
+
     Route::fallback(function () {
         return response()->json(['message' => 'Rota não encontrada'], 404);
     });

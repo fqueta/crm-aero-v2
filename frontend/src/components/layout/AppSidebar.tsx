@@ -275,7 +275,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           {!collapsed && (
-            <div className="px-3 pb-2 pt-1">
+            <div className="sticky top-0 z-10 bg-sidebar px-3 pb-2 pt-2 -mt-1 shadow-sm">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input

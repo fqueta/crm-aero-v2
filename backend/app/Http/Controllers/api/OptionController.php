@@ -25,6 +25,27 @@ class OptionController extends Controller
     }
 
     /**
+     * Retorna apenas configurações públicas de tema
+     */
+    public function publicTheme()
+    {
+        $themeKeys = [
+            'app_primary_color',
+            'app_primary_text_color',
+            'app_secondary_color',
+            'app_secondary_text_color',
+            'app_hover_color',
+            'app_dark_mode_default'
+        ];
+
+        $options = Option::whereIn('url', $themeKeys)->get();
+
+        return response()->json([
+            'data' => $options
+        ]);
+    }
+
+    /**
      * Listar todas as opções
      */
     public function index(Request $request)
