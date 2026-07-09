@@ -335,14 +335,14 @@ export default function ProposalApproval() {
                         <div className="mx-auto bg-green-100 text-green-600 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
                             <CheckCircle className="w-8 h-8" />
                         </div>
-                        <CardTitle className="text-2xl text-green-800">Proposta Aguardado Assinatura Digital!</CardTitle>
+                        <CardTitle className="text-2xl text-green-800">Proposta Aguardando Assinatura Digital!</CardTitle>
                         <CardDescription>
                             A proposta foi aprovada e está aguardando assinatura digital.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="text-center space-y-4">
                         <p className="text-gray-600">
-                           Obrigado, <strong>{proposal.cliente?.name}</strong>. Em breve voce receberá uma mensagem com o link para assinar a proposta.
+                           Obrigado, <strong>{proposal.cliente?.name || proposal.student_name || proposal.name || 'Aluno'}</strong>. Em breve você receberá uma mensagem com o link para assinar a proposta.
                         </p>
 
                         {proposal.processo_assinatura?.signers?.[0]?.sign_url && (

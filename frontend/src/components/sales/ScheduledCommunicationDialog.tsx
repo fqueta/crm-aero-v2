@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { RichTextEditor } from '@/components/ui/RichTextEditor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -41,22 +42,30 @@ function getDefaultScheduledAt(): string {
  * pt-BR: Retorna a mensagem padrão conforme o canal escolhido.
  * en-US: Returns the default message according to the selected channel.
  */
-function getDefaultMessageByChannel(channel: ScheduledCommunicationChannel): string {
+function getDefaultMessageByChannel(channel: ScheduledCommunicationChannel, obsText: string = ''): string {
   if (channel === 'manual') {
     return 'Realizar contato com {nome} sobre a proposta {id_proposta} do curso {curso}.';
   }
 
-  return [
-    'Olá, {nome}!',
-    '',
-    'Segue o link para visualizar e assinar a sua proposta comercial:',
-    '{link_assinatura}',
-    '',
-    'Curso: {curso} — {turma}',
-    'Valor: {valor_proposta} | Parcelas: {parcelas}x de {valor_parcela}',
-    '',
-    'Período: {data_inicio} a {data_fim}',
-  ].join('\n');
+  let html = `
+<p>Olá, {nome}!</p>
+<p><strong>Sua aprovação da proposta foi solicitada.</strong><br/>
+Esta proposta refere-se à renovação da matrícula para o semestre letivo 2026.2, garantindo a continuidade da formação acadêmica e prática do aluno. Nela estão descritas as condições de permanência, valores, cronograma e demais informações necessárias para o prosseguimento das atividades durante o novo semestre.</p>
+<p>{botao_ver_proposta}<br/>
+<span style="font-size: 13px; color: #6b7280;">Ou utilize o link abaixo:</span><br/>
+{link_assinatura}</p>
+<p>
+  <strong>Curso:</strong> {curso} — {turma}<br/>
+  <strong>Valor:</strong> {valor_proposta} | <strong>Parcelas:</strong> {parcelas}x de {valor_parcela}
+</p>
+<p><strong>Período:</strong> {data_inicio} a {data_fim}</p>
+`;
+
+  if (obsText) {
+    html += `\n<p><strong>Observações:</strong></p>\n${obsText}`;
+  }
+
+  return html.trim();
 }
 
 /**
@@ -70,14 +79,24 @@ export function ScheduledCommunicationDialog({
   enrollments,
   onSuccess,
 }: ScheduledCommunicationDialogProps) {
-  const { toast } = useToast();
+  const defaultObs = useMemo(() => {
+    if (!enrollments || enrollments.length === 0) return '';
+    return enrollments[0].obs || (enrollments[0] as any).descricao || '';
+  }, [enrollments]);
+
   const [channel, setChannel] = useState<ScheduledCommunicationChannel>('email');
-  const [subject, setSubject] = useState('Sua proposta — {curso} — esta pronta para assinatura');
-  const [message, setMessage] = useState(getDefaultMessageByChannel('email'));
+  const [subject, setSubject] = useState('Renovação de Matrícula – Semestre 2026.2');
+  const [message, setMessage] = useState(() => getDefaultMessageByChannel('email', defaultObs));
   const [scheduledAt, setScheduledAt] = useState(getDefaultScheduledAt());
   const [tags, setTags] = useState('assinatura, proposta');
   const [createAttendanceLog, setCreateAttendanceLog] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  // Se as propostas mudarem com o modal fechado, atualiza a mensagem
+  useEffect(() => {
+    setMessage(getDefaultMessageByChannel(channel, defaultObs));
+  }, [defaultObs]);
 
   const enrollmentIds = useMemo(
     () => enrollments.map((enrollment) => Number(enrollment.id)).filter((id) => Number.isFinite(id)),
@@ -91,8 +110,8 @@ export function ScheduledCommunicationDialog({
    */
   function resetForm() {
     setChannel('email');
-    setSubject('Sua proposta — {curso} — esta pronta para assinatura');
-    setMessage(getDefaultMessageByChannel('email'));
+    setSubject('Renovação de Matrícula – Semestre 2026.2');
+    setMessage(getDefaultMessageByChannel('email', defaultObs));
     setScheduledAt(getDefaultScheduledAt());
     setTags('assinatura, proposta');
     setCreateAttendanceLog(true);
@@ -113,13 +132,13 @@ export function ScheduledCommunicationDialog({
   function handleChannelChange(value: string) {
     const nextChannel = value as ScheduledCommunicationChannel;
     setChannel(nextChannel);
-    setMessage(getDefaultMessageByChannel(nextChannel));
+    setMessage(getDefaultMessageByChannel(nextChannel, defaultObs));
     if (nextChannel === 'manual') {
       setSubject('');
       return;
     }
 
-    setSubject('Sua proposta — {curso} — esta pronta para assinatura');
+    setSubject('Sua aprovação da proposta foi solicitada');
   }
 
   /**
@@ -244,11 +263,10 @@ export function ScheduledCommunicationDialog({
             <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Mensagem padrao
             </label>
-            <Textarea
+            <RichTextEditor
               value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              className="min-h-[180px]"
-              placeholder="Use placeholders: {nome}, {curso}, {turma}, {link_assinatura}, {id_proposta}, {valor_proposta}, {desconto}, {subtotal}, {parcelas}, {valor_parcela}, {data_inicio}, {data_fim}, {carga_horaria}, {telefone}, {documento}"
+              onChange={setMessage}
+              placeholder="Use placeholders: {nome}, {curso}, {turma}, {link_assinatura}, {botao_ver_proposta}, {id_proposta}, {valor_proposta}, {desconto}, {subtotal}, {parcelas}, {valor_parcela}, {data_inicio}, {data_fim}, {carga_horaria}, {telefone}, {documento}"
             />
           </div>
 

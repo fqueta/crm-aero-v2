@@ -268,6 +268,24 @@ Route::post('matriculas/{id}/revoke-approval', [\App\Http\Controllers\api\Matric
             // Route::post('{id}/menus', [PermissionMenuController::class, 'update']);
         });
     });
+    // Rota publica para servir a logo dos e-mails (evita base64 no HTML)
+    Route::get('email-logo', function () {
+        $logo = \App\Services\Qlib::qoption('email_logo_url');
+        if (!$logo) {
+            return response()->noContent(404);
+        }
+        if (preg_match('/^data:image\/(\w+);base64,/', $logo, $type)) {
+            $image = base64_decode(substr($logo, strpos($logo, ',') + 1));
+            if ($image === false) {
+                return response()->noContent(500);
+            }
+            return response($image)->header('Content-Type', 'image/' . $type[1]);
+        }
+        if (preg_match('/^https?:\/\//', $logo)) {
+            return redirect($logo);
+        }
+        return response()->noContent(404);
+    })->name('email-logo');
     // Rotas para tracking events
     Route::post('tracking/whatsapp-contact', [TrackingEventController::class, 'whatsappContact'])->name('tracking.whatsapp-contact');
     // Rotas para webhooks

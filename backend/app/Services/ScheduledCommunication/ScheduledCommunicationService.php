@@ -64,8 +64,8 @@ class ScheduledCommunicationService
                     'status' => 'scheduled',
                     'recipient_name' => $context['recipient_name'],
                     'recipient_email' => $context['recipient_email'],
-                    'subject' => $this->replaceTemplateTokens((string) ($payload['subject'] ?? ''), $context),
-                    'message' => $this->replaceTemplateTokens((string) ($payload['message'] ?? ''), $context),
+                    'subject' => $this->replaceTemplateTokens((string) ($payload['subject'] ?? ''), $context, $channel),
+                    'message' => $this->replaceTemplateTokens((string) ($payload['message'] ?? ''), $context, $channel),
                     'scheduled_at' => $scheduledAt,
                     'max_attempts' => (int) ($payload['max_attempts'] ?? 3),
                     'created_by' => $actor?->id ? (string) $actor->id : null,
@@ -285,6 +285,13 @@ class ScheduledCommunicationService
         $courseName = $course?->nome ?? $course?->titulo ?? 'Curso';
         $turmaNome = $turma?->nome ?? '';
 
+        $formatCurrency = function ($value) {
+            if (!is_numeric($value)) {
+                return (string) $value;
+            }
+            return 'R$ ' . number_format((float) $value, 2, ',', '.');
+        };
+
         return [
             'client_id' => $client?->id ? (string) $client->id : null,
             'recipient_name' => $payload['recipient_name'] ?? $client?->name ?? 'Cliente',
@@ -293,11 +300,11 @@ class ScheduledCommunicationService
             'turma_nome' => $turmaNome,
             'matricula_id' => (string) $matricula->id,
             'signature_link' => $signatureLink,
-            'proposal_amount' => (string) ($matricula->total ?? $matricula->subtotal ?? ''),
-            'proposal_discount' => (string) ($matricula->desconto ?? ''),
-            'proposal_subtotal' => (string) ($matricula->subtotal ?? ''),
+            'proposal_amount' => $formatCurrency($matricula->total ?? $matricula->subtotal ?? ''),
+            'proposal_discount' => $formatCurrency($matricula->desconto ?? ''),
+            'proposal_subtotal' => $formatCurrency($matricula->subtotal ?? ''),
             'installment_count' => (string) ($matricula->parcelamento ?? ''),
-            'installment_value' => (string) ($matricula->valor_parcela ?? ''),
+            'installment_value' => $formatCurrency($matricula->valor_parcela ?? ''),
             'course_duration' => $course?->duracao ? ((string) $course->duracao . ' ' . ($course->unidade_duracao ?? '')) : '',
             'data_inicio' => $turma?->inicio ? $turma->inicio->format('d/m/Y') : '',
             'data_fim' => $turma?->fim ? $turma->fim->format('d/m/Y') : '',
@@ -311,7 +318,7 @@ class ScheduledCommunicationService
      * pt-BR: Substitui placeholders simples no assunto e na mensagem do agendamento.
      * en-US: Replaces simple placeholders in the subject and message templates.
      */
-    protected function replaceTemplateTokens(string $content, array $context): string
+    protected function replaceTemplateTokens(string $content, array $context, string $channel = 'email'): string
     {
         $replacements = [
             '{nome}' => (string) ($context['recipient_name'] ?? ''),
@@ -320,6 +327,7 @@ class ScheduledCommunicationService
             '{turma}' => (string) ($context['turma_nome'] ?? ''),
             '{periodo}' => (string) ($context['turma_nome'] ?? ''),
             '{link_assinatura}' => (string) ($context['signature_link'] ?? ''),
+            '{botao_ver_proposta}' => $context['signature_link'] ? '{botao_ver_proposta}' : '',
             '{id_proposta}' => (string) ($context['matricula_id'] ?? ''),
             '{valor_proposta}' => (string) ($context['proposal_amount'] ?? ''),
             '{desconto}' => (string) ($context['proposal_discount'] ?? ''),
@@ -343,22 +351,44 @@ class ScheduledCommunicationService
      */
     protected function createAttendanceLog(ScheduledCommunication $communication): void
     {
-        if (!$communication->client_id) {
-            return;
-        }
+        try {
+            $clientId = $communication->client_id;
+            if (!$clientId && $communication->matricula_id) {
+                $matricula = Matricula::withTrashed()->find($communication->matricula_id);
+                $clientId = $matricula?->id_cliente;
+            }
+            if (!$clientId) {
+                Log::warning('createAttendanceLog: client_id não disponível para agendamento', [
+                    'scheduled_communication_id' => $communication->id,
+                    'matricula_id' => $communication->matricula_id,
+                ]);
+                return;
+            }
 
-        ClientAttendance::create([
-            'client_id' => $communication->client_id,
-            'attended_by' => $communication->created_by,
-            'channel' => $communication->channel,
-            'observation' => $communication->message,
-            'metadata' => [
+            ClientAttendance::create([
+                'client_id' => $clientId,
+                'attended_by' => $communication->created_by ?: '1',
+                'channel' => $communication->channel,
+                'observation' => $communication->message,
+                'metadata' => [
+                    'scheduled_communication_id' => $communication->id,
+                    'matricula_id' => $communication->matricula_id,
+                    'provider' => $communication->provider,
+                    'provider_message_id' => $communication->provider_message_id,
+                ],
+            ]);
+
+            Log::info('createAttendanceLog: registro criado com sucesso', [
                 'scheduled_communication_id' => $communication->id,
-                'matricula_id' => $communication->matricula_id,
-                'provider' => $communication->provider,
-                'provider_message_id' => $communication->provider_message_id,
-            ],
-        ]);
+                'client_id' => $clientId,
+            ]);
+        } catch (\Throwable $th) {
+            Log::error('createAttendanceLog: erro ao criar registro', [
+                'scheduled_communication_id' => $communication->id,
+                'error' => $th->getMessage(),
+                'trace' => $th->getTraceAsString(),
+            ]);
+        }
     }
 
     /**

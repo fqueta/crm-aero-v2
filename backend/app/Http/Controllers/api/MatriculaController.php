@@ -1223,10 +1223,10 @@ class MatriculaController extends Controller
         $base = [
             // IDs devem existir nas tabelas correspondentes.
             // Valida diretamente em users com permission_id = 7.
-            'id_cliente' => [$update ? 'sometimes' : 'required', 'uuid', 'exists:users,id,permission_id,7'],
+            'id_cliente' => [$update ? 'sometimes' : 'required', 'integer', 'exists:users,id'],
             'id_curso' => [$update ? 'sometimes' : 'required', 'integer', 'exists:cursos,id'],
-            'id_responsavel' => ['nullable', 'uuid'],
-            'id_consultor' => ['nullable', 'uuid'],
+            'id_responsavel' => ['nullable', 'integer'],
+            'id_consultor' => ['nullable', 'integer'],
             'id_turma' => ['nullable', 'integer', 'exists:turmas,id'],
             // Situação da matrícula: referência para posts (situacao_matricula)
             'situacao_id' => ['nullable', 'integer', Rule::exists('posts','ID')->where(function($q){ $q->where('post_type','situacao_matricula'); })],

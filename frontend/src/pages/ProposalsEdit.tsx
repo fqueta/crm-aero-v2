@@ -566,7 +566,15 @@ export default function ProposalsEdit() {
     return Array.isArray(list) ? list : [];
   }, [situationsData]);
 
-  const clientsList = useMemo(() => (clientsData?.data || clientsData?.items || []), [clientsData]);
+  const clientsList = useMemo(() => {
+    const list = [...(clientsData?.data || clientsData?.items || [])];
+    const encClient = (enrollment as any)?.cliente;
+    if (encClient && !list.find(c => String(c.id) === String(encClient.id))) {
+      list.unshift(encClient);
+    }
+    return list;
+  }, [clientsData, enrollment]);
+
   const clientOptions = useComboboxOptions<any>(
     clientsList,
     'id',
