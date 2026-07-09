@@ -121,6 +121,7 @@ export default function SystemSettings() {
       showAnimations: true,
       logoUrl: "",
       faviconUrl: "",
+      emailNome: "",
     };
   });
 
@@ -271,10 +272,26 @@ export default function SystemSettings() {
   /**
    * Salva configurações de aparência
    */
-  const handleSaveAppearanceSettings = () => {
+  const handleSaveAppearanceSettings = async () => {
     localStorage.setItem('appearanceSettings', JSON.stringify(appearanceSettings));
     applyAppearanceSettings(appearanceSettings);
     window.dispatchEvent(new Event('appearanceSettingsUpdated'));
+
+    try {
+      const emailSettings: Record<string, string> = {};
+      if (appearanceSettings.logoUrl) {
+        emailSettings.email_logo_url = appearanceSettings.logoUrl;
+      }
+      if (appearanceSettings.emailNome) {
+        emailSettings.email_nome = appearanceSettings.emailNome;
+      }
+      if (Object.keys(emailSettings).length > 0) {
+        await systemSettingsService.saveAdvancedSettings(emailSettings as AdvancedSystemSettings);
+      }
+    } catch (error) {
+      console.error('Erro ao salvar configurações de e-mail:', error);
+    }
+
     toast.success('Configurações de aparência salvas!');
   };
 
@@ -496,6 +513,26 @@ export default function SystemSettings() {
           cacheDriver: data.cacheDriver,
           sessionDriver: data.sessionDriver,
           queueDriver: data.queueDriver,
+        }));
+      }
+
+      // Carrega configurações de e-mail do banco
+      const emailUpdates: Record<string, string> = {};
+      if (data.email_logo_url) {
+        emailUpdates.logoUrl = data.email_logo_url;
+      }
+      if (data.email_nome) {
+        emailUpdates.emailNome = data.email_nome;
+      }
+      if (Object.keys(emailUpdates).length > 0) {
+        setAppearanceSettings(prev => ({
+          ...prev,
+          ...emailUpdates,
+        }));
+        const stored = JSON.parse(localStorage.getItem('appearanceSettings') || '{}');
+        localStorage.setItem('appearanceSettings', JSON.stringify({
+          ...stored,
+          ...emailUpdates,
         }));
       }
       
@@ -720,6 +757,21 @@ export default function SystemSettings() {
                   maxSize={1}
                   acceptedTypes={['image/jpeg', 'image/png', 'image/svg+xml', 'image/x-icon']}
                 />
+              </div>
+
+              <div className="space-y-2 pt-4 border-t">
+                <Label htmlFor="emailNome">Nome do Remetente (E-mail)</Label>
+                <Input
+                  id="emailNome"
+                  type="text"
+                  value={appearanceSettings.emailNome}
+                  onChange={(e) => handleAppearanceChange('emailNome', e.target.value)}
+                  placeholder="Ex.: Aeroclube JF"
+                  className="w-full"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Nome que aparece no cabeçalho dos e-mails enviados pelo sistema.
+                </p>
               </div>
 
               <div className="flex justify-end pt-4 border-t">

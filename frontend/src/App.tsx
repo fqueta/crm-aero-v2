@@ -87,6 +87,7 @@ import LandingPage from "./pages/LandingPage";
 import AeroclubeDashboard from "./pages/AeroclubeDashboard";
 import CustomersLeads from "./pages/CustomersLeads";
 import Sales from "./pages/Sales";
+import ScheduledCommunicationsPage from "./pages/ScheduledCommunications";
 import ProposalsCreate from "./pages/ProposalsCreate";
 import ProposalsEdit from "./pages/ProposalsEdit";
 import ProposalsView from "./pages/ProposalsView";
@@ -476,6 +477,13 @@ const App = () => {
                 <AdminProtectedRoute>
                   <AppLayout>
                     <Sales />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/sales/scheduled-communications" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <ScheduledCommunicationsPage />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

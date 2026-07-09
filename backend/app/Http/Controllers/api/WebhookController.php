@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\api\MetricasController;
 use App\Http\Controllers\Controller;
+use App\Models\ScheduledCommunication;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
@@ -177,6 +178,8 @@ class WebhookController extends Controller
 
             case 'zapsing':
                 return $this->processZapsingWebhook($endp1, $endp2, $payload, $headers);
+            case 'brevo':
+                return $this->processBrevoWebhook($payload, $headers);
             default:
                 return $this->processGenericWebhook($endp1, $endp2, $payload, $headers);
         }
@@ -375,6 +378,129 @@ class WebhookController extends Controller
             'processed_at' => now()->toISOString(),
             'payload_received' => !empty($payload),
             'data' => $proccess
+        ];
+    }
+
+    /**
+     * processBrevoWebhook
+     * pt-BR: Processa eventos de tracking do Brevo (abertura, clique, entrega, bounce, etc.)
+     * en-US: Processes Brevo tracking events (open, click, delivery, bounce, etc.)
+     *
+     * Payload Brevo:
+     * {
+     *   "event": "unique_opened|click|delivered|hard_bounce|soft_bounce|complaint|blocked|invalid_email",
+     *   "email": "cliente@email.com",
+     *   "message-id": "<202607081346.90685018781@smtp-relay.mailin.fr>",
+     *   "date": "2026-07-09 07:41:34",
+     *   "subject": "Assunto do e-mail",
+     *   "tags": ["tag1","tag2"],
+     *   "link": "https://..." (presente em clicks),
+     *   "user_agent": "Mozilla/...",
+     *   "device_used": "DESKTOP|MOBILE|TABLET",
+     *   "ts_epoch": 1783593694690
+     * }
+     */
+    private function processBrevoWebhook(array $payload, array $headers): array
+    {
+        Log::info('Processando webhook Brevo', [
+            'event' => $payload['event'] ?? 'unknown',
+            'email' => $payload['email'] ?? 'unknown',
+        ]);
+
+        $messageId = $payload['message-id'] ?? null;
+        if (!$messageId) {
+            return [
+                'type' => 'brevo',
+                'processed_at' => now()->toISOString(),
+                'payload_received' => true,
+                'warning' => 'message-id ausente no payload',
+            ];
+        }
+
+        // Remove angle brackets from message-id for DB lookup
+        $cleanMessageId = trim($messageId, '<>');
+        $event = $payload['event'] ?? 'unknown';
+        $eventDate = $payload['date'] ?? now()->toDateTimeString();
+
+        $communication = ScheduledCommunication::where('provider_message_id', $cleanMessageId)->first();
+
+        if (!$communication) {
+            Log::warning('Brevo webhook: ScheduledCommunication não encontrado', [
+                'provider_message_id' => $cleanMessageId,
+                'event' => $event,
+            ]);
+            return [
+                'type' => 'brevo',
+                'processed_at' => now()->toISOString(),
+                'payload_received' => true,
+                'warning' => 'Nenhum agendamento encontrado para este message-id',
+                'provider_message_id' => $cleanMessageId,
+            ];
+        }
+
+        // Build tracking event entry
+        $trackingEvent = [
+            'event' => $event,
+            'timestamp' => $eventDate,
+            'email' => $payload['email'] ?? null,
+            'subject' => $payload['subject'] ?? null,
+            'ts_epoch' => $payload['ts_epoch'] ?? null,
+            'link' => $payload['link'] ?? null,
+            'user_agent' => $payload['user_agent'] ?? null,
+            'device_used' => $payload['device_used'] ?? null,
+            'sending_ip' => $payload['sending_ip'] ?? null,
+        ];
+
+        // Merge with existing metadata
+        $metadata = $communication->metadata ?? [];
+        if (!isset($metadata['tracking'])) {
+            $metadata['tracking'] = [];
+        }
+        $metadata['tracking'][] = $trackingEvent;
+
+        // Update summary fields for quick frontend display
+        $summary = $metadata['summary'] ?? [];
+        $summary['last_event'] = $event;
+        $summary['last_event_at'] = $eventDate;
+        $metadata['summary'] = $summary;
+
+        // Update status based on event type
+        $statusMap = [
+            'delivered' => null, // Keep current status (sent)
+            'sent' => null,
+            'unique_opened' => null,
+            'opened' => null,
+            'click' => null,
+            'unique_click' => null,
+            'hard_bounce' => 'failed',
+            'soft_bounce' => 'failed',
+            'blocked' => 'failed',
+            'invalid_email' => 'failed',
+            'complaint' => 'failed',
+            'unsubscribed' => 'failed',
+            'error' => 'failed',
+        ];
+
+        $updateData = ['metadata' => $metadata];
+        if (isset($statusMap[$event])) {
+            $updateData['status'] = $statusMap[$event];
+            $updateData['last_error'] = "Evento Brevo: {$event}";
+        }
+
+        $communication->update($updateData);
+
+        Log::info('Brevo webhook processado com sucesso', [
+            'communication_id' => $communication->id,
+            'provider_message_id' => $cleanMessageId,
+            'event' => $event,
+        ]);
+
+        return [
+            'type' => 'brevo',
+            'processed_at' => now()->toISOString(),
+            'payload_received' => true,
+            'communication_id' => $communication->id,
+            'event' => $event,
         ];
     }
 

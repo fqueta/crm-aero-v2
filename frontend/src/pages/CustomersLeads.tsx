@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layers, Plus, NotebookPen, MoreHorizontal, Eye, MessageSquare, FileText, BookOpen, User2, Clock, Hash, CheckCircle2, CircleDot, XCircle, ExternalLink } from 'lucide-react';
+import { Layers, Plus, NotebookPen, MoreHorizontal, Eye, MessageSquare, FileText, BookOpen, User2, Clock, Hash, CheckCircle2, CircleDot, XCircle, ExternalLink, CalendarClock } from 'lucide-react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useFunnelsList, useStagesList, useUpdateStage } from '@/hooks/funnels';
 import { useUsersList } from '@/hooks/users';
@@ -23,6 +24,7 @@ import { CreateClientAttendanceInput } from '@/types/attendance';
 import { useToast } from '@/hooks/use-toast';
 import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
 import * as attendanceLogsService from '@/services/attendanceLogsService';
+import { ScheduledCommunicationDialog } from '@/components/sales/ScheduledCommunicationDialog';
 
 /**
  * hexToRgba
@@ -190,6 +192,7 @@ const getEnrollmentStatusBadgeClass = (status?: string): string => {
  *        Defaults to filtering support-area funnels.
  */
 export default function CustomersLeads({ place = 'atendimento' }: { place?: 'vendas' | 'atendimento' }) {
+  const navigate = useNavigate();
   /**
    * useAuth
    * pt-BR: Obtém o usuário atual para definir o consultor padrão no modal.
@@ -397,9 +400,27 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
   ), [enrollmentsData?.data]);
   const [localEnrollments, setLocalEnrollments] = useState<EnrollmentRecord[]>([]);
   const [salesStatusFilter, setSalesStatusFilter] = useState<'all' | 'a' | 'g' | 'p'>('a');
+  const [selectedEnrollmentIds, setSelectedEnrollmentIds] = useState<string[]>([]);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   useEffect(() => {
     if (place === 'vendas') setLocalEnrollments(allEnrollments);
   }, [place, allEnrollments]);
+  useEffect(() => {
+    setSelectedEnrollmentIds((prev) => {
+      const allowedIds = new Set(localEnrollments.map((enrollment) => String(enrollment.id)));
+      return prev.filter((id) => allowedIds.has(id));
+    });
+  }, [localEnrollments]);
+
+  /**
+   * selectedEnrollments
+   * pt-BR: Resolve os registros completos das propostas selecionadas no kanban.
+   * en-US: Resolves the full records for the proposals selected in the kanban.
+   */
+  const selectedEnrollments = useMemo(() => {
+    const selectedSet = new Set(selectedEnrollmentIds);
+    return localEnrollments.filter((enrollment) => selectedSet.has(String(enrollment.id)));
+  }, [localEnrollments, selectedEnrollmentIds]);
 
   /**
    * loadLastAttendanceFromStorage
@@ -740,6 +761,45 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
   const [attendanceTargetStageId, setAttendanceTargetStageId] = useState<string>('');
   const [attendanceDuration, setAttendanceDuration] = useState<string>('');
   const [attendanceTagsText, setAttendanceTagsText] = useState<string>('');
+
+  /**
+   * toggleEnrollmentSelection
+   * pt-BR: Alterna a selecao de uma proposta para operacoes em lote.
+   * en-US: Toggles proposal selection for batch operations.
+   */
+  const toggleEnrollmentSelection = (enrollmentId: string) => {
+    setSelectedEnrollmentIds((prev) => (
+      prev.includes(enrollmentId)
+        ? prev.filter((id) => id !== enrollmentId)
+        : [...prev, enrollmentId]
+    ));
+  };
+
+  /**
+   * toggleAllEnrollmentsSelection
+   * pt-BR: Seleciona ou desmarca todas as propostas de uma coluna.
+   * en-US: Selects or deselects all enrollments in a column.
+   */
+  const toggleAllEnrollmentsSelection = (enrollmentIds: string[], selectAll: boolean) => {
+    setSelectedEnrollmentIds((prev) => {
+      const set = new Set(prev);
+      for (const id of enrollmentIds) {
+        if (selectAll) set.add(id);
+        else set.delete(id);
+      }
+      return Array.from(set);
+    });
+  };
+
+  /**
+   * openScheduleDialogForEnrollment
+   * pt-BR: Abre o modal de agendamento focado em uma unica proposta.
+   * en-US: Opens the scheduling modal focused on a single proposal.
+   */
+  const openScheduleDialogForEnrollment = (enrollment: EnrollmentRecord) => {
+    setSelectedEnrollmentIds([String(enrollment.id)]);
+    setScheduleDialogOpen(true);
+  };
 
   /**
    * addLeadDialog state
@@ -1166,7 +1226,29 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
                 {dense ? 'Modo Compacto' : 'Modo Confortável'}
               </Label>
             </div>
+
+            {place === 'vendas' && (
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate('/admin/sales/scheduled-communications')}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Painel de agendamentos
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setScheduleDialogOpen(true)}
+                  disabled={selectedEnrollmentIds.length === 0}
+                >
+                  <CalendarClock className="mr-2 h-4 w-4" />
+                  Agendar atendimento/envio
+                </Button>
+              </div>
+            )}
           </div>
+
 
           {/* Diagnóstico: contadores de exclusão */}
           {/**
@@ -1286,6 +1368,10 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
                         onDropEnrollmentOnStage={onDropEnrollmentOnStage}
                         recentlyMovedEnrollmentId={recentlyMovedEnrollmentId}
                         onUpdateEnrollmentStatus={updateEnrollmentStatusQuickly}
+                        selectedEnrollmentIds={selectedEnrollmentIds}
+                        onToggleEnrollmentSelection={toggleEnrollmentSelection}
+                        onToggleAllSelection={toggleAllEnrollmentsSelection}
+                        onScheduleEnrollment={openScheduleDialogForEnrollment}
                       />
                     ) : (
                       <StageColumn
@@ -1516,6 +1602,35 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
           )}
         </CardContent>
       </Card>
+
+      {place === 'vendas' && selectedEnrollmentIds.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-primary/20 bg-background/95 backdrop-blur-sm shadow-[0_-4px_12px_rgba(0,0,0,0.08)] px-4 py-3">
+          <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{selectedEnrollmentIds.length}</Badge>
+              <span className="text-sm font-medium text-foreground">
+                proposta(s) selecionada(s) para agendamento
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedEnrollmentIds([])}>
+                Limpar selecao
+              </Button>
+              <Button type="button" size="sm" onClick={() => setScheduleDialogOpen(true)}>
+                <CalendarClock className="mr-2 h-4 w-4" />
+                Agendar agora
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ScheduledCommunicationDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        enrollments={selectedEnrollments}
+        onSuccess={() => setSelectedEnrollmentIds([])}
+      />
     </div>
   );
 }
@@ -1913,6 +2028,9 @@ function EnrollmentKanbanCard({
   onDragEnd,
   isRecentlyMoved,
   onUpdateStatus,
+  selected,
+  onToggleSelection,
+  onSchedule,
 }: {
   enrollment: EnrollmentRecord;
   dense?: boolean;
@@ -1921,6 +2039,9 @@ function EnrollmentKanbanCard({
   onDragEnd?: () => void;
   isRecentlyMoved?: boolean;
   onUpdateStatus?: (enrollmentId: string, status: 'a' | 'g' | 'p') => void;
+  selected?: boolean;
+  onToggleSelection?: (enrollmentId: string) => void;
+  onSchedule?: (enrollment: EnrollmentRecord) => void;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1966,6 +2087,12 @@ function EnrollmentKanbanCard({
       {/* Header: ID e Status */}
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-1.5 overflow-hidden">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelection?.(String(enrollment.id))}
+            onClick={(event) => event.stopPropagation()}
+            aria-label={`Selecionar proposta ${enrollment.id}`}
+          />
           <div className="flex items-center justify-center bg-primary/10 text-primary rounded-lg p-1.5 h-7 w-7 shrink-0">
              <Hash className="h-3.5 w-3.5 " />
           </div>
@@ -1989,6 +2116,9 @@ function EnrollmentKanbanCard({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={goToEdit} className="cursor-pointer">
                 <FileText className="mr-2 h-4 w-4 opacity-70" /> Editar
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSchedule?.(enrollment)} className="cursor-pointer">
+                <CalendarClock className="mr-2 h-4 w-4 opacity-70" /> Agendar
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onUpdateStatus?.(String(enrollment.id), 'a')} className="cursor-pointer">
                 <CircleDot className="mr-2 h-4 w-4 opacity-70" /> Marcar atendimento
@@ -2128,6 +2258,10 @@ function StageColumnSales({
   onDropEnrollmentOnStage,
   recentlyMovedEnrollmentId,
   onUpdateEnrollmentStatus,
+  selectedEnrollmentIds,
+  onToggleEnrollmentSelection,
+  onToggleAllSelection,
+  onScheduleEnrollment,
 }: {
   stage: StageRecord;
   funnelId: string;
@@ -2141,6 +2275,10 @@ function StageColumnSales({
   onDropEnrollmentOnStage: (toStageId: string) => void;
   recentlyMovedEnrollmentId?: string | null;
   onUpdateEnrollmentStatus: (enrollmentId: string, status: 'a' | 'g' | 'p') => void;
+  selectedEnrollmentIds: string[];
+  onToggleEnrollmentSelection: (enrollmentId: string) => void;
+  onToggleAllSelection: (enrollmentIds: string[], selectAll: boolean) => void;
+  onScheduleEnrollment: (enrollment: EnrollmentRecord) => void;
 }) {
   // useNavigate/useLocation para permitir abrir criação de propostas e retornar ao funil
   // pt-BR: Navega para a página de criação de propostas, carregando o estado atual para voltar.
@@ -2157,6 +2295,8 @@ function StageColumnSales({
   const totalCards = enrollments.length;
   const totalAmount = enrollments.reduce((sum, e) => sum + getEnrollmentAmountBRL(e), 0);
   const totalAmountBRL = formatBRL(totalAmount);
+  const allSelected = totalCards > 0 && enrollments.every((e) => selectedEnrollmentIds.includes(String(e.id)));
+  const someSelected = enrollments.some((e) => selectedEnrollmentIds.includes(String(e.id)));
 
   /**
    * handleAddProposal
@@ -2216,6 +2356,20 @@ function StageColumnSales({
         <div className="flex items-center justify-between p-3.5">
           <div className="flex items-center gap-2.5">
             <span className="inline-block h-3.5 w-3.5 rounded-full ring-2 ring-offset-1" style={{ backgroundColor: stageColor, '--tw-ring-color': stageColor + '40' } as any} />
+            <input
+              type="checkbox"
+              className="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary focus:ring-primary"
+              checked={allSelected}
+              ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+              onChange={() => {
+                onToggleAllSelection(
+                  enrollments.map((e) => String(e.id)),
+                  !allSelected
+                );
+              }}
+              onClick={(e) => e.stopPropagation()}
+              title={allSelected ? 'Desmarcar todas' : 'Selecionar todas'}
+            />
             {isEditing ? (
               <input
                 autoFocus
@@ -2276,6 +2430,9 @@ function StageColumnSales({
               onDragEnd={onDragEnd}
               isRecentlyMoved={recentlyMovedEnrollmentId === String(e.id)}
               onUpdateStatus={onUpdateEnrollmentStatus}
+              selected={selectedEnrollmentIds.includes(String(e.id))}
+              onToggleSelection={onToggleEnrollmentSelection}
+              onSchedule={onScheduleEnrollment}
             />
           ))
         )}

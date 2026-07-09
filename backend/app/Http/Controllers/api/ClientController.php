@@ -62,13 +62,20 @@ class ClientController extends Controller
 
         $query = Client::with('metas')->orderBy($order_by, $order);
 
-        // Não exibir registros marcados como deletados ou excluídos
-        $query->where(function($q) {
-            $q->where('deletado', 'n')->orWhereNull('deletado');
-        });
-        $query->where(function($q) {
-            $q->where('excluido', 'n')->orWhereNull('excluido');
-        });
+        // Filtro de lixeira: excluido=s mostra apenas registros deletados/excluídos
+        if ($request->input('excluido') === 's') {
+            $query->where(function($q) {
+                $q->where('deletado', 's')->orWhere('excluido', 's');
+            });
+        } else {
+            // Não exibir registros marcados como deletados ou excluídos
+            $query->where(function($q) {
+                $q->where('deletado', 'n')->orWhereNull('deletado');
+            });
+            $query->where(function($q) {
+                $q->where('excluido', 'n')->orWhereNull('excluido');
+            });
+        }
         //adiciona filtro search por email, cpf ou cnpj ou nome
         if ($request->filled('search')) {
             $search = $request->input('search');

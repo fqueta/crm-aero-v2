@@ -89,8 +89,32 @@ class PermissionService
 
         // Verifica permissão para a rota atual
         $routeName = request()->route()->getName();
+        //verifica se a rota é uma exceção, caso seja, retorna true
+        if($this->exceptions($routeName)){ return true; }
+
         $ret = $this->can($user, $routeName, $permissao);
         return $ret;
+    }
+    /***
+     * Metodo para mapear rotas para URLs de menu para exceções.
+     * @param string $name Nome da rota (ex: 'api.permissions.index').
+     * @return string URL correspondente no menu (ex: '/settings/permissions').
+     */
+    private function exceptions($routeName = ''): bool
+    {
+        $arr = [
+            'api.scheduled-communications.store' => true,
+            'api.scheduled-communications.index' => true,
+            'api.scheduled-communications.show' => true,
+            'api.scheduled-communications.update' => true,
+            'api.scheduled-communications.destroy' => true,
+            'api.scheduled-communications.cancel' => true,
+            'api.scheduled-communications.retry' => true,
+        ];
+        if (array_key_exists($routeName, $arr)) {
+            return true;
+        }
+        return false;
     }
     private function get_url_by_route($name=''){
         $url = '';

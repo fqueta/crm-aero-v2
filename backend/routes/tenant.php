@@ -142,6 +142,12 @@ Route::name('api.')->prefix('api/v1')->middleware([
         // Atendimentos do cliente (nested)
         Route::get('clients/{id}/attendances', [ClientAttendanceController::class, 'index'])->name('clients.attendances.index');
         Route::post('clients/{id}/attendances', [ClientAttendanceController::class, 'store'])->name('clients.attendances.store');
+        Route::get('scheduled-communications', [\App\Http\Controllers\api\ScheduledCommunicationController::class, 'index'])->name('scheduled-communications.index');
+        Route::post('scheduled-communications', [\App\Http\Controllers\api\ScheduledCommunicationController::class, 'store'])->name('scheduled-communications.store');
+        Route::get('scheduled-communications/{id}', [\App\Http\Controllers\api\ScheduledCommunicationController::class, 'show'])->name('scheduled-communications.show');
+        Route::patch('scheduled-communications/{id}/cancel', [\App\Http\Controllers\api\ScheduledCommunicationController::class, 'cancel'])->name('scheduled-communications.cancel');
+        Route::patch('scheduled-communications/{id}/retry', [\App\Http\Controllers\api\ScheduledCommunicationController::class, 'retry'])->name('scheduled-communications.retry');
+        Route::delete('scheduled-communications/{id}', [\App\Http\Controllers\api\ScheduledCommunicationController::class, 'destroy'])->name('scheduled-communications.destroy');
         Route::get('clients/trash', [ClientController::class, 'trash'])->name('clients.trash');
         Route::put('clients/{id}/restore', [ClientController::class, 'restore'])->name('clients.restore');
         Route::delete('clients/{id}/force', [ClientController::class, 'forceDelete'])->name('clients.forceDelete');

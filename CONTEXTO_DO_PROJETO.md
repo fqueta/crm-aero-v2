@@ -161,6 +161,104 @@ Arquivos-chave:
 - `frontend/src/pages/ProposalsEdit.tsx`
 - `frontend/src/pages/ProposalsView.tsx`
 
+### Agendamento de atendimento e envio de propostas
+
+Foi adicionado um novo modulo para agendar envios e atendimentos ligados a propostas/matriculas, com foco inicial em:
+
+- disparo de e-mail via Brevo com link de assinatura
+- agendamento por data/hora
+- selecao de propostas em lote no funil de vendas
+- painel administrativo de acompanhamento da execucao
+- registro opcional no historico de atendimento do cliente
+
+#### Objetivo funcional
+
+O fluxo permite que o usuario:
+
+1. selecione uma ou varias propostas no kanban de vendas
+2. clique em um botao de agendamento ou use a acao individual no card
+3. abra um modal para definir canal, assunto, mensagem e horario
+4. conclua o fluxo criando um item agendado por proposta
+5. acompanhe no painel se o envio foi executado, falhou, foi cancelado ou reagendado
+
+#### Canais suportados na primeira versao
+
+- `email` -> envio transacional via Brevo
+- `manual` -> tarefa interna de atendimento sem disparo externo
+
+#### Arquitetura adotada
+
+O modulo foi implementado com separacao de responsabilidades e uso de Design Patterns:
+
+- `Strategy` para cada canal/provedor
+- `Factory` para resolver a estrategia adequada
+- `Service Layer` para a regra de negocio do agendamento
+- `Job` para processamento assincrono
+- `Controller` fino apenas para validacao e delegacao
+
+#### Backend
+
+Entidades e arquivos principais:
+
+- `backend/database/migrations/tenant/2026_07_09_100000_create_scheduled_communications_table.php`
+- `backend/app/Models/ScheduledCommunication.php`
+- `backend/app/Contracts/ScheduledCommunicationChannelStrategy.php`
+- `backend/app/Services/ScheduledCommunication/ScheduledCommunicationStrategyFactory.php`
+- `backend/app/Services/ScheduledCommunication/ScheduledCommunicationService.php`
+- `backend/app/Services/ScheduledCommunication/Strategies/BrevoEmailScheduledCommunicationStrategy.php`
+- `backend/app/Services/ScheduledCommunication/Strategies/ManualAttendanceScheduledCommunicationStrategy.php`
+- `backend/app/Jobs/ProcessScheduledCommunicationJob.php`
+- `backend/app/Http/Controllers/api/ScheduledCommunicationController.php`
+- `backend/app/Providers/AppServiceProvider.php`
+- `backend/routes/tenant.php`
+
+#### Frontend
+
+Arquivos principais:
+
+- `frontend/src/pages/CustomersLeads.tsx`
+- `frontend/src/components/sales/ScheduledCommunicationDialog.tsx`
+- `frontend/src/pages/ScheduledCommunications.tsx`
+- `frontend/src/services/scheduledCommunicationsService.ts`
+- `frontend/src/types/scheduledCommunications.ts`
+- `frontend/src/App.tsx`
+- `frontend/src/lib/menu.ts`
+
+#### Tela administrativa
+
+Nova rota:
+
+- `/admin/sales/scheduled-communications`
+
+Capacidades do painel:
+
+- listar agendamentos com filtros
+- acompanhar status (`scheduled`, `processing`, `sent`, `failed`, `cancelled`)
+- cancelar itens pendentes
+- reenfileirar itens com falha ou cancelados
+- abrir a proposta vinculada
+
+#### Relacao com o fluxo atual de atendimento
+
+Quando configurado, o processamento bem-sucedido tambem cria um `ClientAttendance`, mantendo coerencia com o historico do cliente e com o fluxo ja existente de atendimento no CRM.
+
+#### Dependencias operacionais
+
+Para o modulo funcionar corretamente em producao:
+
+- a migration precisa estar aplicada
+- a fila do Laravel precisa estar ativa (`queue:work`)
+- o Brevo precisa estar configurado no backend
+
+#### Placeholders suportados na mensagem
+
+- `{nome}`
+- `{email}`
+- `{curso}`
+- `{link_assinatura}`
+- `{id_proposta}`
+- `{valor_proposta}`
+
 ### Financeiro
 
 O modulo financeiro cobre:

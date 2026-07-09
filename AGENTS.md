@@ -213,3 +213,79 @@ php artisan db:seed --class=Database\\Seeders\\Tenant\\TermoRescisaoSeeder
 | `frontend/src/components/school/CourseForm.tsx` | Card "Páginas do PDF" no formulário de cursos |
 | `backend/app/Http/Controllers/api/PdfController.php` | Leitura de `config.pdf_show_*` |
 | `backend/resources/views/pdf/matricula.blade.php` | Condicional de exibição por página |
+| `frontend/src/pages/settings/SystemSettings.tsx` | `handleSaveAppearanceSettings` agora persiste `email_logo_url` no backend via `POST /options/all` |
+| `frontend/src/services/systemSettingsService.ts` | Add `email_logo_url?: string` ao `AdvancedSystemSettings` |
+| `backend/app/Services/ScheduledCommunication/Strategies/BrevoEmailScheduledCommunicationStrategy.php` | Lê `email_logo_url` de `Qlib::qoption()` e usa como `<img>` no template de e-mail (fallback: texto "CRM Aeroclube") |
+
+## Logo em E-mails (Brevo)
+
+### Fluxo
+1. Usuário faz upload da logo em `/admin/settings/system` (Card "Identidade Visual")
+2. Ao salvar (`handleSaveAppearanceSettings`), a logo (base64 data URI) é enviada para `POST /options/all` como `email_logo_url`
+3. Opção fica persistida na tabela `options` (url = `email_logo_url`, value = base64 da logo)
+4. `BrevoEmailScheduledCommunicationStrategy` lê `Qlib::qoption('email_logo_url')` e insere `<img>` no header do e-mail
+5. Se `email_logo_url` não existir, fallback para o texto "CRM Aeroclube"
+
+### Arquivos alterados
+| Arquivo | Descrição |
+|---------|-----------|
+| `frontend/src/pages/settings/SystemSettings.tsx` | `handleSaveAppearanceSettings` agora async, salva logo no backend |
+| `frontend/src/services/systemSettingsService.ts` | Interface `AdvancedSystemSettings` + campo `email_logo_url` |
+| `backend/app/Services/ScheduledCommunication/Strategies/BrevoEmailScheduledCommunicationStrategy.php` | Import `Qlib`, usa `qoption('email_logo_url')` no HTML |
+
+### Campo "Nome do Remetente"
+- Opção `email_nome` na tabela `options` (url = `email_nome`)
+- Configurável em `/admin/settings/system` → card "Identidade Visual" → campo "Nome do Remetente (E-mail)"
+- Lido por `BrevoEmailScheduledCommunicationStrategy` via `Qlib::qoption('email_nome')`
+- Fallback: "CRM Aeroclube"
+
+### Arquivos alterados (E-mail Nome)
+| Arquivo | Descrição |
+|---------|-----------|
+| `frontend/src/pages/settings/SystemSettings.tsx` | Add `emailNome` no state, campo input no card Identidade Visual, salva `email_nome` no backend |
+| `frontend/src/services/systemSettingsService.ts` | Add `email_nome?: string` ao `AdvancedSystemSettings` |
+| `backend/app/Services/ScheduledCommunication/Strategies/BrevoEmailScheduledCommunicationStrategy.php` | Lê `email_nome` de `Qlib::qoption()`, usa como texto/label da logo (fallback: "CRM Aeroclube") |
+
+### Observações
+- A logo é armazenada como base64 data URI no banco (coluna `value` do tipo `text` na tabela `options`)
+- Para logos muito grandes (>64KB), pode ser necessário alterar a coluna para `mediumtext` ou fazer upload do arquivo com URL
+- Alguns clientes de e-mail (Outlook) podem não renderizar base64 em `<img>`. Se necessário, usar uma URL pública da logo
+
+## Webhook Brevo (Event Tracking)
+
+### Endpoint
+`POST /webhook/brevo` — rota pública (sem autenticação), registrada em `tenant.php` e `api.php`.
+
+### Fluxo
+1. Brevo envia eventos de tracking para `https://{dominio}/api/v1/webhook/brevo`
+2. `WebhookController::processBrevoWebhook()` localiza `ScheduledCommunication` por `provider_message_id`
+3. Acumula eventos no `metadata.tracking` (array) e atualiza `metadata.summary`
+4. Eventos de falha (`hard_bounce`, `soft_bounce`, `blocked`, `complaint`, etc.) alteram status para `failed`
+5. Eventos de sucesso (`delivered`, `opened`, `click`) são armazenados sem alterar status
+
+### Payload Brevo
+```json
+{
+  "event": "delivered|unique_opened|click|hard_bounce|soft_bounce|complaint|blocked|invalid_email",
+  "email": "cliente@email.com",
+  "message-id": "<messageid@smtp-relay.mailin.fr>",
+  "date": "2026-07-09 07:41:34",
+  "subject": "...",
+  "link": "https://...",
+  "device_used": "DESKTOP|MOBILE|TABLET"
+}
+```
+
+### Frontend (ScheduledCommunicationsPage)
+- Coluna "Tracking" com ícones visuais:
+  - ✅ (verde) = entregue (`delivered`)
+  - 👁️ (azul) = visualizado (`opened`/`unique_opened`)
+  - 🖱️ (roxo) = clicou (`click`/`unique_click`)
+  - ⏳ (cinza) = aguardando confirmação
+- Metadados são exibidos apenas para canal `email`
+
+### Arquivos alterados/criados
+| Arquivo | Descrição |
+|---------|-----------|
+| `backend/app/Http/Controllers/api/WebhookController.php` | Add `processBrevoWebhook()` + `use App\Models\ScheduledCommunication` + case `brevo` no switch |
+| `frontend/src/pages/ScheduledCommunications.tsx` | Add coluna "Tracking" com ícones de evento, função `getTrackingSummary()` |

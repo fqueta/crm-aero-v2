@@ -2,10 +2,14 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
 use App\Helpers\StringHelper;
-use Inertia\Inertia;
+use App\Services\ScheduledCommunication\ScheduledCommunicationService;
+use App\Services\ScheduledCommunication\ScheduledCommunicationStrategyFactory;
+use App\Services\ScheduledCommunication\Strategies\BrevoEmailScheduledCommunicationStrategy;
+use App\Services\ScheduledCommunication\Strategies\ManualAttendanceScheduledCommunicationStrategy;
+use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Event;
+use Inertia\Inertia;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -23,6 +27,17 @@ class AppServiceProvider extends ServiceProvider
         // $this->app->singleton(StringHelper::class, function () {
         //     return new StringHelper();
         // });
+        $this->app->singleton(ScheduledCommunicationStrategyFactory::class, function () {
+            return new ScheduledCommunicationStrategyFactory([
+                new BrevoEmailScheduledCommunicationStrategy(),
+                new ManualAttendanceScheduledCommunicationStrategy(),
+            ]);
+        });
+        $this->app->singleton(ScheduledCommunicationService::class, function ($app) {
+            return new ScheduledCommunicationService(
+                $app->make(ScheduledCommunicationStrategyFactory::class)
+            );
+        });
     }
 
     /**

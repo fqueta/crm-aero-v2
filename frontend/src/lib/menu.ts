@@ -8,6 +8,7 @@ import {
   DollarSign,
   BarChart3,
   Settings,
+  Calendar,
   LucideIcon,
 } from "lucide-react";
 import { MenuItemDTO, MenuItemResolved } from "@/types/menu";
@@ -23,6 +24,7 @@ export const iconMap: Record<string, LucideIcon> = {
   DollarSign,
   BarChart3,
   Settings,
+  Calendar,
 };
 
 // Helper to check if can_view is truthy (considers 1, '1', true as truthy)
@@ -87,6 +89,13 @@ export const defaultMenu: MenuItemDTO[] = [
     title: "Vendas",
     url: "/admin/sales",
     icon: "BarChart3",
+    permission: "sales.view",
+    can_view: true
+  },
+  {
+    title: "Agendamentos",
+    url: "/admin/sales/scheduled-communications",
+    icon: "Calendar",
     permission: "sales.view",
     can_view: true
   },
