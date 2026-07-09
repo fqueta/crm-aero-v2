@@ -52,7 +52,10 @@ function getDefaultMessageByChannel(channel: ScheduledCommunicationChannel): str
     'Segue o link para visualizar e assinar a sua proposta comercial:',
     '{link_assinatura}',
     '',
-    'Curso: {curso}',
+    'Curso: {curso} — {turma}',
+    'Valor: {valor_proposta} | Parcelas: {parcelas}x de {valor_parcela}',
+    '',
+    'Período: {data_inicio} a {data_fim}',
   ].join('\n');
 }
 
@@ -69,7 +72,7 @@ export function ScheduledCommunicationDialog({
 }: ScheduledCommunicationDialogProps) {
   const { toast } = useToast();
   const [channel, setChannel] = useState<ScheduledCommunicationChannel>('email');
-  const [subject, setSubject] = useState('Sua proposta comercial esta pronta para assinatura');
+  const [subject, setSubject] = useState('Sua proposta — {curso} — esta pronta para assinatura');
   const [message, setMessage] = useState(getDefaultMessageByChannel('email'));
   const [scheduledAt, setScheduledAt] = useState(getDefaultScheduledAt());
   const [tags, setTags] = useState('assinatura, proposta');
@@ -88,7 +91,7 @@ export function ScheduledCommunicationDialog({
    */
   function resetForm() {
     setChannel('email');
-    setSubject('Sua proposta comercial esta pronta para assinatura');
+    setSubject('Sua proposta — {curso} — esta pronta para assinatura');
     setMessage(getDefaultMessageByChannel('email'));
     setScheduledAt(getDefaultScheduledAt());
     setTags('assinatura, proposta');
@@ -116,7 +119,7 @@ export function ScheduledCommunicationDialog({
       return;
     }
 
-    setSubject('Sua proposta comercial esta pronta para assinatura');
+    setSubject('Sua proposta — {curso} — esta pronta para assinatura');
   }
 
   /**
@@ -245,7 +248,7 @@ export function ScheduledCommunicationDialog({
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               className="min-h-[180px]"
-              placeholder="Use placeholders como {nome}, {curso}, {link_assinatura} e {id_proposta}."
+              placeholder="Use placeholders: {nome}, {curso}, {turma}, {link_assinatura}, {id_proposta}, {valor_proposta}, {desconto}, {subtotal}, {parcelas}, {valor_parcela}, {data_inicio}, {data_fim}, {carga_horaria}, {telefone}, {documento}"
             />
           </div>
 

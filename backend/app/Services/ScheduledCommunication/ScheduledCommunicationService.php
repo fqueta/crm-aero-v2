@@ -37,7 +37,7 @@ class ScheduledCommunicationService
         $provider = $channel === 'email' ? 'brevo' : 'internal';
 
         foreach (collect($matriculaIds)->filter()->unique() as $matriculaId) {
-            $matricula = Matricula::with(['cliente', 'curso'])->find($matriculaId);
+            $matricula = Matricula::with(['cliente', 'curso', 'turma'])->find($matriculaId);
             if (!$matricula) {
                 $skipped[] = [
                     'matricula_id' => $matriculaId,
@@ -274,6 +274,7 @@ class ScheduledCommunicationService
     {
         $client = $matricula->cliente;
         $course = $matricula->curso;
+        $turma = $matricula->turma;
         $appUrl = rtrim((string) ($payload['app_url'] ?? config('app.url')), '/');
         $signatureLink = $payload['signature_link'] ?? null;
 
@@ -281,14 +282,27 @@ class ScheduledCommunicationService
             $signatureLink = $appUrl . '/aluno/assinatura/' . $matricula->id_cliente . '_' . $matricula->id . '/1';
         }
 
+        $courseName = $course?->nome ?? $course?->titulo ?? 'Curso';
+        $turmaNome = $turma?->nome ?? '';
+
         return [
             'client_id' => $client?->id ? (string) $client->id : null,
             'recipient_name' => $payload['recipient_name'] ?? $client?->name ?? 'Cliente',
             'recipient_email' => $payload['recipient_email'] ?? $client?->email ?? null,
-            'course_name' => $course?->post_title ?? $course?->name ?? 'Curso',
+            'course_name' => $courseName,
+            'turma_nome' => $turmaNome,
             'matricula_id' => (string) $matricula->id,
             'signature_link' => $signatureLink,
             'proposal_amount' => (string) ($matricula->total ?? $matricula->subtotal ?? ''),
+            'proposal_discount' => (string) ($matricula->desconto ?? ''),
+            'proposal_subtotal' => (string) ($matricula->subtotal ?? ''),
+            'installment_count' => (string) ($matricula->parcelamento ?? ''),
+            'installment_value' => (string) ($matricula->valor_parcela ?? ''),
+            'course_duration' => $course?->duracao ? ((string) $course->duracao . ' ' . ($course->unidade_duracao ?? '')) : '',
+            'data_inicio' => $turma?->inicio ? $turma->inicio->format('d/m/Y') : '',
+            'data_fim' => $turma?->fim ? $turma->fim->format('d/m/Y') : '',
+            'cliente_telefone' => (string) ($client?->telefone ?? $client?->celular ?? ''),
+            'cliente_documento' => (string) ($client?->cpf ?? $client?->cnpj ?? ''),
         ];
     }
 
@@ -303,9 +317,20 @@ class ScheduledCommunicationService
             '{nome}' => (string) ($context['recipient_name'] ?? ''),
             '{email}' => (string) ($context['recipient_email'] ?? ''),
             '{curso}' => (string) ($context['course_name'] ?? ''),
+            '{turma}' => (string) ($context['turma_nome'] ?? ''),
+            '{periodo}' => (string) ($context['turma_nome'] ?? ''),
             '{link_assinatura}' => (string) ($context['signature_link'] ?? ''),
             '{id_proposta}' => (string) ($context['matricula_id'] ?? ''),
             '{valor_proposta}' => (string) ($context['proposal_amount'] ?? ''),
+            '{desconto}' => (string) ($context['proposal_discount'] ?? ''),
+            '{subtotal}' => (string) ($context['proposal_subtotal'] ?? ''),
+            '{parcelas}' => (string) ($context['installment_count'] ?? ''),
+            '{valor_parcela}' => (string) ($context['installment_value'] ?? ''),
+            '{carga_horaria}' => (string) ($context['course_duration'] ?? ''),
+            '{data_inicio}' => (string) ($context['data_inicio'] ?? ''),
+            '{data_fim}' => (string) ($context['data_fim'] ?? ''),
+            '{telefone}' => (string) ($context['cliente_telefone'] ?? ''),
+            '{documento}' => (string) ($context['cliente_documento'] ?? ''),
         ];
 
         return str_replace(array_keys($replacements), array_values($replacements), $content);
