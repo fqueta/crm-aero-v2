@@ -2338,7 +2338,7 @@ class MatriculaController extends Controller
             // Não redireciona se a assinatura foi revogada (permite refazer o processo)
             if($step1Done && ($status_assintura_atual == 'aprovado' || $is_assinado === true) && $status_assintura_atual !== 'revogado'){
                 $client = User::findOrFail($client_id);
-            $status = $is_assinado ? 'aprovado' : '';
+            $status = 'aprovado';
             $message = $is_assinado
                 ? 'Está proposta ja está aprovada e assinada'
                 : 'A proposta foi aprovada e está aguardando assinatura digital.';
@@ -2347,7 +2347,7 @@ class MatriculaController extends Controller
                     'message' => $message,
                     'redirect' => '/aluno/matricula/' . $client_id . '_' . Qlib::zerofill($matricula_id, 5) . '/2/aprovado',
                         'client' => $client,
-                        // 'list_pdf' => $list_pdf_contratos,
+                        'config' => $config,
                         'exec' => true,
                     ];
                 return response()->json($ret, 200);
