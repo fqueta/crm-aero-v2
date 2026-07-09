@@ -49,8 +49,6 @@ function getDefaultMessageByChannel(channel: ScheduledCommunicationChannel, obsT
 
   let html = `
 <p>Olá, {nome}!</p>
-<p><strong>Sua aprovação da proposta foi solicitada.</strong><br/>
-Esta proposta refere-se à renovação da matrícula para o semestre letivo 2026.2, garantindo a continuidade da formação acadêmica e prática do aluno. Nela estão descritas as condições de permanência, valores, cronograma e demais informações necessárias para o prosseguimento das atividades durante o novo semestre.</p>
 <p>{botao_ver_proposta}<br/>
 <span style="font-size: 13px; color: #6b7280;">Ou utilize o link abaixo:</span><br/>
 {link_assinatura}</p>
@@ -85,7 +83,7 @@ export function ScheduledCommunicationDialog({
   }, [enrollments]);
 
   const [channel, setChannel] = useState<ScheduledCommunicationChannel>('email');
-  const [subject, setSubject] = useState('Renovação de Matrícula – Semestre 2026.2');
+  const [subject, setSubject] = useState('Sua aprovação da proposta foi solicitada');
   const [message, setMessage] = useState(() => getDefaultMessageByChannel('email', defaultObs));
   const [scheduledAt, setScheduledAt] = useState(getDefaultScheduledAt());
   const [tags, setTags] = useState('assinatura, proposta');
@@ -110,7 +108,7 @@ export function ScheduledCommunicationDialog({
    */
   function resetForm() {
     setChannel('email');
-    setSubject('Renovação de Matrícula – Semestre 2026.2');
+    setSubject('Sua aprovação da proposta foi solicitada');
     setMessage(getDefaultMessageByChannel('email', defaultObs));
     setScheduledAt(getDefaultScheduledAt());
     setTags('assinatura, proposta');
