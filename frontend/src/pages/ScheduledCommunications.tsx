@@ -1,13 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Send, Ban, RotateCcw, CalendarClock, AlertTriangle, Trash2, ExternalLink, Eye, MousePointerClick, CheckCircle2, Clock } from 'lucide-react';
+import { RefreshCw, Send, Ban, RotateCcw, CalendarClock, AlertTriangle, Trash2, ExternalLink, Eye, MousePointerClick, CheckCircle2, Clock, FileText, Bug } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { scheduledCommunicationsService } from '@/services/scheduledCommunicationsService';
 import { ScheduledCommunicationRecord, ScheduledCommunicationStatus } from '@/types/scheduledCommunications';
 import { useToast } from '@/hooks/use-toast';
@@ -90,6 +91,7 @@ export default function ScheduledCommunicationsPage() {
   const [search, setSearch] = useState('');
   const [scheduledFrom, setScheduledFrom] = useState('');
   const [scheduledTo, setScheduledTo] = useState('');
+  const [detailItem, setDetailItem] = useState<ScheduledCommunicationRecord | null>(null);
 
   const listQuery = useQuery({
     queryKey: ['scheduled-communications', status, channel, search, scheduledFrom, scheduledTo],
@@ -369,7 +371,7 @@ export default function ScheduledCommunicationsPage() {
                           {item.last_error ? (
                             <div className="flex items-start gap-2 text-rose-600">
                               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                              <span className="text-xs">{item.last_error}</span>
+                              <span className="text-xs line-clamp-2">{item.last_error}</span>
                             </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">-</span>
@@ -377,6 +379,9 @@ export default function ScheduledCommunicationsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => setDetailItem(item)} title="Ver detalhes">
+                              <FileText className="h-4 w-4" />
+                            </Button>
                             {!!item.matricula_id && (
                               <Button variant="ghost" size="icon" onClick={() => openProposal(item)} title="Ver proposta">
                                 <ExternalLink className="h-4 w-4" />
@@ -434,6 +439,141 @@ export default function ScheduledCommunicationsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog de Detalhes */}
+      <Dialog open={!!detailItem} onOpenChange={(open) => { if (!open) setDetailItem(null); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bug className="h-5 w-5" />
+              Detalhes do Agendamento #{detailItem?.id}
+            </DialogTitle>
+            <DialogDescription>
+              Informações completas de envio, erros e eventos de tracking.
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailItem && (
+            <div className="space-y-4">
+              {/* Informações básicas */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
+                <div>
+                  <p className="text-xs text-muted-foreground">Cliente</p>
+                  <p className="text-sm font-medium">{detailItem.recipient_name || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">E-mail</p>
+                  <p className="text-sm font-medium">{detailItem.recipient_email || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <Badge variant="outline" className={getStatusVariantClass(detailItem.status)}>
+                    {getStatusLabel(detailItem.status)}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Canal</p>
+                  <p className="text-sm font-medium">{detailItem.channel === 'email' ? 'E-mail (Brevo)' : 'Manual'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Provider Message ID</p>
+                  <p className="text-sm font-medium font-mono text-xs">{detailItem.provider_message_id || '-'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Tentativas</p>
+                  <p className="text-sm font-medium">{detailItem.attempts || 0} / {detailItem.max_attempts || 3}</p>
+                </div>
+              </div>
+
+              {/* Erro */}
+              {detailItem.last_error && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-rose-600 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    Erro
+                  </h4>
+                  <pre className="text-xs bg-rose-50 text-rose-800 p-3 rounded-md whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                    {detailItem.last_error}
+                  </pre>
+                </div>
+              )}
+
+              {/* Resposta completa da API (metadata.last_response) */}
+              {detailItem.metadata?.last_response && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <Bug className="h-4 w-4" />
+                    Resposta da API (Brevo)
+                  </h4>
+                  <pre className="text-xs bg-muted p-3 rounded-md whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                    {JSON.stringify(detailItem.metadata.last_response, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Tracking events */}
+              {detailItem.metadata?.tracking && detailItem.metadata.tracking.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Eventos de Tracking ({detailItem.metadata.tracking.length})
+                  </h4>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {(detailItem.metadata.tracking as Array<Record<string, any>>).map((event, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-2 bg-muted/30 rounded-md text-xs">
+                        <div className="shrink-0 mt-0.5">
+                          {event.event === 'delivered' ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : event.event === 'opened' || event.event === 'unique_opened' ? (
+                            <Eye className="h-4 w-4 text-blue-500" />
+                          ) : event.event === 'click' || event.event === 'unique_click' ? (
+                            <MousePointerClick className="h-4 w-4 text-purple-500" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-rose-500" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium">{event.event}</p>
+                          <p className="text-muted-foreground">{event.timestamp || '-'}</p>
+                          {event.link && (
+                            <p className="text-muted-foreground truncate">Link: {event.link}</p>
+                          )}
+                          {event.device_used && (
+                            <p className="text-muted-foreground">Dispositivo: {event.device_used}</p>
+                          )}
+                          {event.user_agent && (
+                            <p className="text-muted-foreground truncate">{event.user_agent}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Payload */}
+              {detailItem.payload && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">Payload do Agendamento</h4>
+                  <pre className="text-xs bg-muted p-3 rounded-md whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                    {JSON.stringify(detailItem.payload, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Metadata completa */}
+              {detailItem.metadata && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold">Metadata</h4>
+                  <pre className="text-xs bg-muted p-3 rounded-md whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                    {JSON.stringify(detailItem.metadata, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

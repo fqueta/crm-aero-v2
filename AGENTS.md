@@ -288,4 +288,4 @@ php artisan db:seed --class=Database\\Seeders\\Tenant\\TermoRescisaoSeeder
 | Arquivo | Descrição |
 |---------|-----------|
 | `backend/app/Http/Controllers/api/WebhookController.php` | Add `processBrevoWebhook()` + `use App\Models\ScheduledCommunication` + case `brevo` no switch |
-| `frontend/src/pages/ScheduledCommunications.tsx` | Add coluna "Tracking" com ícones de evento, função `getTrackingSummary()` |
+| `frontend/src/pages/ScheduledCommunications.tsx` | Add coluna "Tracking" com ícones de evento, função `getTrackingSummary()`, Dialog de detalhes com erro, response, tracking e payload |
