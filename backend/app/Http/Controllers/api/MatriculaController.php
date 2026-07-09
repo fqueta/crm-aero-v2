@@ -171,7 +171,7 @@ class MatriculaController extends Controller
         // Anexar metacampos a cada item paginado
         $items->getCollection()->transform(function ($item) {
             $item->meta = $this->getAllMatriculaMeta($item->id);
-            
+
             // Resolve o nome do período para cursos tipo 4 legados que não possuem o nome no JSON 'orc'
             if ($item->curso_tipo == '4') {
                 $orc = is_string($item->orc) ? json_decode($item->orc, true) : (array)$item->orc;
@@ -185,7 +185,7 @@ class MatriculaController extends Controller
                     }
                 }
             }
-            
+
             return $item;
         });
 
@@ -3843,7 +3843,7 @@ class MatriculaController extends Controller
                 "name" => $nome,
                 "email" => $email,
                 "cpf" => $cpf,
-                "send_automatic_email" => false,
+                "send_automatic_email" => true,
                 "send_automatic_whatsapp" => false,
                 "auth_mode" => "CPF", //tokenEmail,assinaturaTela-tokenEmail,tokenSms,assinaturaTela-tokenSms,tokenWhatsapp,assinaturaTela-tokenWhatsapp,CPF,assinaturaTela-cpf,assinaturaTela
                 "order_group" => 1,
