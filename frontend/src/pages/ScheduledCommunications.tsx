@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { scheduledCommunicationsService } from '@/services/scheduledCommunicationsService';
 import { ScheduledCommunicationRecord, ScheduledCommunicationStatus } from '@/types/scheduledCommunications';
+import { eventLogsService, EventLogRecord } from '@/services/eventLogsService';
 import { useToast } from '@/hooks/use-toast';
 
 /**
@@ -92,6 +93,8 @@ export default function ScheduledCommunicationsPage() {
   const [scheduledFrom, setScheduledFrom] = useState('');
   const [scheduledTo, setScheduledTo] = useState('');
   const [detailItem, setDetailItem] = useState<ScheduledCommunicationRecord | null>(null);
+  const [detailLogs, setDetailLogs] = useState<EventLogRecord[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   const listQuery = useQuery({
     queryKey: ['scheduled-communications', status, channel, search, scheduledFrom, scheduledTo],
@@ -379,7 +382,20 @@ export default function ScheduledCommunicationsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => setDetailItem(item)} title="Ver detalhes">
+                            <Button variant="ghost" size="icon" onClick={async () => {
+                              setDetailItem(item);
+                              setDetailLogs([]);
+                              setLogsLoading(true);
+                              try {
+                                const res = await eventLogsService.listEventLogs({
+                                  entity_type: 'scheduled_communication',
+                                  entity_id: String(item.id),
+                                  per_page: 50,
+                                });
+                                setDetailLogs(res.data || []);
+                              } catch { /* ignore */ }
+                              setLogsLoading(false);
+                            }} title="Ver detalhes">
                               <FileText className="h-4 w-4" />
                             </Button>
                             {!!item.matricula_id && (
@@ -550,6 +566,55 @@ export default function ScheduledCommunicationsPage() {
                   </div>
                 </div>
               )}
+
+              {/* Event Logs */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Logs de Auditoria ({logsLoading ? '...' : detailLogs.length})
+                </h4>
+                {logsLoading ? (
+                  <p className="text-xs text-muted-foreground">Carregando logs...</p>
+                ) : detailLogs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhum log encontrado.</p>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {detailLogs.map((log) => (
+                      <div key={log.id} className="flex items-start gap-3 p-2 bg-muted/30 rounded-md text-xs">
+                        <div className="shrink-0 mt-0.5">
+                          {log.action === 'processed' ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : log.action === 'failed' ? (
+                            <AlertTriangle className="h-4 w-4 text-rose-500" />
+                          ) : log.action === 'cancelled' ? (
+                            <Ban className="h-4 w-4 text-zinc-500" />
+                          ) : log.action === 'scheduled' || log.action === 'retried' ? (
+                            <CalendarClock className="h-4 w-4 text-blue-500" />
+                          ) : (
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium capitalize">{log.action}</p>
+                          <p className="text-muted-foreground">{log.description || '-'}</p>
+                          <p className="text-muted-foreground">
+                            {new Date(log.created_at).toLocaleString('pt-BR')}
+                            {log.actor?.name && ` — por ${log.actor.name}`}
+                          </p>
+                          {log.payload && Object.keys(log.payload).length > 0 && (
+                            <details className="mt-1">
+                              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Detalhes</summary>
+                              <pre className="mt-1 text-xs bg-background p-2 rounded whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                                {JSON.stringify(log.payload, null, 2)}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Payload */}
               {detailItem.payload && (

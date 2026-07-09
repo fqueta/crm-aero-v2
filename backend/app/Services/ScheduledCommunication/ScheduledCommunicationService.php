@@ -10,6 +10,7 @@ use App\Models\ScheduledCommunication;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class ScheduledCommunicationService
@@ -137,6 +138,13 @@ class ScheduledCommunicationService
                 $this->createAttendanceLog($communication);
             }
 
+            Log::info('Agendamento executado com sucesso', [
+                'id' => $communication->id,
+                'provider_message_id' => $communication->provider_message_id,
+                'channel' => $communication->channel,
+                'matricula_id' => $communication->matricula_id,
+            ]);
+
             $this->createEventLog(
                 $communication,
                 'processed',
@@ -152,16 +160,26 @@ class ScheduledCommunicationService
             return $communication->fresh(['client', 'matricula.cliente', 'matricula.curso', 'creator']);
         }
 
+        $errorMsg = (string) ($result['error'] ?? 'Falha no processamento do agendamento.');
         $communication->status = 'failed';
-        $communication->last_error = (string) ($result['error'] ?? 'Falha no processamento do agendamento.');
+        $communication->last_error = $errorMsg;
         $communication->save();
+
+        Log::error('Falha ao executar agendamento', [
+            'id' => $communication->id,
+            'error' => $errorMsg,
+            'response' => $result['response'] ?? null,
+            'channel' => $communication->channel,
+            'matricula_id' => $communication->matricula_id,
+            'attempts' => $communication->attempts,
+        ]);
 
         $this->createEventLog(
             $communication,
             'failed',
             'Falha ao executar agendamento.',
             [
-                'error' => $communication->last_error,
+                'error' => $errorMsg,
                 'channel' => $communication->channel,
             ],
             $communication->created_by,
