@@ -1,12 +1,23 @@
 import { useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Pencil, Printer, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Pencil, Printer, FileText, Loader2, RotateCcw } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import ProposalViewContent from '@/components/school/ProposalViewContent';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEnrollment } from '@/hooks/enrollments';
+import { proposalService } from '@/services/proposalService';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 
@@ -34,8 +45,13 @@ export default function ProposalsView() {
   const navState = (location?.state || {}) as { returnTo?: string; funnelId?: string; stageId?: string };
   const { id } = useParams<{ id: string }>();
   const [isPdfLoading, setIsPdfLoading] = useState(false);
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
   const { data: enrollment } = useEnrollment(String(id || ''));
   const isAdmin = Number(user?.permission_id) === 1;
+  const meta = (enrollment as any)?.meta || {};
+  const statusAssinatura = String(meta?.status_assinatura || '').toLowerCase();
+  const isApproved = statusAssinatura === 'aprovado';
   const clientId = useMemo(() => {
     const value = (enrollment as any)?.id_cliente ?? (enrollment as any)?.client_id;
     return value ? String(value) : '';
@@ -97,6 +113,33 @@ export default function ProposalsView() {
    * pt-BR: Dispara a geração assíncrona atual do PDF para administradores.
    * en-US: Triggers the current asynchronous PDF generation for administrators.
    */
+  /**
+   * handleRevokeApproval
+   * pt-BR: Revoga a assinatura/aprovação da proposta para o cliente refazer.
+   * en-US: Revokes the proposal approval so the client can re-sign.
+   */
+  async function handleRevokeApproval() {
+    if (!id) return;
+    setIsRevoking(true);
+    try {
+      const response = await proposalService.revokeApproval(String(id));
+      toast({
+        title: 'Assinatura revogada',
+        description: response?.message || 'A aprovação foi revogada. O cliente poderá refazer a assinatura.',
+      });
+      setRevokeDialogOpen(false);
+      window.location.reload();
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao revogar',
+        description: String(err?.message || 'Não foi possível revogar a assinatura.'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRevoking(false);
+    }
+  }
+
   async function handleGeneratePdfAsync() {
     if (!id) return;
     setIsPdfLoading(true);
@@ -161,6 +204,11 @@ export default function ProposalsView() {
               <FileText className="h-4 w-4 mr-2" /> Gerar PDF Async
             </Button>
           )}
+          {isAdmin && isApproved && (
+            <Button variant="destructive" onClick={() => setRevokeDialogOpen(true)}>
+              <RotateCcw className="h-4 w-4 mr-2" /> Revogar Assinatura
+            </Button>
+          )}
           <Button variant="secondary" onClick={handlePrint}>
             <Printer className="h-4 w-4 mr-2" /> Imprimir
           </Button>
@@ -169,6 +217,38 @@ export default function ProposalsView() {
           </Button>
         </div>
       </div>
+
+      {/* Dialog de confirmação para revogar assinatura */}
+      <AlertDialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Revogar Assinatura</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p className="font-semibold text-foreground">Você está prestes a desfazer a aprovação desta proposta. Isso irá:</p>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                <li><span className="font-medium text-foreground">Resetar</span> o status de assinatura para <strong>"revogado"</strong></li>
+                <li><span className="font-medium text-foreground">Desmarcar</span> a etapa de aprovação (step 2) da proposta</li>
+                <li><span className="font-medium text-foreground">Retornar</span> a proposta e o cliente para a etapa de assinatura no funil de vendas</li>
+                <li><span className="font-medium text-foreground">Exigir</span> que o cliente refaça todo o processo de aprovação (etapa 2)</li>
+              </ul>
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                <strong>⚠️ Atenção:</strong> Os PDFs e contratos já gerados <strong>não serão excluídos</strong>. 
+                Eles serão regenerados automaticamente quando o cliente aprovar novamente.
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRevoking}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isRevoking}
+              onClick={handleRevokeApproval}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isRevoking ? 'Revogando...' : 'Sim, revogar assinatura'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

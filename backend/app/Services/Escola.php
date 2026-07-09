@@ -153,7 +153,7 @@ class Escola
 		if($status_assintura_atual == 'assinatura_confirmada'){
 			return true;
 		}
-        return $status_assintura_atual;
+        return false;
 	}
 	/**
 	 * Gera uma página de historico em html para ser exibido no admin ou no site

@@ -109,6 +109,11 @@ class ProposalService extends BaseApiService {
     // pt-BR: Dispara manualmente o envio dos links já gerados pelo ZapSign para o Zapguru.
     return this.post(`/matriculas/${matriculaId}/testar-envio-link-assinatura-zapguru`, tkPeriodo ? { tk_periodo: tkPeriodo } : {});
   }
+
+  async revokeApproval(matriculaId: string) {
+    // pt-BR: Administrador revoga a aprovação para o cliente refazer a assinatura.
+    return this.post(`/matriculas/${matriculaId}/revoke-approval`, {});
+  }
 }
 
 export const proposalService = new ProposalService();

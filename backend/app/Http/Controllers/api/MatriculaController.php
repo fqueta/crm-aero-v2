@@ -2335,7 +2335,8 @@ class MatriculaController extends Controller
             $config = is_array($matricula->config) ? $matricula->config : (is_string($matricula->config) ? (json_decode($matricula->config, true) ?? []) : []);
             $step1Done = !empty($config['step1_done']);
             // Redireciona para etapa 2 somente se já concluiu a etapa 1 (para evitar loop)
-            if(($status_assintura_atual == 'aprovado' || $is_assinado) && $step1Done){
+            // Não redireciona se a assinatura foi revogada (permite refazer o processo)
+            if($step1Done && ($status_assintura_atual == 'aprovado' || $is_assinado === true) && $status_assintura_atual !== 'revogado'){
                 $client = User::findOrFail($client_id);
             $status = $is_assinado ? 'aprovado' : '';
             $message = $is_assinado
@@ -3295,6 +3296,44 @@ class MatriculaController extends Controller
             return response()->json(['error' => 'Erro ao aprovar proposta: ' . $e->getMessage()], 500);
         }
     }
+    /**
+     * Revoga a aprovação/assinatura de uma proposta.
+     * pt-BR: Administrador pode revogar a aprovação para permitir que o cliente refaça a assinatura.
+     * en-US: Admin can revoke the approval to let the client re-sign.
+     */
+    public function revokeApproval(Request $request, string $id)
+    {
+        try {
+            $user = $request->user();
+            if (!$user) {
+                return response()->json(['error' => 'Acesso negado'], 403);
+            }
+
+            $matricula = Matricula::findOrFail($id);
+
+            $config = $matricula->config ?? [];
+            $config['step2_done'] = false;
+            unset($config['step2_at']);
+            $matricula->config = $config;
+            $matricula->save();
+
+            Qlib::update_matriculameta($matricula->id, $this->campos_status_assinatura, 'revogado');
+
+            $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('sign'), (string)$user->id, $request->ip(), 'Assinatura revogada pelo administrador');
+            $clientUser = User::find($matricula->id_cliente);
+            if ($clientUser) {
+                $this->applyUserStage($clientUser, $this->getUserStageId('sign'), (string)$user->id, $request->ip(), 'Assinatura do cliente revogada pelo administrador');
+            }
+
+            return response()->json([
+                'message' => 'Assinatura revogada com sucesso. O cliente poderá refazer a aprovação.',
+                'exec' => true,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Erro ao revogar assinatura: ' . $e->getMessage()], 500);
+        }
+    }
+
     /**
      * Atualiza rapidamente a etapa (stage) da matrícula.
      */
