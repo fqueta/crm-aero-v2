@@ -206,7 +206,7 @@ export default function ProposalsView() {
           )}
           {isAdmin && isApproved && (
             <Button variant="destructive" onClick={() => setRevokeDialogOpen(true)}>
-              <RotateCcw className="h-4 w-4 mr-2" /> Revogar Assinatura
+              <RotateCcw className="h-4 w-4 mr-2" /> Remover Aprovação
             </Button>
           )}
           <Button variant="secondary" onClick={handlePrint}>
@@ -218,11 +218,11 @@ export default function ProposalsView() {
         </div>
       </div>
 
-      {/* Dialog de confirmação para revogar assinatura */}
+      {/* Dialog de confirmação para remover aprovação */}
       <AlertDialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Revogar Assinatura</AlertDialogTitle>
+            <AlertDialogTitle className="text-destructive">Remover Aprovação</AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
               <p className="font-semibold text-foreground">Você está prestes a desfazer a aprovação desta proposta. Isso irá:</p>
               <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
@@ -244,7 +244,7 @@ export default function ProposalsView() {
               onClick={handleRevokeApproval}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isRevoking ? 'Revogando...' : 'Sim, revogar assinatura'}
+              {isRevoking ? 'Removendo...' : 'Sim, remover aprovação'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
