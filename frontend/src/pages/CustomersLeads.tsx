@@ -1749,19 +1749,43 @@ function StageColumn({
        */}
       <div className="sticky top-0 z-10 rounded-t-xl overflow-hidden glass-header backdrop-blur-sm bg-background/80 border-b border-border/50 supports-[backdrop-filter]:bg-background/60">
         <div className="h-1.5 w-full" style={{ backgroundColor: stageColor }} />
-        <div
-          className="flex items-center justify-between p-3.5"
-        >
-          <div className="flex items-center gap-2.5">
-            <span
-              className="inline-block h-3.5 w-3.5 rounded-full ring-2 ring-offset-1"
-              style={{ backgroundColor: stageColor, '--tw-ring-color': stageColor + '40' } as any}
-            />
+        <div className="flex flex-col p-3.5 gap-2">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2.5">
+              <Badge variant="secondary" className="shrink-0">{totalCards}</Badge>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">{totalAmountBRL}</span>
+              {/* Dropdown de ações da coluna */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 px-2">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  {/*
+                   * onAddLeadClick
+                   * pt-BR: Ação de adicionar lead na etapa atual.
+                   * en-US: Action to add a lead in the current stage.
+                   */}
+                  <DropdownMenuItem onClick={handleAddLead}>
+                    <Plus className="h-4 w-4 mr-2" /> Adicionar lead
+                  </DropdownMenuItem>
+                  {/* Itens futuros (placeholders) */}
+                  <DropdownMenuItem disabled>
+                    <NotebookPen className="h-4 w-4 mr-2" /> Editar etapa
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          <div className="w-full">
             {/* Inline edit title */}
             {isEditing ? (
               <input
                 autoFocus
-                className="h-6 w-full max-w-[140px] rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm transition-colors md:text-sm"
+                className="h-6 w-full rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm transition-colors md:text-sm"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onBlur={handleSaveTitle}
@@ -1776,39 +1800,13 @@ function StageColumn({
               />
             ) : (
               <span 
-                className="font-semibold text-sm tracking-tight cursor-pointer hover:underline hover:decoration-dotted hover:underline-offset-4"
+                className="font-semibold text-sm tracking-tight cursor-pointer hover:underline hover:decoration-dotted hover:underline-offset-4 line-clamp-2 leading-tight"
                 onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
                 title="Clique para editar"
               >
                 {stage.name}
               </span>
             )}
-            <Badge variant="secondary">{totalCards}</Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{totalAmountBRL}</span>
-            {/* Dropdown de ações da coluna */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 px-2">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                {/*
-                 * onAddLeadClick
-                 * pt-BR: Ação de adicionar lead na etapa atual.
-                 * en-US: Action to add a lead in the current stage.
-                 */}
-                <DropdownMenuItem onClick={handleAddLead}>
-                  <Plus className="h-4 w-4 mr-2" /> Adicionar lead
-                </DropdownMenuItem>
-                {/* Itens futuros (placeholders) */}
-                <DropdownMenuItem disabled>
-                  <NotebookPen className="h-4 w-4 mr-2" /> Editar etapa
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -2353,27 +2351,46 @@ function StageColumnSales({
     >
       <div className="sticky top-0 z-10 rounded-t-xl overflow-hidden glass-header backdrop-blur-sm bg-background/80 border-b border-border/50 supports-[backdrop-filter]:bg-background/60">
         <div className="h-1.5 w-full" style={{ backgroundColor: stageColor }} />
-        <div className="flex items-center justify-between p-3.5">
-          <div className="flex items-center gap-2.5">
-            <span className="inline-block h-3.5 w-3.5 rounded-full ring-2 ring-offset-1" style={{ backgroundColor: stageColor, '--tw-ring-color': stageColor + '40' } as any} />
-            <input
-              type="checkbox"
-              className="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary focus:ring-primary"
-              checked={allSelected}
-              ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
-              onChange={() => {
-                onToggleAllSelection(
-                  enrollments.map((e) => String(e.id)),
-                  !allSelected
-                );
-              }}
-              onClick={(e) => e.stopPropagation()}
-              title={allSelected ? 'Desmarcar todas' : 'Selecionar todas'}
-            />
+        <div className="flex flex-col p-3.5 gap-2">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2.5">
+              <input
+                type="checkbox"
+                className="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary focus:ring-primary"
+                checked={allSelected}
+                ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                onChange={() => {
+                  onToggleAllSelection(
+                    enrollments.map((e) => String(e.id)),
+                    !allSelected
+                  );
+                }}
+                onClick={(e) => e.stopPropagation()}
+                title={allSelected ? 'Desmarcar todas' : 'Selecionar todas'}
+              />
+              <Badge variant="secondary" className="bg-secondary/50 shrink-0">{totalCards}</Badge>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{totalAmountBRL}</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 hover:bg-muted/80">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem onClick={handleAddProposal}>
+                    <Plus className="h-4 w-4 mr-2" /> Adicionar propostas
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          <div className="w-full">
             {isEditing ? (
               <input
                 autoFocus
-                className="h-6 w-full max-w-[140px] rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm transition-colors md:text-sm"
+                className="h-6 w-full rounded-md border border-input bg-transparent px-2 py-1 text-sm shadow-sm transition-colors md:text-sm"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onBlur={handleSaveTitle}
@@ -2388,29 +2405,13 @@ function StageColumnSales({
               />
             ) : (
               <span 
-                className="font-semibold text-sm tracking-tight cursor-pointer hover:underline hover:decoration-dotted hover:underline-offset-4"
+                className="font-semibold text-sm tracking-tight cursor-pointer hover:underline hover:decoration-dotted hover:underline-offset-4 line-clamp-2 leading-tight"
                 onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
                 title="Clique para editar"
               >
                 {stage.name}
               </span>
             )}
-            <Badge variant="secondary" className="bg-secondary/50">{totalCards}</Badge>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-medium text-muted-foreground">{totalAmountBRL}</span>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 px-2 hover:bg-muted/80">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onClick={handleAddProposal}>
-                  <Plus className="h-4 w-4 mr-2" /> Adicionar propostas
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
       </div>
