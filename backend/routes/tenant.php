@@ -365,6 +365,10 @@ Route::name('api.')->prefix('api/v1')->middleware([
             'workflow-actions' => 'id'
         ]]);
         Route::get('workflow/metrics', \App\Http\Controllers\api\WorkflowMetricsController::class.'@index')->name('workflow.metrics');
+
+        // Consulta Geral
+        Route::get('consulta-geral', [\App\Http\Controllers\api\ConsultaGeralController::class, 'query'])->name('consulta-geral');
+        Route::get('consulta-geral/search', [\App\Http\Controllers\api\ConsultaGeralController::class, 'search'])->name('consulta-geral.search');
     });
 
 

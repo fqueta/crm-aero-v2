@@ -289,3 +289,36 @@ php artisan db:seed --class=Database\\Seeders\\Tenant\\TermoRescisaoSeeder
 |---------|-----------|
 | `backend/app/Http/Controllers/api/WebhookController.php` | Add `processBrevoWebhook()` + `use App\Models\ScheduledCommunication` + case `brevo` no switch |
 | `frontend/src/pages/ScheduledCommunications.tsx` | Add coluna "Tracking" com ícones de evento, função `getTrackingSummary()`, Dialog de detalhes com erro, response, tracking e payload |
+
+## PDF de Proposta (Orçamento) — Desconto
+
+### Fluxo
+- **Frontend:** `frontend/src/pages/ProposalsView.tsx` — botão "Gerar PDF" → `GET /api/v1/pdf/propostas/public/{clientId}/{matriculaId}?force=1`
+- **Backend:** `PdfController::adminProposalByClientAndEnrollment()` → `matricula()` → `prepareMatriculaViewData()`
+- **View:** `backend/resources/views/pdf/matricula.blade.php` — loop `@foreach($extras as $idx => $p)` (4 páginas)
+
+### Página 1 — Orçamento (idx === 1)
+Tabela: Matrícula, etapas (exceto combustível), taxas, **desconto** (linha vermelha `#ef4444`, add em `matricula.blade.php:514-520`), total final.
+
+### Campo desconto
+- Tabela `matriculas.desconto` (float, nullable)
+- Passado à view como `$desconto` em `PdfController.php:722`
+- Subtraído no cálculo do total (`$totalSemCombustivel -= $desconto`)
+
+## Consulta Geral
+
+### Frontend
+- **Botão:** Integrado no QuickClientSearch (`AppLayout.tsx:91`, ícone de lupa)
+- **Modal:** `frontend/src/components/clients/QuickClientSearch.tsx` (mesmo modal da lupa)
+  - Ao digitar, busca nas 3 tabelas: Clientes, Matrículas e Cursos
+  - Resultados agrupados por seção com cabeçalho
+  - Cliente → navega para `/admin/clients/{id}/view`
+  - Matrícula → navega para `/admin/sales/proposals/view/{id}`
+  - Curso → navega para `/admin/school/courses/{id}/edit`
+
+### Backend
+- **Controller:** `backend/app/Http/Controllers/api/ConsultaGeralController.php`
+- **Endpoints:**
+  - `GET /api/v1/consulta-geral?table=matriculas|cursos&id=&descricao=&nome=&titulo=` — consulta filtrada por tabela
+  - `GET /api/v1/consulta-geral/search?q=texto&per_page=10` — busca unificada nas 3 tabelas
+- **Rotas:** `backend/routes/tenant.php:369-370` — dentro do grupo `auth:sanctum`
