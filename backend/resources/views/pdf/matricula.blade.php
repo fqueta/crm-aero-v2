@@ -511,6 +511,14 @@
                                             </tr>
                                         @endif
 
+                                        <!-- Desconto -->
+                                        @if(isset($desconto) && (float)$desconto > 0)
+                                        <tr>
+                                            <td style="padding: 10px; border-bottom: 1px solid #eee; color: #ef4444;">Desconto</td>
+                                            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; color: #ef4444;">- {{ fmt_valor($desconto) }}</td>
+                                        </tr>
+                                        @endif
+
                                         <!-- Total Final -->
                                         <tr>
                                             <td style="padding: 15px 10px; color: #00b050; font-weight: 800; font-size: 14px; text-transform: uppercase;">TOTAL DA PROPOSTA A VISTA:</td>
