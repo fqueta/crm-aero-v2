@@ -36,6 +36,7 @@ class ConsultaGeralController extends Controller
                   ->orWhere('email', 'like', "%{$q}%")
                   ->orWhere('celular', 'like', "%{$q}%");
         })->where('status', '!=', 'inactive')
+          ->where('permission_id', '>=', 5)
           ->limit($limit)
           ->get(['id', 'name', 'cpf', 'celular', 'email']);
 

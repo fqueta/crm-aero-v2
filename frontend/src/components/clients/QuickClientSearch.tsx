@@ -225,7 +225,7 @@ export function QuickClientSearch() {
           </div>
         </TableCell>
         <TableCell>
-          {(client.celular || client.phone) && <div className="text-sm font-medium text-slate-700">{formatPhone(client.celular || client.phone)}</div>}
+          {(client.celular || client.phone) && <div className="text-sm font-medium text-slate-700">{highlightText(formatPhone(client.celular || client.phone), q)}</div>}
           {client.email && <div className="text-xs text-slate-500 truncate max-w-[250px]" title={client.email}>{highlightText(client.email, q)}</div>}
         </TableCell>
         <TableCell className="text-right">
@@ -251,7 +251,7 @@ export function QuickClientSearch() {
               M
             </div>
             <div>
-              <div className="font-semibold text-slate-800">#{mat.id} - {highlightText(mat.cliente?.name || mat.cliente?.nome || 'Sem cliente', q)}</div>
+              <div className="font-semibold text-slate-800">{highlightText(`#${mat.id}`, q)} - {highlightText(mat.cliente?.name || mat.cliente?.nome || 'Sem cliente', q)}</div>
               <div className="text-xs text-slate-500 mt-0.5">{highlightText(mat.curso?.nome || mat.curso?.titulo || 'Sem curso', q)}</div>
             </div>
           </div>
