@@ -46,6 +46,18 @@ function formatCPF(cpf?: string) {
   return cpf;
 }
 
+function highlightText(text: string | undefined | null, query: string): React.ReactNode {
+  if (!text || !query) return text || '-';
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase()
+      ? React.createElement('strong', { key: i, className: 'font-bold text-blue-600' }, part)
+      : part
+  );
+}
+
 function getInitials(name?: string) {
   if (!name) return 'U';
   const parts = name.trim().split(' ').filter(Boolean);
@@ -188,6 +200,7 @@ export function QuickClientSearch() {
 
   const renderClientRow = (client: any, index: number, isHistory = false) => {
     const isSelected = index === selectedIndex;
+    const q = isHistory ? '' : debouncedQuery;
     return (
       <TableRow 
         key={`client-${client.id}`}
@@ -205,15 +218,15 @@ export function QuickClientSearch() {
             <div>
               <div className="font-semibold text-slate-800 flex items-center gap-2">
                 {isHistory && <Clock className="h-3 w-3 text-slate-400" title="Do seu histórico" />}
-                {client.name}
+                {highlightText(client.name, q)}
               </div>
-              {client.cpf && <div className="text-xs text-slate-500 font-mono mt-0.5">Doc: {formatCPF(client.cpf)}</div>}
+              {client.cpf && <div className="text-xs text-slate-500 font-mono mt-0.5">Doc: {highlightText(formatCPF(client.cpf), q)}</div>}
             </div>
           </div>
         </TableCell>
         <TableCell>
           {(client.celular || client.phone) && <div className="text-sm font-medium text-slate-700">{formatPhone(client.celular || client.phone)}</div>}
-          {client.email && <div className="text-xs text-slate-500 truncate max-w-[250px]" title={client.email}>{client.email}</div>}
+          {client.email && <div className="text-xs text-slate-500 truncate max-w-[250px]" title={client.email}>{highlightText(client.email, q)}</div>}
         </TableCell>
         <TableCell className="text-right">
           <ChevronRight className={`h-5 w-5 ml-auto transition-colors ${isSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-blue-500'}`} />
@@ -224,6 +237,7 @@ export function QuickClientSearch() {
 
   const renderMatriculaRow = (mat: any, index: number) => {
     const isSelected = index === selectedIndex;
+    const q = debouncedQuery;
     return (
       <TableRow
         key={`mat-${mat.id}`}
@@ -237,8 +251,8 @@ export function QuickClientSearch() {
               M
             </div>
             <div>
-              <div className="font-semibold text-slate-800">#{mat.id} - {mat.cliente?.name || mat.cliente?.nome || 'Sem cliente'}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{mat.curso?.nome || mat.curso?.titulo || 'Sem curso'}</div>
+              <div className="font-semibold text-slate-800">#{mat.id} - {highlightText(mat.cliente?.name || mat.cliente?.nome || 'Sem cliente', q)}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{highlightText(mat.curso?.nome || mat.curso?.titulo || 'Sem curso', q)}</div>
             </div>
           </div>
         </TableCell>
@@ -260,6 +274,7 @@ export function QuickClientSearch() {
 
   const renderCursoRow = (curso: any, index: number) => {
     const isSelected = index === selectedIndex;
+    const q = debouncedQuery;
     return (
       <TableRow
         key={`curso-${curso.id}`}
@@ -273,8 +288,8 @@ export function QuickClientSearch() {
               C
             </div>
             <div>
-              <div className="font-semibold text-slate-800">{curso.nome || '-'}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{curso.titulo || ''}</div>
+              <div className="font-semibold text-slate-800">{highlightText(curso.nome, q) || '-'}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{highlightText(curso.titulo, q)}</div>
             </div>
           </div>
         </TableCell>
