@@ -95,7 +95,7 @@ class ZapsingController extends Controller
             // dd($body,$endpoint);
             try {
                 // dd($this->url_api,$endpoint,$this->api_id);
-                $urlEndpoint = $this->url_api.'/'.$endpoint;
+                $urlEndpoint = rtrim($this->url_api, '/').'/'.ltrim($endpoint, '/');
                 // dd($urlEndpoint,$body,$this->api_id);
                 $response = Http::withHeaders([
                     'Content-Type' => 'application/json',
@@ -296,7 +296,7 @@ class ZapsingController extends Controller
         if($token){
 
             $endpoint = str_replace('{{doc_token}}',$token,'docs/{{doc_token}}');
-            $link = $this->url_api.'/'.$endpoint;
+            $link = rtrim($this->url_api, '/').'/'.ltrim($endpoint, '/');
             // dump($link);
             try {
             //code...

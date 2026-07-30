@@ -14,6 +14,9 @@ class GeraPdfcontratosPnlJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public $timeout = 600;
+    public $tries = 3;
+
     protected $id_matricula;
 
     /**

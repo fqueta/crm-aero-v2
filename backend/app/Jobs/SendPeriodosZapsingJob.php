@@ -10,9 +10,9 @@ class SendPeriodosZapsingJob implements ShouldQueue
 {
     use Queueable;
 
-    /**
-     * Create a new job instance.
-     */
+    public $timeout = 300;
+    public $tries = 3;
+
     protected $id_matricula;
 
     /**
