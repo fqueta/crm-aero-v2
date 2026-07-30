@@ -317,6 +317,22 @@ class ComponentController extends Controller
 
         $post->save();
 
+        // Atualizar uploads com id_componente após salvar (criação ou atualização)
+        if (!empty($config['galeria'])) {
+            foreach ($config['galeria'] as $galeriaItem) {
+                $uploadId = $galeriaItem['id'] ?? null;
+                if ($uploadId) {
+                    $upload = Post::query()->where('post_type', 'files_uload')->find($uploadId);
+                    if ($upload) {
+                        $uploadConfig = $upload->config ?? [];
+                        $uploadConfig['id_componente'] = $post->ID;
+                        $upload->config = $uploadConfig;
+                        $upload->save();
+                    }
+                }
+            }
+        }
+
         // Resposta: retornar os dados gravados
         $responseData = [
             'id' => $post->ID,

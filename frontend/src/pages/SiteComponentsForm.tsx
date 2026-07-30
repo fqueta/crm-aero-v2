@@ -402,7 +402,7 @@ export default function SiteComponentsForm() {
     // en-US: IDs may come in record.galeria or record.config.galeria
     const rawConfig = (record as any)?.config?.galeria as any[] | undefined;
     const rawTop = (record as any)?.galeria as any[] | undefined;
-    const raw = (rawConfig && Array.isArray(rawConfig) && rawConfig.length > 0) ? rawConfig : rawTop;
+    const raw = (rawTop && Array.isArray(rawTop) && rawTop.length > 0) ? rawTop : rawConfig;
     const componentUploads = ((uploadsQuery.data?.data as UploadRecord[]) || []);
     const byId = new Map<number, UploadRecord>();
     componentUploads.forEach((u) => byId.set(u.id, u));
@@ -431,11 +431,9 @@ export default function SiteComponentsForm() {
       return item;
     }).filter(Boolean) as GalleryItem[] : [];
     
-    if (ordered.length > 0) {
-      setGallerySelection(ordered);
-    }
+    setGallerySelection(ordered);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record?.id, isGallery, uploadsQuery.data]);
+  }, [record, isGallery, uploadsQuery.data]);
 
   /**
    * finishAfterSaveRef
@@ -453,8 +451,8 @@ export default function SiteComponentsForm() {
    */
   const handleSubmit = (data: FormData) => {
     const payload: CreateComponentInput = { ...data } as unknown as CreateComponentInput;
-    // Quando for galeria (ID 19), incluir os IDs selecionados
-    if (isGallery && gallerySelection.length > 0) {
+    // Quando for galeria, incluir os IDs selecionados (mesmo que vazio para limpar)
+    if (isGallery) {
       payload.galeria = gallerySelection.map((g) => ({ id: g.id, nome: g.nome_personalizado ?? g.nome ?? '', descricao: g.descricao_personalizada ?? '' }));
     }
     if (id) {
