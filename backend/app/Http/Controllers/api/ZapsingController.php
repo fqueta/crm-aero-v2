@@ -339,6 +339,13 @@ class ZapsingController extends Controller
             //para assinaturas dos documentos a serem enviados no zapsing
             $ret[0]=$sing;
             if($dcont){
+                if (empty($dcont->cpf)) {
+                    \Log::warning('[ZapSign] Assinante sem CPF cadastrado', [
+                        'token' => 'id_contatada',
+                        'user_id' => $dcont->id,
+                        'user_name' => $dcont->name,
+                    ]);
+                }
                 $arr_dcont = [
                     "name" => $dcont->name,
                     "email" => $dcont->email,
@@ -349,8 +356,17 @@ class ZapsingController extends Controller
                     "order_group" => 2,
                 ];
                 array_push($ret,$arr_dcont);
+            } else {
+                \Log::warning('[ZapSign] Assinante com token id_contatada não encontrado na tabela users');
             }
             if($dtes1){
+                if (empty($dtes1->cpf)) {
+                    \Log::warning('[ZapSign] Assinante sem CPF cadastrado', [
+                        'token' => 'id_testemunha1',
+                        'user_id' => $dtes1->id,
+                        'user_name' => $dtes1->name,
+                    ]);
+                }
                 $arr_dtes1 = [
                     "name" => $dtes1->name,
                     "email" => $dtes1->email,
@@ -361,8 +377,17 @@ class ZapsingController extends Controller
                     "order_group" => 3,
                 ];
                 array_push($ret,$arr_dtes1);
+            } else {
+                \Log::warning('[ZapSign] Assinante com token id_testemunha1 não encontrado na tabela users');
             }
             if($dtes2){
+                if (empty($dtes2->cpf)) {
+                    \Log::warning('[ZapSign] Assinante sem CPF cadastrado', [
+                        'token' => 'id_testemunha2',
+                        'user_id' => $dtes2->id,
+                        'user_name' => $dtes2->name,
+                    ]);
+                }
                 $arr_dtes2 = [
                     "name" => $dtes2->name,
                     "email" => $dtes2->email,
@@ -373,6 +398,8 @@ class ZapsingController extends Controller
                     "order_group" => 4,
                 ];
                 array_push($ret,$arr_dtes2);
+            } else {
+                \Log::warning('[ZapSign] Assinante com token id_testemunha2 não encontrado na tabela users');
             }
         }
         if($type == 2){

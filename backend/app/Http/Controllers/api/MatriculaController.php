@@ -3873,6 +3873,14 @@ class MatriculaController extends Controller
             $nome = $cliente['name']?? $cliente['nome'] ?? '';
             $email = $cliente['email']?? $cliente['email'] ?? '';
             $cpf = $cliente['cpf']?? $cliente['cpf'] ?? '';
+            if (empty($cpf)) {
+                \Log::warning('[ZapSign] Envio de envelope sem CPF do assinante (aluno)', [
+                    'matricula_id' => $id,
+                    'cliente_id'   => $dm['id_cliente'] ?? null,
+                    'cliente_nome' => $nome,
+                    'email'        => $email,
+                ]);
+            }
             // $celular = $cliente['celular']?? $cliente['celular'] ?? '';
             $tipo_curso = $dm['curso_tipo']?? $dm['curso_tipo'] ?? '';
             $periodo = $dm['orc']['modulos'][0]['nome']?? $dm['orc']['modulos'][0]['nome'] ?? '';
