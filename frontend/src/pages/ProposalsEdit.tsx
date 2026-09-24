@@ -128,6 +128,12 @@ export default function ProposalsEdit() {
    * en-US: Controls whether to finish and go back to origin with refresh after saving.
    */
   const finishAfterSaveRef = useRef(false);
+  /**
+   * nextStepAfterSaveRef
+   * pt-BR: Controla se ao salvar deve avançar para uma etapa específica do wizard.
+   * en-US: Controls whether to advance to a specific wizard step after saving.
+   */
+  const nextStepAfterSaveRef = useRef<string | null>(null);
 
   // UI
   const [showResponsible, setShowResponsible] = useState(false);
@@ -814,7 +820,19 @@ export default function ProposalsEdit() {
   const nextStep = safeCurrentStepIndex < wizardSteps.length - 1 ? wizardSteps[safeCurrentStepIndex + 1] : null;
 
   const handleNextStep = () => {
-    if (nextStep) {
+    if (!nextStep) {
+      // Se estiver na última etapa, o botão Próximo atua como Salvar e Finalizar
+      handleSaveFinish();
+      return;
+    }
+
+    if (form.formState.isDirty) {
+      // Se houver alterações não salvas, salva e avança após o sucesso da mutação
+      finishAfterSaveRef.current = false;
+      nextStepAfterSaveRef.current = nextStep.id;
+      form.handleSubmit(onSubmit, onInvalid)();
+    } else {
+      // Se não houver alterações pendentes, apenas avança para a próxima etapa
       handleTabChange(nextStep.id);
     }
   };
@@ -1340,13 +1358,15 @@ export default function ProposalsEdit() {
         // pt-BR: Invalida o cache para que a listagem revalide ao retornar
         // en-US: Invalidate cache so listing revalidates upon return
         try { queryClient.invalidateQueries(); } catch {}
-        if (navState?.returnTo && typeof navState.returnTo === 'string') {
+        if (navState?.returnTo && typeof navState.returnTo === 'string' && !navState.returnTo.includes(`/admin/sales/proposals/view/${id}`)) {
           navigate(navState.returnTo);
-        } else if (navState?.funnelId) {
-          navigate(`/admin/sales?funnel=${navState.funnelId}`);
+        } else if (searchParams.get('funnel') || navState?.funnelId) {
+          const fid = searchParams.get('funnel') || navState?.funnelId;
+          navigate(`/admin/sales?funnel=${encodeURIComponent(String(fid))}`);
+        } else if (navState?.returnTo && typeof navState.returnTo === 'string') {
+          navigate(navState.returnTo);
         } else {
             // Se não houver state, tenta voltar para o histórico (origem)
-            // Se o histórico for vazio ou indefinido, vai para sales
             if (window.history.state && window.history.state.idx > 0) {
                  navigate(-1);
             } else {
@@ -1354,12 +1374,19 @@ export default function ProposalsEdit() {
             }
         }
       } else {
-        /**
-         * Toast de sucesso padronizado
-         * pt-BR: Usa API de objeto do useToast.
-         * en-US: Uses object-based API from useToast.
-         */
-        toast({ title: 'Sucesso', description: 'Proposta atualizada com sucesso!' });
+        const nextStepId = nextStepAfterSaveRef.current;
+        if (nextStepId) {
+          nextStepAfterSaveRef.current = null;
+          handleTabChange(nextStepId);
+          toast({ title: 'Sucesso', description: 'Alterações salvas com sucesso!' });
+        } else {
+          /**
+           * Toast de sucesso padronizado
+           * pt-BR: Usa API de objeto do useToast.
+           * en-US: Uses object-based API from useToast.
+           */
+          toast({ title: 'Sucesso', description: 'Proposta atualizada com sucesso!' });
+        }
       }
     },
     onError: (error: any) => {
@@ -1829,16 +1856,34 @@ export default function ProposalsEdit() {
 
   /**
    * handleBack
-   * pt-BR: Volta para a página de origem (histórico) ou para `returnTo`.
-   * en-US: Goes back to the origin page (history) or uses `returnTo`.
+   * pt-BR: Volta para o funil ou página de origem (returnTo), query param de funil ou histórico.
+   * en-US: Goes back to the funnel or origin page (returnTo), funnel query param, or history.
    */
   function handleBack() {
     if (navState?.returnTo && typeof navState.returnTo === 'string') {
-      navigate(navState.returnTo);
+      // Se returnTo for a tela de visualização desta mesma proposta, evita voltar em loop se o usuário quer voltar ao funil
+      if (navState.returnTo.includes(`/admin/sales/proposals/view/${id}`)) {
+        const funnelParam = searchParams.get('funnel') || navState?.funnelId;
+        if (funnelParam) {
+          navigate(`/admin/sales?funnel=${encodeURIComponent(String(funnelParam))}`);
+          return;
+        }
+      } else {
+        navigate(navState.returnTo);
+        return;
+      }
+    }
+    const funnelParam = searchParams.get('funnel') || navState?.funnelId;
+    if (funnelParam) {
+      navigate(`/admin/sales?funnel=${encodeURIComponent(String(funnelParam))}`);
       return;
     }
-    // Preferir histórico para retornar exatamente à origem.
-    navigate(-1);
+    // Se o histórico anterior é da mesma sessão e não é loop
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate('/admin/sales');
   }
 
   const onInvalid = (errors: any) => {
@@ -3037,7 +3082,7 @@ export default function ProposalsEdit() {
       {/* Rodapé fixo com ações e navegação do Wizard */}
       <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg">
         <div className="container mx-auto py-2.5 px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5">
-          {/* Lado Esquerdo: Navegação de Etapas (Anterior / Próximo / Etapa X de Y), Visualizar e Total */}
+          {/* Lado Esquerdo: Navegação de Etapas (Anterior / Etapa X de Y), Visualizar e Total */}
           <div className="flex items-center gap-2 w-full sm:w-auto justify-start">
             {/* Botão Anterior (se estiver na 1ª etapa, volta ao funil) */}
             <Button
@@ -3050,20 +3095,6 @@ export default function ProposalsEdit() {
               <ArrowLeft className="h-3.5 w-3.5 mr-1" />
               <span>Anterior</span>
             </Button>
-
-            {/* Botão Próximo */}
-            {nextStep && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleNextStep}
-                className="h-8 px-2.5 text-xs rounded-md font-medium text-primary border-primary/30 hover:bg-primary/5"
-              >
-                <span>Próximo</span>
-                <ArrowRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
-            )}
 
             <span className="text-xs text-muted-foreground font-medium px-1">
               {safeCurrentStepIndex + 1} de {wizardSteps.length}
@@ -3093,7 +3124,7 @@ export default function ProposalsEdit() {
             </div>
           </div>
 
-          {/* Lado Direito: Ações de Salvar */}
+          {/* Lado Direito: Ações de Salvar e Próxima Etapa */}
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <Button
               type="button"
@@ -3113,6 +3144,28 @@ export default function ProposalsEdit() {
               className="h-8 px-3.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
             >
               <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Salvar e Finalizar
+            </Button>
+
+            {/* Botão Próximo / Finalizar destacado em primary */}
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={handleNextStep}
+              disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
+              className="h-8 px-3.5 text-xs font-semibold shadow-xs"
+            >
+              {nextStep ? (
+                <>
+                  <span>Próximo</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                  <span>Finalizar</span>
+                </>
+              )}
             </Button>
           </div>
         </div>

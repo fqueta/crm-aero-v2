@@ -829,7 +829,13 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
    * en-US: Fetches system users (consultants only) to populate the select.
    */
   const { data: consultantsPaginated, isLoading: isLoadingConsultants } = useUsersList({ consultores: true, per_page: 200, sort: 'name', search: consultantSearchTerm });
-  const consultantOptions = useMemo(() => consultantsPaginated?.data ?? [], [consultantsPaginated]);
+  const consultantOptions = useMemo(() => {
+    const list = consultantsPaginated?.data ?? [];
+    return list.filter((u) => {
+      const p = Number(u?.permission_id) || 0;
+      return p > 0 && p !== 7 && p !== 8 && p !== 5;
+    });
+  }, [consultantsPaginated]);
   // Garante que o consultor atualmente selecionado apareça nas opções
   const mergedConsultants = useMemo(() => {
     const list = consultantOptions.slice();

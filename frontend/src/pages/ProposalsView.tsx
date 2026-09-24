@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Pencil, Printer, FileText, Loader2, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Pencil, Printer, FileText, Loader2, RotateCcw, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,7 +17,7 @@ import AsaasBillingSection from '@/components/school/AsaasBillingSection';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
 import { useAuth } from '@/contexts/AuthContext';
-import { useEnrollment } from '@/hooks/enrollments';
+import { useEnrollment, useDeleteEnrollment } from '@/hooks/enrollments';
 import { proposalService } from '@/services/proposalService';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
@@ -48,7 +48,10 @@ export default function ProposalsView() {
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { data: enrollment } = useEnrollment(String(id || ''));
+  const deleteEnrollmentMutation = useDeleteEnrollment();
   const isAdmin = Number(user?.permission_id) === 1;
   const meta = (enrollment as any)?.meta || {};
   const statusAssinatura = String(meta?.status_assinatura || '').toLowerCase();
@@ -57,27 +60,59 @@ export default function ProposalsView() {
     const value = (enrollment as any)?.id_cliente ?? (enrollment as any)?.client_id;
     return value ? String(value) : '';
   }, [enrollment]);
+
+  const backLabel = useMemo(() => {
+    const returnTo = navState?.returnTo;
+    if (returnTo) {
+      if (returnTo.includes('sales')) return 'Voltar ao funil';
+      if (returnTo.includes('formation-control')) return 'Controle de Formação';
+      if (returnTo.includes('school/enroll')) return 'Matrículas';
+      if (returnTo.includes('clients')) return 'Clientes';
+    }
+    const params = new URLSearchParams(location.search);
+    if (params.get('funnel') || navState?.funnelId) return 'Voltar ao funil';
+    return 'Voltar';
+  }, [navState, location.search]);
+
   /**
    * handleBack
-   * pt-BR: Volta para a página de origem (histórico) ou para `returnTo`.
-   * en-US: Goes back to the origin page (history) or uses `returnTo`.
+   * pt-BR: Volta para a página de origem (returnTo), query param de funil ou histórico.
+   * en-US: Goes back to the origin page (returnTo), funnel query param, or history.
    */
   function handleBack() {
     if (navState?.returnTo && typeof navState.returnTo === 'string') {
       navigate(navState.returnTo);
       return;
     }
-    // Preferir histórico para retornar exatamente à origem.
-    navigate(-1);
+    const params = new URLSearchParams(location.search);
+    const funnelParam = params.get('funnel') || navState?.funnelId;
+    if (funnelParam) {
+      navigate(`/admin/sales?funnel=${encodeURIComponent(String(funnelParam))}`);
+      return;
+    }
+    // Se há histórico anterior na aplicação, volta
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate('/admin/sales');
   }
   /**
    * handleEdit
-   * pt-BR: Navega para edição preservando o estado de origem.
-   * en-US: Navigates to edit preserving origin state.
+   * pt-BR: Navega para edição preservando o estado de origem (returnTo e funil).
+   * en-US: Navigates to edit preserving origin state (returnTo and funnel).
    */
   function handleEdit() {
-    const stateToPass = navState && typeof navState === 'object' ? navState : {};
-    navigate(`/admin/sales/proposals/edit/${id}` , { state: stateToPass });
+    const params = new URLSearchParams(location.search);
+    const funnelParam = params.get('funnel') || navState?.funnelId;
+    const returnTo = navState?.returnTo || (funnelParam ? `/admin/sales?funnel=${encodeURIComponent(String(funnelParam))}` : '/admin/sales');
+    const stateToPass = {
+      ...(navState && typeof navState === 'object' ? navState : {}),
+      returnTo,
+      funnelId: funnelParam || undefined,
+    };
+    const q = funnelParam ? `?funnel=${encodeURIComponent(String(funnelParam))}` : '';
+    navigate(`/admin/sales/proposals/edit/${id}${q}`, { state: stateToPass });
   }
 
   /**
@@ -141,6 +176,34 @@ export default function ProposalsView() {
     }
   }
 
+  /**
+   * handleDeleteProposal
+   * pt-BR: Exclui a proposta e redireciona de volta para a tela de origem (funil).
+   * en-US: Deletes the proposal and navigates back to the origin page (funnel).
+   */
+  async function handleDeleteProposal() {
+    if (!id) return;
+    setIsDeleting(true);
+    try {
+      await deleteEnrollmentMutation.mutateAsync(String(id));
+      toast({
+        title: 'Proposta excluída',
+        description: 'A proposta foi excluída com sucesso.',
+      });
+      setDeleteDialogOpen(false);
+      handleBack();
+    } catch (err: any) {
+      console.error('Erro ao excluir proposta:', err);
+      toast({
+        title: 'Erro ao excluir proposta',
+        description: err?.message || 'Não foi possível excluir a proposta no momento.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   async function handleGeneratePdfAsync() {
     if (!id) return;
     setIsPdfLoading(true);
@@ -196,29 +259,43 @@ export default function ProposalsView() {
 
       {/* Rodapé fixo com ações */}
       <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 print:hidden">
-        <div className="container mx-auto py-3 flex flex-wrap items-center gap-2 justify-start">
-          <Button variant="ghost" onClick={handleBack}>
-            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
-          </Button>
-          <Button variant="outline" onClick={handleOpenProposalPdf}>
-            <FileText className="h-4 w-4 mr-2" /> Gerar PDF
-          </Button>
-          {isAdmin && (
-            <Button variant="outline" onClick={handleGeneratePdfAsync} disabled={isPdfLoading}>
-              <FileText className="h-4 w-4 mr-2" /> Gerar PDF Async
+        <div className="container mx-auto py-3 flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={handleBack}>
+              <ArrowLeft className="h-4 w-4 mr-2" /> {backLabel}
             </Button>
-          )}
-          {isAdmin && isApproved && (
-            <Button variant="destructive" onClick={() => setRevokeDialogOpen(true)}>
-              <RotateCcw className="h-4 w-4 mr-2" /> Remover Aprovação
+            <Button variant="outline" onClick={handleOpenProposalPdf}>
+              <FileText className="h-4 w-4 mr-2" /> Gerar PDF
             </Button>
-          )}
-          <Button variant="secondary" onClick={handlePrint}>
-            <Printer className="h-4 w-4 mr-2" /> Imprimir
-          </Button>
-          <Button variant="default" onClick={handleEdit}>
-            <Pencil className="h-4 w-4 mr-2" /> Editar
-          </Button>
+            {isAdmin && (
+              <Button variant="outline" onClick={handleGeneratePdfAsync} disabled={isPdfLoading}>
+                <FileText className="h-4 w-4 mr-2" /> Gerar PDF Async
+              </Button>
+            )}
+            {isAdmin && isApproved && (
+              <Button variant="destructive" onClick={() => setRevokeDialogOpen(true)}>
+                <RotateCcw className="h-4 w-4 mr-2" /> Remover Aprovação
+              </Button>
+            )}
+            <Button variant="secondary" onClick={handlePrint}>
+              <Printer className="h-4 w-4 mr-2" /> Imprimir
+            </Button>
+            <Button variant="default" onClick={handleEdit}>
+              <Pencil className="h-4 w-4 mr-2" /> Editar
+            </Button>
+          </div>
+
+          {/* Botão de Excluir Proposta */}
+          <div>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(true)}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+              title="Excluir esta proposta"
+            >
+              <Trash2 className="h-4 w-4 mr-2" /> Excluir
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -249,6 +326,33 @@ export default function ProposalsView() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isRevoking ? 'Removendo...' : 'Sim, remover aprovação'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de confirmação para exclusão da proposta */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Excluir Proposta</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p className="font-semibold text-foreground">
+                Tem certeza que deseja excluir esta proposta?
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Esta ação removerá a proposta do funil de vendas e de todas as listagens do sistema.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              onClick={handleDeleteProposal}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Excluindo...' : 'Sim, excluir proposta'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

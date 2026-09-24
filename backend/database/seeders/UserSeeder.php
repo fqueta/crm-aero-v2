@@ -279,7 +279,7 @@ class UserSeeder extends Seeder
                 'deletado' => 'n',
             ],
 
-            // ── Consultor (id=5) ───────────────────────────────────
+            // ── Consultor (id=4) ───────────────────────────────────
             [
                 'name' => 'Lazaro Pancoti',
                 'email' => 'lazaro@aeroclubejf.com.br',
@@ -287,7 +287,7 @@ class UserSeeder extends Seeder
                 'status' => 'actived',
                 'verificado' => 'n',
                 'token' => uniqid(),
-                'permission_id' => 5,
+                'permission_id' => 4,
                 'tipo_pessoa' => 'pf',
                 'genero' => 'm',
                 'ativo' => 's',

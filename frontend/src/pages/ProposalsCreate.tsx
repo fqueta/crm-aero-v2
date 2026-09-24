@@ -527,7 +527,13 @@ export default function ProposalsCreate() {
       return [email, phone].filter(Boolean).join(' • ');
     }
   );
-  const consultantsList = useMemo(() => (consultantsData?.data || consultantsData?.items || []), [consultantsData]);
+  const consultantsList = useMemo(() => 
+    (consultantsData?.data || consultantsData?.items || [])
+    .filter((u: any) => {
+      const p = Number(u?.permission_id) || 0;
+      return p > 0 && p !== 7 && p !== 8 && p !== 5;
+    }),
+  [consultantsData]);
   const consultantOptions = useComboboxOptions<any>(
     consultantsList,
     'id',

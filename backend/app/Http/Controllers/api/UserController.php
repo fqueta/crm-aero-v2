@@ -14,6 +14,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Sanctum\PersonalAccessToken;
 // Removido import indevido de função do PHPUnit; usar nativo is_array
+use Illuminate\Support\Facades\DB;
 use App\Models\EventLog;
 use App\Models\Stage;
 
@@ -41,13 +42,51 @@ class UserController extends Controller
     public $cliente_permission_id;
     public function __construct(PermissionService $permissionService)
     {
-        $this->routeName = request()->route()->getName();
+        $this->routeName = request()->route()?->getName();
         $this->permissionService = $permissionService;
         $this->sec = request()->segment(3);
         $this->cliente_permission_id = (int) (Qlib::qoption('permission_client_id') ?? 5);
     }
+
     /**
-     * Listar todos os usuários
+     * Retorna a lista de IDs de permissão que correspondem a clientes e responsáveis,
+     * garantindo que consultas de usuários do sistema e consultores nunca incluam clientes.
+     */
+    public function getClientPermissionIds(): array
+    {
+        $ids = [];
+
+        // 1. Permissões cujos nomes indicam cliente ou responsável
+        try {
+            $permIds = DB::table('permissions')
+                ->where(function($q) {
+                    $q->where('name', 'like', '%cliente%')
+                      ->orWhere('name', 'like', '%responsavel%')
+                      ->orWhere('name', 'like', '%responsável%');
+                })
+                ->pluck('id')
+                ->toArray();
+            $ids = array_merge($ids, $permIds);
+        } catch (\Throwable $e) {}
+
+        // 2. Opção configurada no banco (permission_client_id)
+        $optClient = Qlib::qoption('permission_client_id');
+        if ($optClient) {
+            $ids[] = (int) $optClient;
+        }
+
+        // 3. IDs padrão conhecidos no CRM (7: cliente CRM Aero, 8: responsável)
+        $ids[] = 7;
+        $ids[] = 8;
+        if (!empty($this->cliente_permission_id)) {
+            $ids[] = (int) $this->cliente_permission_id;
+        }
+
+        return array_values(array_unique(array_filter(array_map('intval', $ids))));
+    }
+
+    /**
+     * Listar todos os usuários (exclui clientes e responsáveis)
      */
     public function index(Request $request)
     {
@@ -62,10 +101,13 @@ class UserController extends Controller
         $perPage = $request->input('per_page', 10);
         $order_by = $request->input('order_by', 'created_at');
         $order = $request->input('order', 'desc');
-        //listar usuarios com permissões dele pra cima
-        $permission_id = $request->user()->permission_id;
-        // dd($permission_id);
-        $query = User::query()->where('permission_id','!=',$this->cliente_permission_id)->orderBy($order_by,$order);
+
+        $clientPermissionIds = $this->getClientPermissionIds();
+
+        $query = User::query()
+            ->whereNotNull('permission_id')
+            ->whereNotIn('permission_id', $clientPermissionIds)
+            ->orderBy($order_by, $order);
 
         // Não exibir registros marcados como deletados ou excluídos
         $query->where(function($q) {
@@ -92,9 +134,14 @@ class UserController extends Controller
             });
         }
         //**Adicionar filtros extras  */
-        //se existir um campo consultores for true então filtrar todos com permissão maior ou igual a dele
-        if($request->filled('consultores')){
-            $query->where('permission_id','>=',$user->permission_id);
+        // Quando consultores for solicitado, garante que apenas usuários ativos sejam retornados
+        if ($request->filled('consultores')) {
+            $query->where(function($q) {
+                $q->where('ativo', 's')->orWhereNull('ativo');
+            });
+            $query->where(function($q) {
+                $q->where('status', 'actived')->orWhereNull('status');
+            });
         }
 
         $users = $query->paginate($perPage);

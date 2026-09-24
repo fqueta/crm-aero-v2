@@ -78,7 +78,14 @@ export function ClientForm({
   // pt-BR: Carrega consultores com paginação maior e ordenados por nome.
   // en-US: Load consultants with larger page size and sorted by name.
   const { data: usersData, isLoading: isLoadingUsers } = useUsersList({ consultores: true, per_page: 100, sort: 'name' });
-  const usersList = usersData?.data || [];
+  const usersList = useMemo(() => {
+    const list = usersData?.data || [];
+    // Filtro de segurança: listar apenas usuários do sistema (exclui clientes e responsáveis)
+    return list.filter((u) => {
+      const permId = Number(u.permission_id) || 0;
+      return permId !== 7 && permId !== 8 && permId !== 5;
+    });
+  }, [usersData?.data]);
   
   // Watch para validação em tempo real
   const emailWatch = form.watch("email");

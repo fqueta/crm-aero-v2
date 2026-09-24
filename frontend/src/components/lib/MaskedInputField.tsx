@@ -35,7 +35,10 @@ export function MaskedInputField({
                   replacement={{ d: /\d/ }}
                   value={field.value && mask && typeof field.value === 'string' && field.value.trim() !== '' ? format(field.value, { mask, replacement: { d: /\d/ } }) : ""}
                   onChange={field.onChange}
-                  onBlur={onBlur}
+                  onBlur={(e) => {
+                    field.onBlur();
+                    if (onBlur) onBlur(e);
+                  }}
                   disabled={disabled}
                   placeholder={placeholder}
                   ref={field.ref}

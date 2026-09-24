@@ -93,7 +93,9 @@ const isValidPhone = (phone: string): boolean => {
  * @returns true se o CEP for válido
  */
 const isValidCEP = (cep: string): boolean => {
-  return !cep || /^\d{5}-\d{3}$/.test(cep);
+  if (!cep || cep.trim() === '') return true;
+  const clean = cep.replace(/\D/g, '');
+  return clean.length === 8;
 };
 
 // Schema de validação do formulário
@@ -134,7 +136,8 @@ const clientSchema = z.object({
     return isValidCPF(val);
   }, "CPF inválido"),
   cnpj: z.string().optional().refine((val) => {
-    return isValidCNPJ(val || "");
+    if (!val || val.trim() === '') return true;
+    return isValidCNPJ(val);
   }, "CNPJ inválido"),
   razao: z.string().optional(),
   genero: z.enum(["m", "f", "ni"], {
@@ -153,15 +156,16 @@ const clientSchema = z.object({
     nome_fantasia: z.string().nullable().optional(),
     celular: z.string().nullable().optional(),
     telefone_residencial: z.string().nullable().optional().refine((val) => {
-      return isValidPhone(val || "");
+      if (!val || val.trim() === '') return true;
+      return isValidPhone(val);
     }, "Número de telefone residencial inválido"),
     rg: z.string().nullable().optional().refine((val) => {
-      if (!val) return true;
+      if (!val || val.trim() === '') return true;
       const cleanRg = val.replace(/\D/g, '');
       return cleanRg.length >= 7 && cleanRg.length <= 9;
     }, "RG deve ter entre 7 e 9 dígitos"),
     nascimento: z.string().nullable().optional().refine((val) => {
-      if (!val) return true;
+      if (!val || val.trim() === '') return true;
       const date = new Date(val);
       const today = new Date();
       return date <= today;
@@ -170,7 +174,8 @@ const clientSchema = z.object({
     profissao: z.string().nullable().optional(),
     tipo_pj: z.string().nullable().optional(),
     cep: z.string().nullable().optional().refine((val) => {
-      return isValidCEP(val || "");
+      if (!val || val.trim() === '') return true;
+      return isValidCEP(val);
     }, "CEP deve ter 8 dígitos"),
     endereco: z.string().nullable().optional(),
     numero: z.string().nullable().optional(),
