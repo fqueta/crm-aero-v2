@@ -5,6 +5,15 @@ export interface IntegracaoConfig {
   user?: string;
   pass?: string;
   produto?: string;
+  /** Asaas (integracao-asaas) */
+  access_token?: string;
+  environment?: 'sandbox' | 'production';
+  billing_type?: 'BOLETO' | 'PIX' | 'CREDIT_CARD' | 'UNDEFINED';
+  webhook_token?: string;
+  /** Mora (vazio = padrão da conta Asaas) */
+  fine_value?: string;
+  fine_type?: 'FIXED' | 'PERCENTAGE';
+  interest_value?: string;
 }
 
 export interface IntegracaoMetaPair {

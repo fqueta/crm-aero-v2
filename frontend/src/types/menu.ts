@@ -6,6 +6,10 @@ export interface MenuItemDTO {
   title: string;
   url?: string;
   icon?: string;
+  section?: string;
+  module?: string;
+  location?: string;
+  permission?: string;
   can_view?: boolean | number | '0' | '1';
   items?: MenuItemDTO[];
 }
@@ -16,6 +20,10 @@ export interface MenuItemResolved {
   title: string;
   url?: string;
   icon: LucideIcon;
+  section?: string;
+  module?: string;
+  location?: string;
+  permission?: string;
   can_view?: boolean | number | '0' | '1';
   items?: MenuItemResolved[];
 }

@@ -30,23 +30,25 @@ export function PublicHeader() {
   const permission_id: any = user?.permission_id;
 
   return (
-    <header className="bg-white/80 backdrop-blur-md border-b border-blue-200 sticky top-0 z-50">
-      <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <Link to="/" className="flex items-center space-x-3">
-          <img src="/logo.png" alt="Aeroclube JF" className="h-12" />
-          <div>
-            <h1 className="text-2xl font-bold text-blue-800">Aeroclube de Juiz de Fora</h1>
-            <p className="text-sm text-blue-600">Escola de aviação</p>
+    <header className="bg-white/90 backdrop-blur-md border-b border-blue-200 sticky top-0 z-50">
+      <div className="container mx-auto px-3 sm:px-4 py-2.5 sm:py-3.5 flex items-center justify-between gap-2">
+        <Link to="/" className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+          <img src="/logo.png" alt="Aeroclube JF" className="h-8 sm:h-11 w-auto shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-sm sm:text-xl font-bold text-blue-900 truncate tracking-tight">
+              Aeroclube de Juiz de Fora
+            </h1>
+            <p className="text-[10px] sm:text-xs text-blue-600 font-medium">Escola de aviação</p>
           </div>
         </Link>
-        <div className="flex space-x-4">
+        <div className="flex items-center space-x-2 shrink-0">
           {isAuthenticated && user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
-                  <User className="w-4 h-4 mr-2" />
-                  {user.name}
-                  <ChevronDown className="w-4 h-4 ml-2" />
+                <Button variant="outline" size="sm" className="border-blue-300 text-blue-700 hover:bg-blue-50 max-w-[130px] sm:max-w-[200px] h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3">
+                  <User className="w-3.5 h-3.5 mr-1 sm:mr-2 shrink-0" />
+                  <span className="truncate">{user.name}</span>
+                  <ChevronDown className="w-3 h-3 ml-1 sm:ml-2 shrink-0 opacity-60" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">

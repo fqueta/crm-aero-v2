@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRedirect } from '@/hooks/useRedirect';
+import { AuthPreloader } from './AuthPreloader';
 
 interface AuthRedirectProps {
   children: React.ReactNode;
@@ -21,14 +22,15 @@ export function AuthRedirect({ children }: AuthRedirectProps) {
     }
   }, [isAuthenticated, isLoading, user, redirectAfterAuth]);
 
-  // Se está carregando, não renderiza nada (ou pode mostrar um loading)
+  // Carregando sessão: preloader com identidade em vez de tela em branco
   if (isLoading) {
-    return null;
+    return <AuthPreloader />;
   }
 
-  // Se está autenticado, não renderiza o conteúdo (será redirecionado)
+  // Autenticado aguardando redirecionamento: mantém o preloader visível
+  // até a próxima rota pintar (evita flash branco entre login e painel)
   if (isAuthenticated) {
-    return null;
+    return <AuthPreloader message="Sessão ativa! Levando você ao painel..." />;
   }
 
   // Se não está autenticado, renderiza o conteúdo normalmente

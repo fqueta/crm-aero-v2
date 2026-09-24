@@ -306,6 +306,42 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 /**
+ * renderAttendanceObservation
+ * pt-BR: Renderiza a observação do atendimento com suporte a HTML (links, formatação e botões).
+ * en-US: Renders attendance observation with HTML support (links, formatting and buttons).
+ */
+function renderAttendanceObservation(observation?: string | null) {
+  if (!observation || !observation.trim()) {
+    return (
+      <p className="text-sm text-muted-foreground italic">
+        Atendimento registrado sem observação.
+      </p>
+    );
+  }
+
+  const hasHtml = /<\/?[a-z][\s\S]*>/i.test(observation);
+
+  if (hasHtml) {
+    const formattedHtml = observation.replace(
+      /<a\b(?![^>]*\btarget=)([^>]*)>/gi,
+      '<a target="_blank" rel="noopener noreferrer"$1>'
+    );
+    return (
+      <div
+        className="text-sm text-foreground break-words [overflow-wrap:anywhere] whitespace-pre-line leading-relaxed [&_a]:text-blue-600 hover:[&_a]:text-blue-800 [&_a]:underline"
+        dangerouslySetInnerHTML={{ __html: formattedHtml }}
+      />
+    );
+  }
+
+  return (
+    <p className="text-sm text-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-relaxed">
+      {observation}
+    </p>
+  );
+}
+
+/**
  * ProposalAttendanceCard
  * pt-BR: Card lateral da proposta para registrar atendimentos e marcar ganho/perda.
  * en-US: Proposal sidebar card to register attendances and mark win/loss.
@@ -1058,9 +1094,7 @@ export default function ProposalAttendanceCard({
                     {attendance.created_at ? formatDate(attendance.created_at) : '-'}
                   </span>
                 </div>
-                <p className="text-sm text-foreground">
-                  {attendance.observation || 'Atendimento registrado sem observação.'}
-                </p>
+                {renderAttendanceObservation(attendance.observation)}
                 <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                   <span>Atendente: {attendance?.attendant?.name || 'Sistema'}</span>
                   {attendance?.metadata?.duration ? (

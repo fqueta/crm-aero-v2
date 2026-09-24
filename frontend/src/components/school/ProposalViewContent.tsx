@@ -12,6 +12,7 @@ import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
 import ProposalPdfLinkCard from '@/components/school/ProposalPdfLinkCard';
 import ResponsibleInfoCard from '@/components/school/ResponsibleInfoCard';
+import AsaasBillingCard from '@/components/school/AsaasBillingCard';
 import ProposalAttendanceCard from '@/components/school/ProposalAttendanceCard';
 import ProposalContractsTab from './ProposalContractsTab';
 import ProposalLogsTab from './ProposalLogsTab';
@@ -20,7 +21,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
-import { CheckCircle, Clock, User, Mail, Phone, BookOpen, Layers, Calendar, Hash, CircleDollarSign, Info, Loader2, Copy, MessageCircle, Send, Sparkles } from 'lucide-react';
+import { CheckCircle, Clock, User, Mail, Phone, BookOpen, Layers, Calendar, Hash, CircleDollarSign, Info, Loader2, Copy, MessageCircle, Send, Sparkles, CreditCard } from 'lucide-react';
 import { enrollmentsService } from '@/services/enrollmentsService';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,16 +39,21 @@ interface ProposalViewContentProps {
  * pt-BR: Card de métrica para uso interno na visualização de proposta.
  * en-US: Metric card for internal use in proposal view.
  */
-function StatCard({ label, value, icon: Icon, colorClass = "text-primary", bgClass = "bg-primary/10" }: any) {
+function StatCard({ label, value, description, icon: Icon, colorClass = "text-primary", bgClass = "bg-primary/10", className = "" }: any) {
   return (
-    <Card className="border-none shadow-sm bg-zinc-50/50 dark:bg-zinc-900/50 backdrop-blur-sm overflow-hidden transition-all hover:shadow-md hover:bg-white dark:hover:bg-zinc-900 border border-border/40">
-      <CardContent className="p-5 flex items-center gap-4">
-        <div className={`p-3 rounded-2xl ${bgClass} ${colorClass}`}>
+    <Card className={`border-none shadow-sm bg-zinc-50/50 dark:bg-zinc-900/50 backdrop-blur-sm overflow-hidden transition-all hover:shadow-md hover:bg-white dark:hover:bg-zinc-900 border border-border/40 ${className}`}>
+      <CardContent className="p-4 sm:p-5 flex items-start sm:items-center gap-3.5">
+        <div className={`p-2.5 sm:p-3 rounded-2xl shrink-0 ${bgClass} ${colorClass}`}>
           <Icon className="h-5 w-5" />
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">{label}</span>
-          <span className="text-lg font-bold tracking-tight text-foreground">{value}</span>
+          <div className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-tight">
+            {value}
+          </div>
+          {description && (
+            <span className="text-xs text-muted-foreground font-medium leading-tight mt-0.5">{description}</span>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -327,6 +333,104 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
     return ((enrollment as any)?.orc?.parcelamento ?? null) as any;
   }, [enrollment]);
 
+  /**
+   * parcelamentoSummary
+   * pt-BR: Monta o resumo amigável do parcelamento (ex.: "1 + 12x de R$ 2.456,00" ou "12x de R$ 2.456,00")
+   *        e a forma/condição de pagamento (ex.: "Boleto bancário / Cartão").
+   */
+  const parcelamentoSummary = useMemo(() => {
+    if (!parcelamento) return null;
+
+    const linhas = Array.isArray(parcelamento.linhas) ? parcelamento.linhas : [];
+    const parcelaSel = String(parcelamento.parcela_selecionada || '').trim();
+    const activeLine = (parcelaSel && linhas.find((l: any) => String(l.parcela || l.parcelas || '').trim() === parcelaSel))
+      || linhas[0]
+      || null;
+
+    const qtdParcelas = parseInt(parcelaSel || String(activeLine?.parcela || activeLine?.parcelas || '0'), 10) || 0;
+    if (qtdParcelas <= 0 && !activeLine) return null;
+
+    // Valor da parcela
+    let valorParcelaNum = 0;
+    if (activeLine?.valor) {
+      valorParcelaNum = typeof activeLine.valor === 'number'
+        ? activeLine.valor
+        : (currencyRemoveMaskToNumber(String(activeLine.valor)) || 0);
+    }
+    const descPontualidadeNum = activeLine?.desconto
+      ? (typeof activeLine.desconto === 'number' ? activeLine.desconto : (currencyRemoveMaskToNumber(String(activeLine.desconto)) || 0))
+      : 0;
+
+    const valorEfetivoParcela = Math.max(0, valorParcelaNum - descPontualidadeNum);
+
+    const recebimento = parcelamento.recebimento_matricula || 'diluida';
+    const matriculaValorRaw = (enrollment as any)?.orc?.inscricao ?? (enrollment as any)?.inscricao ?? 0;
+    const matriculaValorNum = typeof matriculaValorRaw === 'number'
+      ? matriculaValorRaw
+      : (currencyRemoveMaskToNumber(String(matriculaValorRaw)) || 0);
+
+    // Entrada / primeira parcela
+    const primeiraParcelaValorRaw = parcelamento.primeira_parcela_valor;
+    const primeiraParcelaValorNum = primeiraParcelaValorRaw !== undefined && primeiraParcelaValorRaw !== null && primeiraParcelaValorRaw !== ''
+      ? (typeof primeiraParcelaValorRaw === 'number' ? primeiraParcelaValorRaw : (currencyRemoveMaskToNumber(String(primeiraParcelaValorRaw)) || 0))
+      : null;
+
+    const primeiraParcelaComMatriculaNum = recebimento === 'primeira_parcela' && matriculaValorNum > 0
+      ? (primeiraParcelaValorNum !== null ? primeiraParcelaValorNum + matriculaValorNum : valorEfetivoParcela + matriculaValorNum)
+      : null;
+
+    const valorParcelaFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
+
+    let summaryText = '';
+    const hasEntrada = primeiraParcelaValorNum !== null && primeiraParcelaValorNum > 0;
+
+    if (recebimento === 'primeira_parcela' && primeiraParcelaComMatriculaNum !== null) {
+      const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
+      const restantes = Math.max(0, qtdParcelas - 1);
+      if (restantes > 0) {
+        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaFormatted}`;
+      } else {
+        summaryText = `1x de ${entradaComMatFormatted} (Curso + Matrícula)`;
+      }
+    } else if (hasEntrada) {
+      const entradaFormatted = formatCurrencyBRL(primeiraParcelaValorNum);
+      const restantes = Math.max(0, qtdParcelas - 1);
+      if (restantes > 0) {
+        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaFormatted}`;
+      } else {
+        summaryText = `1x de ${entradaFormatted} (À vista / Entrada)`;
+      }
+    } else if (qtdParcelas === 1) {
+      summaryText = `1x de ${valorParcelaFormatted} (À vista)`;
+    } else if (qtdParcelas > 1) {
+      summaryText = `${qtdParcelas}x de ${valorParcelaFormatted}`;
+    } else {
+      summaryText = valorParcelaFormatted;
+    }
+
+    // Forma de pagamento / Condição
+    let paymentMethod = 'Boleto / Carnê Bancário';
+    const diaPagamento = parcelamento.dia_pagamento;
+
+    if (diaPagamento) {
+      paymentMethod += ` • Vencimento dia ${diaPagamento}`;
+    }
+
+    if (recebimento === 'avulsa' && matriculaValorNum > 0) {
+      paymentMethod += ` • Matrícula avulsa: ${formatCurrencyBRL(matriculaValorNum)}`;
+    }
+
+    return {
+      summaryText,
+      paymentMethod,
+      qtdParcelas,
+      valorParcelaFormatted,
+      recebimento,
+      matriculaValorNum,
+      matriculaValorFormatted: matriculaValorNum > 0 ? formatCurrencyBRL(matriculaValorNum) : null,
+    };
+  }, [parcelamento, enrollment]);
+
   const meta = (enrollment as any)?.meta || {};
   const statusAssinatura = useMemo(
     () => normalizeSignatureStatus(meta?.status_assinatura),
@@ -455,11 +559,50 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
         <TabsContent value="overview" className="space-y-8 mt-0 print:mt-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* KPI Section */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
-              <StatCard label="Total da Proposta" value={totalMasked || 'R$ 0,00'} icon={CircleDollarSign} colorClass="text-green-600" bgClass="bg-green-50" />
-              <StatCard label="ID da Matrícula" value={`#${id}`} icon={Hash} colorClass="text-zinc-600" bgClass="bg-zinc-100" />
-              <StatCard label="Validade" value={computeValidityDate(validadeDias, emissionDate) || 'Expirada'} icon={Calendar} colorClass="text-blue-600" bgClass="bg-blue-50" />
-              <StatCard label="Consultor" value={(enrollment as any)?.consultor?.name || (enrollment as any)?.autor_name || 'Sistema'} icon={User} colorClass="text-purple-600" bgClass="bg-purple-50" />
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${parcelamentoSummary ? 'lg:grid-cols-6' : 'lg:grid-cols-4'} gap-4 print:hidden`}>
+              <StatCard 
+                label="Total da Proposta" 
+                value={totalMasked || 'R$ 0,00'} 
+                icon={CircleDollarSign} 
+                colorClass="text-green-600" 
+                bgClass="bg-green-50" 
+                className={parcelamentoSummary ? "lg:col-span-1" : ""}
+              />
+              {parcelamentoSummary && (
+                <StatCard 
+                  label="Condição de Pagamento" 
+                  value={parcelamentoSummary.summaryText} 
+                  description={parcelamentoSummary.paymentMethod}
+                  icon={CreditCard} 
+                  colorClass="text-emerald-600" 
+                  bgClass="bg-emerald-50 dark:bg-emerald-950/40" 
+                  className="sm:col-span-2 lg:col-span-2"
+                />
+              )}
+              <StatCard 
+                label="ID da Matrícula" 
+                value={`#${id}`} 
+                icon={Hash} 
+                colorClass="text-zinc-600" 
+                bgClass="bg-zinc-100" 
+                className={parcelamentoSummary ? "lg:col-span-1" : ""}
+              />
+              <StatCard 
+                label="Validade" 
+                value={computeValidityDate(validadeDias, emissionDate) || 'Expirada'} 
+                icon={Calendar} 
+                colorClass="text-blue-600" 
+                bgClass="bg-blue-50" 
+                className={parcelamentoSummary ? "lg:col-span-1" : ""}
+              />
+              <StatCard 
+                label="Consultor" 
+                value={(enrollment as any)?.consultor?.name || (enrollment as any)?.autor_name || 'Sistema'} 
+                icon={User} 
+                colorClass="text-purple-600" 
+                bgClass="bg-purple-50" 
+                className={parcelamentoSummary ? "lg:col-span-1" : ""}
+              />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -518,6 +661,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                   {linkAssinatura && <SignatureLinkCard link={linkAssinatura} />}
                   {meta?.proposta_pdf && <ProposalPdfLinkCard pdfUrl={meta.proposta_pdf} />}
                   {infoResponsavel && <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />}
+                  <AsaasBillingCard meta={meta} isSigned={isAssinado} />
 
                   <ProposalAttendanceCard
                     enrollmentId={String(id)}

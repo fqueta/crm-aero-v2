@@ -21,22 +21,27 @@ import { turmasService } from '@/services/turmasService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Save, CheckCircle, Pencil, Plus, Trash2, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Pencil, Plus, Trash2, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings, FileText, ArrowRight, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import EditFooterBar from '@/components/ui/edit-footer-bar';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 const DEFAULT_FUEL_TEXT = `<p>O custo estimado de combustível para esta proposta é de <strong>{valor}</strong>. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento. O cálculo final será baseado no preço vigente na data em que o combustível for abastecido, sendo assim, esse valor pode variar.</p>`;
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { CONTRACT_SHORTCODES } from '@/lib/contractShortcodes';
 import SelectGeraValor from '@/components/school/SelectGeraValor';
 import { currencyApplyMask, currencyRemoveMaskToNumber, currencyRemoveMaskToString } from '@/lib/masks/currency';
 import BudgetPreview from '@/components/school/BudgetPreview';
+import PaymentScheduleSection from '@/components/school/PaymentScheduleSection';
+import { getParcelamentoProgramacao } from '@/lib/paymentSchedule';
 import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
 import { cpfApplyMask } from '@/lib/masks/cpf-apply-mask';
 import { cepApplyMask } from '@/lib/masks/cep-apply-mask';
 import { responsaveisService } from '@/services/responsaveisService';
 import QuickResponsibleModal, { createEmptyQuickResponsibleData } from '@/components/proposals/QuickResponsibleModal';
+import QuickTurmaModal from '@/components/school/QuickTurmaModal';
 
 import { useAircraftList } from '@/hooks/aircraft';
 import CourseModulesSelector from '@/components/school/CourseModulesSelector';
@@ -49,33 +54,45 @@ import CourseModulesSelector from '@/components/school/CourseModulesSelector';
 const proposalEditSchema = z.object({
   id_cliente: z.string().min(1, 'Selecione o cliente'),
   id_curso: z.string().min(1, 'Selecione o curso'),
-  id_turma: z.string().min(1, 'Selecione a turma'),
+  id_turma: z.string().optional().nullable(),
   /**
    * parcelamento_id
    * pt-BR: ID da Tabela de Parcelamento selecionada para o curso (opcional).
    * en-US: Selected Installment Table ID for the course (optional).
    */
-  parcelamento_id: z.string().optional(),
-  obs: z.string().optional(),
-  id_consultor: z.string().min(1, 'Selecione o consultor'),
-  gera_valor: z.string().optional(),
+  parcelamento_id: z.string().optional().nullable(),
+  /**
+   * Programação de pagamento (Gerenciamento de Parcelamento)
+   * pt-BR: Parcela do financiamento + primeira parcela (valor/data) + dia do pagamento.
+   * en-US: Financing installment + first installment (value/date) + due day.
+   */
+  parcela_selecionada: z.string().optional().nullable(),
+  primeira_parcela_valor: z.string().optional().nullable(),
+  primeira_parcela_data: z.string().optional().nullable(),
+  dia_pagamento: z.string().optional().nullable(),
+  recebimento_matricula: z.string().optional().nullable(),
+  matricula_vencimento_data: z.string().optional().nullable(),
+  vencimentos_personalizados: z.any().optional().nullable(),
+  obs: z.string().optional().nullable(),
+  id_consultor: z.string().optional().nullable(),
+  gera_valor: z.string().optional().nullable(),
   // pt-BR: Novo campo para vincular a situação via select (GET /situacoes-matricula)
   // en-US: New field to bind situation via select (GET /situacoes-matricula)
-  situacao_id: z.string().optional(),
-  id_responsavel: z.string().optional(),
-  orc_json: z.string().optional(),
-  desconto: z.string().optional(),
-  inscricao: z.string().optional(),
-  subtotal: z.string().optional(),
-  total: z.string().optional(),
-  validade: z.string().optional(),
+  situacao_id: z.string().optional().nullable(),
+  id_responsavel: z.string().optional().nullable(),
+  orc_json: z.string().optional().nullable(),
+  desconto: z.string().optional().nullable(),
+  inscricao: z.string().optional().nullable(),
+  subtotal: z.string().optional().nullable(),
+  total: z.string().optional().nullable(),
+  validade: z.string().optional().nullable(),
   // Novo campo do formulário para meta.texto_desconto
   // New form field backing meta.texto_desconto
-  meta_texto_desconto: z.string().optional(),
-  meta_texto_combustivel: z.string().optional(),
+  meta_texto_desconto: z.string().optional().nullable(),
+  meta_texto_combustivel: z.string().optional().nullable(),
   // Campo para desconto específico da Etapa 1 (não persistido diretamente no model, mas via meta/orc)
-  etapa1_desconto: z.number().optional(),
-  id: z.string().optional(),
+  etapa1_desconto: z.any().optional().nullable(),
+  id: z.string().optional().nullable(),
 });
 
 type ProposalEditFormData = z.infer<typeof proposalEditSchema>;
@@ -97,7 +114,7 @@ export default function ProposalsEdit() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const idClienteFromUrl = searchParams.get('id_cliente') || '';
 
   // navState
@@ -125,6 +142,8 @@ export default function ProposalsEdit() {
   const [quickResponsibleData, setQuickResponsibleData] = useState(createEmptyQuickResponsibleData());
   const [quickResponsibleLoading, setQuickResponsibleLoading] = useState(false);
   const [quickResponsibleEditId, setQuickResponsibleEditId] = useState<string | null>(null);
+
+  const [isQuickTurmaOpen, setIsQuickTurmaOpen] = useState(false);
 
   const [isFuelTextOpen, setIsFuelTextOpen] = useState(false);
   const [isParcelamentoCollapsed, setIsParcelamentoCollapsed] = useState(false);
@@ -355,6 +374,13 @@ export default function ProposalsEdit() {
       // pt-BR: Campo opcional para vincular uma tabela de parcelamento.
       // en-US: Optional field to link an installment table.
       parcelamento_id: '',
+      parcela_selecionada: '',
+      primeira_parcela_valor: '',
+      primeira_parcela_data: '',
+      dia_pagamento: '',
+      recebimento_matricula: 'diluida',
+      matricula_vencimento_data: '',
+      vencimentos_personalizados: {},
       obs: '',
       id_consultor: '',
       gera_valor: '',
@@ -480,6 +506,37 @@ export default function ProposalsEdit() {
   const [tempDiscountRows, setTempDiscountRows] = useState<Array<{ parcela: string; valor: string; desconto: string }>>([]);
 
   /**
+   * activeTab
+   * pt-BR: Controla a aba ativa de edição (dados, modulos, pagamento, preview).
+   * en-US: Controls active editing tab (dados, modulos, pagamento, preview).
+   */
+  const [activeTab, setActiveTab] = useState<'dados' | 'modulos' | 'pagamento' | 'preview'>(
+    () => {
+      const t = searchParams.get('tab');
+      if (t === 'dados' || t === 'modulos' || t === 'pagamento' || t === 'preview') {
+        return t;
+      }
+      return 'dados';
+    }
+  );
+
+  const handleTabChange = (val: string) => {
+    setActiveTab(val as any);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', val);
+      return next;
+    }, { replace: true });
+  };
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'dados' || t === 'modulos' || t === 'pagamento' || t === 'preview') {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
+
+  /**
    * clampActiveRowIndexOnRowsChange
    * pt-BR: Garante que o índice ativo seja válido quando a lista de linhas muda.
    * en-US: Ensures the active index remains valid when the rows list changes.
@@ -520,9 +577,14 @@ export default function ProposalsEdit() {
     // en-US: Adjust active row installment value according to Total, if available.
     try {
       const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+      const inscricaoNum = currencyRemoveMaskToNumber(String(form.getValues('inscricao') || '')) || 0;
+      const recebimentoMatricula = form.getValues('recebimento_matricula') || 'diluida';
+      const baseFinanciamento = (recebimentoMatricula === 'avulsa' || recebimentoMatricula === 'primeira_parcela')
+        ? Math.max(0, totalNum - inscricaoNum)
+        : totalNum;
       const parcStr = String(rows?.[activeRowIndex]?.parcela || '');
       const parcNum = Number(parcStr) || 0;
-      const fromTotal = totalNum > 0 && parcNum > 0 ? (totalNum / parcNum) : 0;
+      const fromTotal = baseFinanciamento > 0 && parcNum > 0 ? (baseFinanciamento / parcNum) : 0;
       if (fromTotal > 0) {
         setDiscountRows((prev) => {
           const next = [...prev];
@@ -724,6 +786,44 @@ export default function ProposalsEdit() {
     const list = coursesList || [];
     return list.find((c: any) => String(c.id) === id);
   }, [coursesList, selectedCourseId]);
+
+  const hasModulesTab = Boolean(form.watch('id_turma') && String(selectedCourse?.tipo) !== '1');
+
+  /**
+   * wizardSteps
+   * pt-BR: Etapas dinâmicas do fluxo tipo wizard com seus respectivos rótulos, ícones e estados.
+   * en-US: Dynamic wizard steps with their respective labels, icons and states.
+   */
+  const wizardSteps = useMemo(() => {
+    const steps = [
+      { id: 'dados' as const, label: 'Dados & Curso', description: 'Cliente, turma e observações', icon: User },
+    ];
+    if (hasModulesTab) {
+      steps.push({ id: 'modulos' as const, label: 'Módulos & Preços', description: 'Grade de horas e aeronaves', icon: Layers });
+    }
+    steps.push(
+      { id: 'pagamento' as const, label: 'Condições & Parcelamento', description: 'Valores, prazos e descontos', icon: Wallet },
+      { id: 'preview' as const, label: 'Preview da Proposta', description: 'Revisão final antes de enviar', icon: FileText }
+    );
+    return steps;
+  }, [hasModulesTab]);
+
+  const currentStepIndex = wizardSteps.findIndex((s) => s.id === activeTab);
+  const safeCurrentStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
+  const prevStep = safeCurrentStepIndex > 0 ? wizardSteps[safeCurrentStepIndex - 1] : null;
+  const nextStep = safeCurrentStepIndex < wizardSteps.length - 1 ? wizardSteps[safeCurrentStepIndex + 1] : null;
+
+  const handleNextStep = () => {
+    if (nextStep) {
+      handleTabChange(nextStep.id);
+    }
+  };
+
+  const handlePrevStep = () => {
+    if (prevStep) {
+      handleTabChange(prevStep.id);
+    }
+  };
 
   // Efeito para preencher inscrição, subtotal e desconto automaticamente ao selecionar curso/turma
   useEffect(() => {
@@ -1223,9 +1323,11 @@ export default function ProposalsEdit() {
 
   const classOptionsWithFallback = useMemo(() => {
     const hasSelectedCourse = !!selectedCourseId;
+    if (!hasSelectedCourse) return [];
     const list = classOptions || [];
-    if (hasSelectedCourse && list.length === 0) {
-      return [{ value: '0', label: 'Aguardar turma', description: 'Sem turmas disponíveis para este curso' }];
+    const aguardarOption = { value: '0', label: 'Aguardar turma', description: 'Aguardando abertura de turma / Sem turma definida' };
+    if (!list.some(item => String(item.value) === '0')) {
+      return [aguardarOption, ...list];
     }
     return list;
   }, [classOptions, selectedCourseId]);
@@ -1396,11 +1498,16 @@ export default function ProposalsEdit() {
       tabela_id: values.parcelamento_id || '',
       texto_desconto: values.meta_texto_desconto || '',
       /**
-       * parcela_selecionada
-       * pt-BR: Armazena qual das linhas foi a escolhida pelo usuário.
-       * en-US: Stores which of the lines was chosen by the user.
+       * Programação de pagamento (primeira parcela + dia) — vale para a matrícula,
+       * alimenta `{tabela_parcelas}` no contrato e a cobrança.
        */
-      parcela_selecionada: activeRow ? String(activeRow.parcela || '') : '',
+      ...getParcelamentoProgramacao(values),
+      /**
+       * parcela_selecionada
+       * pt-BR: Parcela escolhida na Programação de Pagamento (fallback: linha ativa).
+       * en-US: Installment chosen in the Payment Schedule (fallback: active row).
+       */
+      parcela_selecionada: values.parcela_selecionada || (activeRow ? String(activeRow.parcela || '') : ''),
       /**
        * texto_preview_html
        * pt-BR: HTML do texto de desconto com shortcodes resolvidos a partir da linha ativa.
@@ -1450,10 +1557,17 @@ export default function ProposalsEdit() {
       setShowResponsible(false);
     }
 
+    const orcParcelamento = (enrollment as any)?.orc?.parcelamento || {};
+    const rawTurma = (enrollment as any)?.id_turma;
+    const rawCurso = (enrollment as any)?.id_curso;
+    const hydratedTurma = (rawTurma !== null && rawTurma !== undefined && rawTurma !== '' && String(rawTurma) !== '0')
+      ? String(rawTurma)
+      : (rawCurso ? '0' : form.getValues('id_turma'));
+
     form.reset({
       id_cliente: safe('id_cliente', form.getValues('id_cliente')),
       id_curso: safe('id_curso', form.getValues('id_curso')),
-      id_turma: safe('id_turma', form.getValues('id_turma')),
+      id_turma: hydratedTurma,
       // pt-BR: Observações devem ser preenchidas a partir de `descricao` quando existir;
       //        caso contrário, usa `obs` legado.
       // en-US: Observations should be hydrated from `descricao` when present;
@@ -1463,9 +1577,17 @@ export default function ProposalsEdit() {
       // pt-BR: Recupera meta.gera_valor com fallback para campo raiz (compatibilidade)
       // en-US: Restores meta.gera_valor with fallback to root field for compatibility
       gera_valor: metaSafe('gera_valor', safe('gera_valor', form.getValues('gera_valor'))),
-      // pt-BR: Preenche situacao_id se existir no registro
-      // en-US: Fills situacao_id if present in the record
-      situacao_id: String(safe('situacao_id', '')),
+      // pt-BR: Preenche situacao_id se existir no registro; caso contrário, busca a situação "Interessado"
+      // en-US: Fills situacao_id if present in the record; otherwise, looks up "Interessado"
+      situacao_id: (() => {
+        const stored = safe('situacao_id', '');
+        if (stored && stored !== '0' && stored !== '') return String(stored);
+        const intItem = situationsList.find(
+          (s: any) => String(s?.slug || '').toLowerCase() === 'int' ||
+                      String(s?.name || s?.label || s?.nome || '').toLowerCase().includes('interessad')
+        );
+        return intItem?.id ? String(intItem.id) : (stored ? String(stored) : '');
+      })(),
       id_responsavel: currentRespId,
       orc_json: JSON.stringify((enrollment as any)?.orc ?? {}),
       desconto: descontoMaskedInit,
@@ -1477,12 +1599,44 @@ export default function ProposalsEdit() {
       validade: metaSafe('validade', safe('validade', form.getValues('validade'))),
       // pt-BR: Recupera meta.texto_desconto para preencher o novo campo do formulário
       // en-US: Restores meta.texto_desconto to populate the new form field
-      meta_texto_desconto: metaSafe('texto_desconto', ''),
+      meta_texto_desconto: metaSafe('texto_desconto', orcParcelamento.texto_desconto || ''),
       meta_texto_combustivel: metaSafe('texto_combustivel', ''),
       etapa1_desconto: Number(metaSafe('etapa1_desconto', '0')),
+      parcelamento_id: String(safe('parcelamento_id', orcParcelamento.tabela_id || form.getValues('parcelamento_id'))),
+      parcela_selecionada: String(orcParcelamento.parcela_selecionada || form.getValues('parcela_selecionada') || ''),
+      primeira_parcela_valor: (orcParcelamento.primeira_parcela_valor !== undefined && orcParcelamento.primeira_parcela_valor !== null && String(orcParcelamento.primeira_parcela_valor) !== '')
+        ? currencyApplyMask(String(orcParcelamento.primeira_parcela_valor), 'pt-BR', 'BRL')
+        : (form.getValues('primeira_parcela_valor') || ''),
+      primeira_parcela_data: orcParcelamento.primeira_parcela_data
+        ? String(orcParcelamento.primeira_parcela_data).slice(0, 10)
+        : (form.getValues('primeira_parcela_data') || ''),
+      dia_pagamento: (orcParcelamento.dia_pagamento !== undefined && orcParcelamento.dia_pagamento !== null && String(orcParcelamento.dia_pagamento) !== '')
+        ? String(orcParcelamento.dia_pagamento)
+        : (form.getValues('dia_pagamento') || ''),
+      recebimento_matricula: orcParcelamento.recebimento_matricula
+        ? String(orcParcelamento.recebimento_matricula)
+        : (form.getValues('recebimento_matricula') || 'diluida'),
+      matricula_vencimento_data: orcParcelamento.matricula_vencimento_data
+        ? String(orcParcelamento.matricula_vencimento_data).slice(0, 10)
+        : (form.getValues('matricula_vencimento_data') || ''),
+      vencimentos_personalizados: orcParcelamento.vencimentos_personalizados || form.getValues('vencimentos_personalizados') || {},
       id: String(id || ''),
     });
-  }, [enrollment, id]);
+  }, [enrollment, id, situationsList]);
+
+  // Se o formulário já foi hidratado mas situacao_id estiver vazia e a lista de situações carregar, define Interessado
+  useEffect(() => {
+    const current = form.getValues('situacao_id');
+    if ((!current || current === '0') && situationsList.length > 0) {
+      const intItem = situationsList.find(
+        (s: any) => String(s?.slug || '').toLowerCase() === 'int' ||
+                    String(s?.name || s?.label || s?.nome || '').toLowerCase().includes('interessad')
+      );
+      if (intItem?.id) {
+        form.setValue('situacao_id', String(intItem.id));
+      }
+    }
+  }, [situationsList]);
 
   /**
    * textoDescontoWatched
@@ -1522,7 +1676,12 @@ export default function ProposalsEdit() {
     const parcelaStr = String(row.parcela || '');
     const parcelaNum = Number(parcelaStr) || 0;
     const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
-    const fromTotal = parcelaNum > 0 && totalNum > 0 ? (totalNum / parcelaNum) : 0;
+    const inscricaoNum = currencyRemoveMaskToNumber(String(form.getValues('inscricao') || '')) || 0;
+    const recebimentoMatricula = form.getValues('recebimento_matricula') || 'diluida';
+    const baseFinanciamento = (recebimentoMatricula === 'avulsa' || recebimentoMatricula === 'primeira_parcela')
+      ? Math.max(0, totalNum - inscricaoNum)
+      : totalNum;
+    const fromTotal = parcelaNum > 0 && baseFinanciamento > 0 ? (baseFinanciamento / parcelaNum) : 0;
     const valorFromTotalMasked = fromTotal > 0 ? formatCurrencyBRL(fromTotal) : '';
     const { maskedValor, maskedDesc } = getValorDescFromConfig(parcelaStr);
     const valorMasked = String(row.valor || valorFromTotalMasked || maskedValor || '');
@@ -1606,13 +1765,14 @@ export default function ProposalsEdit() {
 
       // Hidratar linhas da tabela se existirem em orc.parcelamento.linhas
       const linhas = Array.isArray(parcelamento.linhas) ? parcelamento.linhas : [];
+      let hydratedRows: any[] = [];
       if (linhas.length > 0) {
-        const rows = linhas.map((l: any) => ({
+        hydratedRows = linhas.map((l: any) => ({
           parcela: String(l.parcelas ?? l.parcela ?? ''),
           valor: l.valor ? currencyApplyMask(String(l.valor), 'pt-BR', 'BRL') : '',
           desconto: l.desconto ? currencyApplyMask(String(l.desconto), 'pt-BR', 'BRL') : '',
         }));
-        setDiscountRows(rows);
+        setDiscountRows(hydratedRows);
         // pt-BR: Se já temos um parcelamento_id (do orc ou do formulário), marca como hidratado.
         // en-US: If we already have a parcelamento_id (from orc or form), mark as hydrated.
         const idForHydration = String(form.getValues('parcelamento_id') || parcelamento.tabela_id || '');
@@ -1628,11 +1788,32 @@ export default function ProposalsEdit() {
       // Hidratar parcela selecionada
       if (parcelamento.parcela_selecionada) {
         form.setValue('total_parcelas', String(parcelamento.parcela_selecionada));
-        const idx = (rows || []).findIndex((r: any) => String(r.parcela) === String(parcelamento.parcela_selecionada));
+        form.setValue('parcela_selecionada', String(parcelamento.parcela_selecionada));
+        const idx = hydratedRows.findIndex((r: any) => String(r.parcela) === String(parcelamento.parcela_selecionada));
         if (idx !== -1) setActiveRowIndex(idx);
       }
-    } catch {
-      // Silenciar erros de hidratação para não afetar UX
+
+      // Hidratar programação de pagamento (primeira parcela + dia)
+      if (parcelamento.primeira_parcela_valor !== undefined && parcelamento.primeira_parcela_valor !== null && String(parcelamento.primeira_parcela_valor) !== '') {
+        form.setValue('primeira_parcela_valor', currencyApplyMask(String(parcelamento.primeira_parcela_valor), 'pt-BR', 'BRL'));
+      }
+      if (parcelamento.primeira_parcela_data) {
+        form.setValue('primeira_parcela_data', String(parcelamento.primeira_parcela_data).slice(0, 10));
+      }
+      if (parcelamento.dia_pagamento !== undefined && parcelamento.dia_pagamento !== null && String(parcelamento.dia_pagamento) !== '') {
+        form.setValue('dia_pagamento', String(parcelamento.dia_pagamento));
+      }
+      if (parcelamento.recebimento_matricula) {
+        form.setValue('recebimento_matricula', String(parcelamento.recebimento_matricula));
+      }
+      if (parcelamento.matricula_vencimento_data) {
+        form.setValue('matricula_vencimento_data', String(parcelamento.matricula_vencimento_data).slice(0, 10));
+      }
+      if (parcelamento.vencimentos_personalizados) {
+        form.setValue('vencimentos_personalizados', parcelamento.vencimentos_personalizados);
+      }
+    } catch (e) {
+      console.warn('Erro ao hidratar parcelamento:', e);
     }
   }, [enrollment, form]);
 
@@ -1660,6 +1841,26 @@ export default function ProposalsEdit() {
     navigate(-1);
   }
 
+  const onInvalid = (errors: any) => {
+    console.error('Validation errors on submit:', errors);
+    const messages = Object.entries(errors)
+      .map(([k, v]: [string, any]) => `${k}: ${v?.message || 'inválido'}`)
+      .join(', ');
+
+    // pt-BR: Redireciona para a aba que contém o campo inválido para o usuário ver o erro.
+    if (errors.id_cliente || errors.id_curso || errors.id_turma || errors.id_responsavel) {
+      handleTabChange('dados');
+    } else if (errors.desconto || errors.inscricao || errors.subtotal || errors.validade || errors.parcelamento_id) {
+      handleTabChange('pagamento');
+    }
+
+    toast({
+      title: 'Atenção ao salvar proposta',
+      description: messages || 'Verifique os campos obrigatórios da proposta.',
+      variant: 'destructive',
+    });
+  };
+
   /**
    * handleSaveContinue
    * pt-BR: Envia o formulário e permanece na página para continuar.
@@ -1667,7 +1868,7 @@ export default function ProposalsEdit() {
    */
   function handleSaveContinue() {
     finishAfterSaveRef.current = false;
-    form.handleSubmit(onSubmit)();
+    form.handleSubmit(onSubmit, onInvalid)();
   }
 
   /**
@@ -1677,7 +1878,7 @@ export default function ProposalsEdit() {
    */
   function handleSaveFinish() {
     finishAfterSaveRef.current = true;
-    form.handleSubmit(onSubmit)();
+    form.handleSubmit(onSubmit, onInvalid)();
   }
 
   /**
@@ -1794,14 +1995,108 @@ export default function ProposalsEdit() {
         </CardHeader>
         <CardContent className="px-0">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
               
-              {/* Seção 1: Identificação */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 px-1">
-                  <div className="h-4 w-1 bg-blue-600 rounded-full"></div>
-                  <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500">Identificação e Status</h3>
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+                {/* Wizard Header Sticky com Stepper e Barra de Progresso */}
+                <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 border-b shadow-xs">
+                  {/* Barra de Progresso Fina no Topo */}
+                  <div className="w-full h-1 bg-muted/80 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 transition-all duration-300 ease-out"
+                      style={{ width: `${((safeCurrentStepIndex + 1) / wizardSteps.length) * 100}%` }}
+                    />
+                  </div>
+
+                  <div className="px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    {/* Stepper Interativo de Etapas */}
+                    <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+                      {wizardSteps.map((step, idx) => {
+                        const Icon = step.icon;
+                        const isCurrent = step.id === activeTab;
+                        const isCompleted = idx < safeCurrentStepIndex;
+
+                        return (
+                          <React.Fragment key={step.id}>
+                            <button
+                              type="button"
+                              onClick={() => handleTabChange(step.id)}
+                              className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                                  : isCompleted
+                                  ? 'bg-muted/70 text-foreground border-border hover:bg-muted hover:border-zinc-300 dark:hover:border-zinc-700'
+                                  : 'bg-background/50 text-muted-foreground border-transparent hover:bg-muted/40 hover:text-foreground'
+                              }`}
+                            >
+                              <div
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors ${
+                                  isCurrent
+                                    ? 'bg-primary-foreground text-primary'
+                                    : isCompleted
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-muted text-muted-foreground group-hover:bg-muted-foreground/20'
+                                }`}
+                              >
+                                {isCompleted ? '✓' : idx + 1}
+                              </div>
+                              <span className="truncate max-w-[130px] sm:max-w-none">{step.label}</span>
+                            </button>
+
+                            {idx < wizardSteps.length - 1 && (
+                              <div className="hidden sm:block text-muted-foreground/40 text-xs px-0.5">
+                                →
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    {/* Controles de Navegação Rápida do Wizard */}
+                    <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePrevStep}
+                        disabled={!prevStep}
+                        className="h-8 text-xs px-2.5 rounded-lg"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                        <span className="hidden sm:inline">Anterior</span>
+                      </Button>
+
+                      {nextStep ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleNextStep}
+                          className="h-8 text-xs px-2.5 rounded-lg font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
+                        >
+                          <span>Próximo: {nextStep.label}</span>
+                          <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                        </Button>
+                      ) : (
+                        <Badge variant="outline" className="h-8 px-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          Etapa Final
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                <div className="px-6 pt-6 pb-2">
+                  {/* Aba 1: Dados do Cliente, Curso e Observações */}
+                  <TabsContent value="dados" forceMount className={`space-y-8 ${activeTab !== 'dados' ? 'hidden' : ''}`}>
+                    {/* Seção 1: Identificação */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 px-1">
+                        <div className="h-4 w-1 bg-blue-600 rounded-full"></div>
+                        <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500">Identificação e Status</h3>
+                      </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800">
                   {/* Cliente */}
@@ -1975,6 +2270,20 @@ export default function ProposalsEdit() {
                           onSearch={setClassSearch}
                           searchTerm={classSearch}
                           debounceMs={250}
+                          header={({ setOpen }) => (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10 text-xs font-medium"
+                              onClick={() => {
+                                setIsQuickTurmaOpen(true);
+                                setOpen(false);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Cadastrar Nova Turma
+                            </Button>
+                          )}
                         />
                         <FormMessage />
                       </FormItem>
@@ -2056,7 +2365,9 @@ export default function ProposalsEdit() {
                         <RichTextEditor
                           value={field.value || ''}
                           onChange={field.onChange}
-                          placeholder="Digite qualquer observação relevante para o histórico da proposta..."
+                          placeholder="Digite qualquer observação relevante para o histórico da proposta... Digite { ou Shift+Espaço para ver os shortcodes."
+                          enableShortcodeHints
+                          shortcodes={CONTRACT_SHORTCODES}
                         />
                       </FormControl>
                       <FormMessage />
@@ -2065,8 +2376,11 @@ export default function ProposalsEdit() {
                 />
               </div>
 
-              {/* Seção 4: Configuração Técnica (Módulos/Gera Valor) */}
-              {form.watch('id_turma') && String(selectedCourse?.tipo) !== '1' && (
+            </TabsContent>
+
+            {/* Aba 2: Configuração Técnica (Módulos/Gera Valor) */}
+            {hasModulesTab && (
+              <TabsContent value="modulos" forceMount className={`space-y-4 ${activeTab !== 'modulos' ? 'hidden' : ''}`}>
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 px-1">
                     <div className="h-4 w-1 bg-purple-600 rounded-full"></div>
@@ -2118,8 +2432,12 @@ export default function ProposalsEdit() {
                     )}
                   </div>
                 </div>
-              )}
 
+              </TabsContent>
+            )}
+
+            {/* Aba 3: Financeiro e Gerenciamento de Parcelamento */}
+            <TabsContent value="pagamento" forceMount className={`space-y-6 ${activeTab !== 'pagamento' ? 'hidden' : ''}`}>
               {/* Seção 5: Financeiro e Condições */}
               <div className="space-y-6">
                 <div className="flex items-center gap-2 px-1">
@@ -2345,8 +2663,13 @@ export default function ProposalsEdit() {
                                       // pt-BR: Recalcula valor da parcela a partir do Total quando possível.
                                       // en-US: Recalculate installment value from Total when possible.
                                       const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+                                      const inscricaoNum = currencyRemoveMaskToNumber(String(form.getValues('inscricao') || '')) || 0;
+                                      const recebimentoMatricula = form.getValues('recebimento_matricula') || 'diluida';
+                                      const baseFinanciamento = (recebimentoMatricula === 'avulsa' || recebimentoMatricula === 'primeira_parcela')
+                                        ? Math.max(0, totalNum - inscricaoNum)
+                                        : totalNum;
                                       const parcNum = Number(val) || 0;
-                                      const fromTotal = totalNum > 0 && parcNum > 0 ? (totalNum / parcNum) : 0;
+                                      const fromTotal = baseFinanciamento > 0 && parcNum > 0 ? (baseFinanciamento / parcNum) : 0;
                                       const maskedValor = fromTotal > 0
                                         ? formatCurrencyBRL(fromTotal)
                                         : (chosen?.valor ? currencyApplyMask(String(chosen.valor), 'pt-BR', 'BRL') : (cfg?.valor ? currencyApplyMask(String(cfg.valor), 'pt-BR', 'BRL') : ''));
@@ -2465,137 +2788,190 @@ export default function ProposalsEdit() {
                   </div>
 
                   {/**
-                   * DiscountTextUnderTable
-                   * pt-BR: O campo Texto de Desconto (WYSIWYG) foi movido para baixo da tabela, conforme solicitado.
-                   * en-US: The Discount Text (WYSIWYG) field is placed under the table as requested.
+                   * PaymentScheduleSection
+                   * pt-BR: Programação de Pagamento da matrícula (parcela, 1ª valor/data, dia).
+                   * en-US: Enrollment Payment Schedule (installment, 1st value/date, day).
                    */}
-                  <div className="mt-4">
-                    <FormField
-                      control={form.control}
-                      name="meta_texto_desconto"
-                      render={({ field }) => (
-                        <FormItem>
-                          <div className="flex items-center justify-between">
-                            <FormLabel>Texto de Desconto</FormLabel>
-                            
-                            {/* pt-BR: Atalhos para shortcodes do parcelamento */}
-                            <div className="flex flex-wrap gap-1.5">
-                              {[
-                                { label: '{total_parcelas}', desc: 'Total de Parc.' },
-                                { label: '{valor_parcela}', desc: 'Valor da Parc.' },
-                                { label: '{desconto_pontualidade}', desc: 'Desconto' },
-                                { label: '{parcela_com_desconto}', desc: 'Líquido' }
-                              ].map((v) => (
-                                <button
-                                  key={v.label}
-                                  type="button"
-                                  className="text-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-400 font-mono hover:bg-blue-100 transition-colors"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    insertTag(v.label);
-                                  }}
-                                  title={v.desc}
-                                >
-                                  {v.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <FormControl>
-                            <RichTextEditor
-                              value={field.value || ''}
-                              onChange={(val) => {
-                                // pt-BR: Marca o texto como editado pelo usuário para evitar rehidratação automática.
-                                // en-US: Marks the text as user-edited to avoid automatic rehydration.
-                                try { setTextoDescontoDirty(true); } catch {}
-                                field.onChange(val);
-                              }}
-                              placeholder="Digite ou edite o texto de desconto (suporta HTML)"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                  <PaymentScheduleSection
+                    control={form.control}
+                    setValue={form.setValue}
+                    lines={(discountRows || []).map((r: any) => ({
+                      parcelas: String(r?.parcela || ''),
+                      valor: String(r?.valor || ''),
+                      desconto: String(r?.desconto || ''),
+                    }))}
+                    onSelectParcela={(v) => {
+                      const idx = (discountRows || []).findIndex((r: any) => String(r?.parcela || '') === String(v));
+                      if (idx !== -1) setActiveRowIndex(idx);
+                    }}
+                    onRecebimentoMatriculaChange={(mode) => {
+                      form.setValue('recebimento_matricula', mode);
+                      const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+                      const inscricaoNum = currencyRemoveMaskToNumber(String(form.getValues('inscricao') || '')) || 0;
+                      const baseFinanciamento = (mode === 'avulsa' || mode === 'primeira_parcela')
+                        ? Math.max(0, totalNum - inscricaoNum)
+                        : totalNum;
+                      setDiscountRows((prev) =>
+                        prev.map((r) => {
+                          const pNum = Number(r.parcela) || 0;
+                          if (pNum > 0 && baseFinanciamento > 0) {
+                            return { ...r, valor: formatCurrencyBRL(baseFinanciamento / pNum) };
+                          }
+                          return r;
+                        })
+                      );
+                    }}
+                  />
 
                   {/**
-                   * DiscountPreviewCard
-                   * pt-BR: Card de preview que renderiza os shortcodes com os valores em tempo real.
-                   * en-US: Preview card that renders shortcodes with real-time values.
+                   * DiscountText & Preview Side-by-Side (Desktop 2 cols)
                    */}
-                  <Card className="mt-4">
-                    <CardHeader>
-                      <CardTitle>Preview de Parcelamento</CardTitle>
-                      <CardDescription>Valores e texto com shortcodes resolvidos em tempo real</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {/* Chips resumindo os valores da linha ativa */}
-                      <div className="flex flex-wrap gap-2">
-                        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
-                          Total de Parcelas: {activeRowResolved?.parcela || '-'}
-                        </span>
-                        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
-                          Valor da Parcela: {activeRowResolved?.valor || '-'}
-                        </span>
-                        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
-                          Desconto: {activeRowResolved?.desconto || '-'}
-                        </span>
-                        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
-                          Parcela c/ Desconto: {activeRowResolved?.parcelaComDesconto || '-'}
-                        </span>
-                      </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 items-stretch">
+                    {/* Coluna 1: Editor Texto de Desconto */}
+                    <Card className="flex flex-col border shadow-sm rounded-xl overflow-hidden">
+                      <CardHeader className="py-3 px-4 border-b bg-zinc-50/50 dark:bg-zinc-900/30">
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                              Texto de Desconto
+                            </CardTitle>
+                            <span className="text-[10px] text-muted-foreground font-mono">HTML / Shortcodes</span>
+                          </div>
+                          {/* Barra de atalhos rápidos */}
+                          <div className="flex flex-wrap gap-1">
+                            {[
+                              { label: '{total_parcelas}', desc: 'Total de Parc.' },
+                              { label: '{valor_parcela}', desc: 'Valor da Parc.' },
+                              { label: '{desconto_pontualidade}', desc: 'Desconto' },
+                              { label: '{parcela_com_desconto}', desc: 'Líquido' },
+                              { label: '{forma_pagamento}', desc: 'Forma Pgto.' },
+                              { label: '{taxa_matricula}', desc: 'Matrícula' },
+                              { label: '{vencimento_matricula}', desc: 'Venc. Matrícula' },
+                            ].map((v) => (
+                              <button
+                                key={v.label}
+                                type="button"
+                                className="text-[10px] bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-400 font-mono hover:bg-blue-100 transition-colors"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  insertTag(v.label);
+                                }}
+                                title={v.desc}
+                              >
+                                {v.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-4 flex-1 flex flex-col">
+                        <FormField
+                          control={form.control}
+                          name="meta_texto_desconto"
+                          render={({ field }) => (
+                            <FormItem className="flex-1 flex flex-col">
+                              <FormControl className="flex-1">
+                                <RichTextEditor
+                                  value={field.value || ''}
+                                  onChange={(val) => {
+                                    try { setTextoDescontoDirty(true); } catch {}
+                                    field.onChange(val);
+                                  }}
+                                  placeholder="Digite ou edite o texto de desconto (suporta HTML). Digite { ou Shift+Espaço para ver os shortcodes."
+                                  enableShortcodeHints
+                                  shortcodes={CONTRACT_SHORTCODES}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </CardContent>
+                    </Card>
 
-                      {/* Render do texto com shortcodes aplicados */}
-                      <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: discountPreviewHtml }} />
-                    </CardContent>
-                  </Card>
+                    {/* Coluna 2: Preview em Tempo Real */}
+                    <Card className="flex flex-col border shadow-sm rounded-xl overflow-hidden">
+                      <CardHeader className="py-3 px-4 border-b bg-zinc-50/50 dark:bg-zinc-900/30">
+                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                          Preview de Parcelamento
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Valores e texto com shortcodes resolvidos em tempo real
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-4 flex-1 space-y-4">
+                        {/* Chips resumindo os valores da linha ativa */}
+                        <div className="flex flex-wrap gap-2">
+                          <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium">
+                            Total de Parcelas: <strong className="ml-1">{activeRowResolved?.parcela || '-'}</strong>
+                          </span>
+                          <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium">
+                            Valor da Parcela: <strong className="ml-1">{activeRowResolved?.valor || '-'}</strong>
+                          </span>
+                          <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium">
+                            Desconto: <strong className="ml-1">{activeRowResolved?.desconto || '-'}</strong>
+                          </span>
+                          <span className="inline-flex items-center rounded-md bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 px-2 py-1 text-xs font-semibold">
+                            Parcela c/ Desconto: <strong className="ml-1">{activeRowResolved?.parcelaComDesconto || '-'}</strong>
+                          </span>
+                        </div>
+
+                        {/* Render do texto com shortcodes aplicados */}
+                        <div className="p-4 rounded-xl border bg-zinc-50/60 dark:bg-zinc-900/40 min-h-[140px] prose prose-sm max-w-none text-zinc-800 dark:text-zinc-200" dangerouslySetInnerHTML={{ __html: discountPreviewHtml }} />
+                      </CardContent>
+                    </Card>
+                  </div>
                   </CardContent>
                 )}
               </Card>
 
-              <div className="mt-6">
-                <Card>
-                  <CardHeader 
-                    className="flex flex-row items-center justify-between cursor-pointer group"
-                    onClick={() => setIsBudgetPreviewCollapsed(!isBudgetPreviewCollapsed)}
-                  >
-                    <div className="flex items-center gap-2">
-                      {isBudgetPreviewCollapsed ? <ChevronDown className="h-5 w-5 transition-transform" /> : <ChevronUp className="h-5 w-5 transition-transform" />}
-                      <CardTitle>Proposta Comercial (Preview)</CardTitle>
-                    </div>
-                  </CardHeader>
-                  {!isBudgetPreviewCollapsed && (
-                    <CardContent className="animate-in fade-in duration-300">
-                      <BudgetPreview
-                        title="Proposta Comercial"
-                        clientName={selectedClient?.name || selectedClient?.nome || ''}
-                        clientId={selectedClient?.id ? String(selectedClient.id) : undefined}
-                        clientPhone={selectedClient?.config?.celular || selectedClient?.config?.telefone_residencial || ''}
-                        clientEmail={selectedClient?.email || ''}
-                        course={selectedCourseNormalized as any}
-                        courseName={selectedCourseNormalized?.titulo || selectedCourseNormalized?.nome || ''}
-                        turmaName={classOptionsWithFallback.find(t => String(t.value) === String(form.watch('id_turma')))?.label || ''}
-                        module={normalizeModuleForTipo4(selectedModule ?? moduleFromEnrollment) as any}
-                        modules={previewModules}
-                        discountLabel="Desconto"
-                        discountAmountMasked={form.watch('desconto') || ''}
-                        subtotalMasked={form.watch('subtotal') || ''}
-                        totalMasked={form.watch('total') || ''}
-                        validityDate={computeValidityDate(form.watch('validade'))}
-                        validityDays={form.watch('validade')}
-                        etapa1Discount={form.watch('etapa1_desconto') || 0}
-                        inscricaoMasked={form.watch('inscricao') || ''}
-                        fuelExternalText={form.watch('meta_texto_combustivel')}
-                        parcelamento={{
-                          linhas: discountRows,
-                          texto_desconto: form.watch('meta_texto_desconto')
-                        }}
-                      />
-                    </CardContent>
-                  )}
-                </Card>
-              </div>
+            </TabsContent>
+
+            {/* Aba 4: Preview da Proposta Comercial */}
+            <TabsContent value="preview" forceMount className={`space-y-4 ${activeTab !== 'preview' ? 'hidden' : ''}`}>
+              <Card>
+                <CardHeader 
+                  className="flex flex-row items-center justify-between cursor-pointer group"
+                  onClick={() => setIsBudgetPreviewCollapsed(!isBudgetPreviewCollapsed)}
+                >
+                  <div className="flex items-center gap-2">
+                    {isBudgetPreviewCollapsed ? <ChevronDown className="h-5 w-5 transition-transform" /> : <ChevronUp className="h-5 w-5 transition-transform" />}
+                    <CardTitle>Proposta Comercial (Preview)</CardTitle>
+                  </div>
+                </CardHeader>
+                {!isBudgetPreviewCollapsed && (
+                  <CardContent className="animate-in fade-in duration-300">
+                    <BudgetPreview
+                      title="Proposta Comercial"
+                      clientName={selectedClient?.name || selectedClient?.nome || ''}
+                      clientId={selectedClient?.id ? String(selectedClient.id) : undefined}
+                      clientPhone={selectedClient?.config?.celular || selectedClient?.config?.telefone_residencial || ''}
+                      clientEmail={selectedClient?.email || ''}
+                      course={selectedCourseNormalized as any}
+                      courseName={selectedCourseNormalized?.titulo || selectedCourseNormalized?.nome || ''}
+                      turmaName={classOptionsWithFallback.find(t => String(t.value) === String(form.watch('id_turma')))?.label || ''}
+                      module={normalizeModuleForTipo4(selectedModule ?? moduleFromEnrollment) as any}
+                      modules={previewModules}
+                      discountLabel="Desconto"
+                      discountAmountMasked={form.watch('desconto') || ''}
+                      subtotalMasked={form.watch('subtotal') || ''}
+                      totalMasked={form.watch('total') || ''}
+                      validityDate={computeValidityDate(form.watch('validade'))}
+                      validityDays={form.watch('validade')}
+                      etapa1Discount={form.watch('etapa1_desconto') || 0}
+                      inscricaoMasked={form.watch('inscricao') || ''}
+                      fuelExternalText={form.watch('meta_texto_combustivel')}
+                      parcelamento={{
+                        linhas: discountRows,
+                        texto_desconto: form.watch('meta_texto_desconto')
+                      }}
+                    />
+                  </CardContent>
+                )}
+              </Card>
+            </TabsContent>
+          </div>
+        </Tabs>
 
               <Dialog open={isFuelTextOpen} onOpenChange={setIsFuelTextOpen}>
                   <DialogContent className="max-w-3xl">
@@ -2628,7 +3004,9 @@ export default function ProposalsEdit() {
                                       <RichTextEditor
                                           value={field.value || ''}
                                           onChange={field.onChange}
-                                          placeholder="Digite o texto personalizado"
+                                          placeholder="Digite o texto personalizado. Digite { para ver os shortcodes."
+                                          enableShortcodeHints
+                                          shortcodes={CONTRACT_SHORTCODES}
                                       />
                                   </FormControl>
                               </FormItem>
@@ -2656,25 +3034,89 @@ export default function ProposalsEdit() {
           </Form>
         </CardContent>
       </Card>
-      <EditFooterBar
-        onBack={handleBack}
-        onContinue={handleSaveContinue}
-        onFinish={handleSaveFinish}
-        onView={handleView}
-        extraContent={(
-          <div className="inline-flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-emerald-900 shadow-sm">
-            <div className="rounded-lg bg-emerald-100 p-2">
-              <CircleDollarSign className="h-4 w-4 text-emerald-700" />
-            </div>
-            <div className="leading-tight">
-              <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-700">Total da Proposta</p>
-              <p className="text-sm font-bold md:text-base">{footerTotalValue}</p>
+      {/* Rodapé fixo com ações e navegação do Wizard */}
+      <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg">
+        <div className="container mx-auto py-2.5 px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+          {/* Lado Esquerdo: Navegação de Etapas (Anterior / Próximo / Etapa X de Y), Visualizar e Total */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-start">
+            {/* Botão Anterior (se estiver na 1ª etapa, volta ao funil) */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={prevStep ? handlePrevStep : handleBack}
+              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+              <span>Anterior</span>
+            </Button>
+
+            {/* Botão Próximo */}
+            {nextStep && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleNextStep}
+                className="h-8 px-2.5 text-xs rounded-md font-medium text-primary border-primary/30 hover:bg-primary/5"
+              >
+                <span>Próximo</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            )}
+
+            <span className="text-xs text-muted-foreground font-medium px-1">
+              {safeCurrentStepIndex + 1} de {wizardSteps.length}
+            </span>
+
+            {/* Botão Visualizar */}
+            {id && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleView}
+                className="h-8 px-2.5 text-xs border-blue-200 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+              >
+                <Eye className="h-3.5 w-3.5 mr-1" /> Visualizar
+              </Button>
+            )}
+
+            <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
+
+            {/* Total Inline Discreto */}
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 text-xs">
+              <span className="text-muted-foreground">Total:</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {footerTotalValue}
+              </span>
             </div>
           </div>
-        )}
-        showView={!!id}
-        disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
-      />
+
+          {/* Lado Direito: Ações de Salvar */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleSaveContinue}
+              disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
+              className="h-8 px-3 text-xs"
+            >
+              <Save className="h-3.5 w-3.5 mr-1.5" /> Salvar e Continuar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSaveFinish}
+              disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
+              className="h-8 px-3.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+            >
+              <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Salvar e Finalizar
+            </Button>
+          </div>
+        </div>
+      </div>
       {/* Modal de Personalização de Parcelamento */}
       <Dialog open={isCustomInstallmentModalOpen} onOpenChange={setIsCustomInstallmentModalOpen}>
         <DialogContent className="max-w-2xl">
@@ -2831,6 +3273,19 @@ export default function ProposalsEdit() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Cadastro Rápido de Turma */}
+      <QuickTurmaModal
+        open={isQuickTurmaOpen}
+        onOpenChange={setIsQuickTurmaOpen}
+        idCurso={selectedCourseId}
+        courseName={selectedCourse?.nome || selectedCourse?.titulo}
+        onSuccess={(newTurma) => {
+          if (newTurma?.id) {
+            form.setValue('id_turma', String(newTurma.id), { shouldDirty: true, shouldValidate: true });
+          }
+        }}
+      />
 
     </div>
   );

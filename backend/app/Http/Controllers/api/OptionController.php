@@ -275,7 +275,6 @@ class OptionController extends Controller
         if (!$this->permissionService->isHasPermission('view')) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        dd($id);
         $option = Option::findOrFail($id);
 
         // Converter value para array

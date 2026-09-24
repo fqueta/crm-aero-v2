@@ -4,8 +4,13 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\api\MetricasController;
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessAsaasPaymentJob;
 use App\Models\ScheduledCommunication;
+use App\Services\Asaas\AsaasPaymentMapper;
+use App\Services\Asaas\AsaasService;
+use App\Services\Qlib;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 
@@ -180,6 +185,8 @@ class WebhookController extends Controller
                 return $this->processZapsingWebhook($endp1, $endp2, $payload, $headers);
             case 'brevo':
                 return $this->processBrevoWebhook($payload, $headers);
+            case 'asaas':
+                return $this->processAsaasWebhook($payload, $headers);
             default:
                 return $this->processGenericWebhook($endp1, $endp2, $payload, $headers);
         }
@@ -378,6 +385,85 @@ class WebhookController extends Controller
             'processed_at' => now()->toISOString(),
             'payload_received' => !empty($payload),
             'data' => $proccess
+        ];
+    }
+
+    /**
+     * processAsaasWebhook
+     * pt-BR: Recebe eventos PAYMENT_* do Asaas: valida `asaas-access-token`,
+     * resolve a matrícula (externalReference `matricula:{id}` ou vínculo do
+     * parcelamento) e enfileira o processamento (resposta 2xx rápida).
+     * Payload Asaas: {id: evt_*, event: PAYMENT_*, dateCreated, payment: {...}}.
+     */
+    private function processAsaasWebhook(array $payload, array $headers): array
+    {
+        $event = (string) ($payload['event'] ?? '');
+        $eventId = (string) ($payload['id'] ?? '');
+        Log::info('Processando webhook Asaas', ['event' => $event ?: 'unknown']);
+
+        $asaas = new AsaasService();
+        $expectedToken = $asaas->getWebhookToken();
+        $providedToken = $headers['asaas-access-token'][0] ?? null;
+        if ($expectedToken !== '' && !hash_equals($expectedToken, (string) $providedToken)) {
+            Log::warning('Webhook Asaas: token inválido.', ['event' => $event]);
+            throw new \RuntimeException('Webhook Asaas não autorizado.');
+        }
+
+        $payment = $payload['payment'] ?? null;
+        if ($event === '' || $eventId === '' || !is_array($payment)) {
+            return ['type' => 'asaas', 'ignored' => true, 'reason' => 'payload incompleto', 'processed_at' => now()->toISOString()];
+        }
+
+        $paymentId = AsaasPaymentMapper::paymentId($payment);
+        if (!$paymentId) {
+            return ['type' => 'asaas', 'ignored' => true, 'reason' => 'payment.id ausente', 'processed_at' => now()->toISOString()];
+        }
+
+        $matriculaId = AsaasPaymentMapper::matriculaIdFromExternalReference($payment['externalReference'] ?? null);
+        $fullPayment = $payment;
+
+        // Payload mínimo ou sem vínculo: busca o detalhe na API (transitório → 500 p/ retry).
+        if ($matriculaId === null || !isset($payment['value'])) {
+            $fullPayment = $asaas->getPayment($paymentId);
+            $matriculaId ??= AsaasPaymentMapper::matriculaIdFromExternalReference($fullPayment['externalReference'] ?? null);
+        }
+
+        // Parcelas do parcelamento: vínculo pelo installment_id gravado na cobrança.
+        if ($matriculaId === null) {
+            $installmentId = AsaasPaymentMapper::installmentId($fullPayment);
+            if ($installmentId) {
+                $row = DB::table('matriculameta')
+                    ->where('meta_key', 'asaas_billing')
+                    ->where('meta_value', 'like', '%' . $installmentId . '%')
+                    ->select('matricula_id')
+                    ->first();
+                if ($row) {
+                    $matriculaId = (int) $row->matricula_id;
+                }
+            }
+        }
+
+        if (!$matriculaId) {
+            Log::warning('Webhook Asaas: matrícula não localizada.', ['event' => $event, 'payment_id' => $paymentId]);
+            return ['type' => 'asaas', 'ignored' => true, 'reason' => 'matricula não localizada', 'processed_at' => now()->toISOString()];
+        }
+
+        // Idempotência rápida (at-least-once): evento já visto não reenfileira.
+        $eventsRaw = Qlib::get_matriculameta($matriculaId, 'asaas_events');
+        $seen = $eventsRaw ? (json_decode((string) $eventsRaw, true) ?: []) : [];
+        if (in_array($eventId, array_map('strval', (array) $seen), true)) {
+            return ['type' => 'asaas', 'duplicate' => true, 'event' => $event, 'matricula_id' => $matriculaId, 'processed_at' => now()->toISOString()];
+        }
+
+        ProcessAsaasPaymentJob::dispatch($matriculaId, $eventId, $event, $fullPayment);
+
+        return [
+            'type' => 'asaas',
+            'event' => $event,
+            'event_id' => $eventId,
+            'matricula_id' => $matriculaId,
+            'queued' => true,
+            'processed_at' => now()->toISOString(),
         ];
     }
 

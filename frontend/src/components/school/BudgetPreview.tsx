@@ -487,11 +487,22 @@ export default function BudgetPreview({
                          const liquido = Math.max(valorNum - descontoNum, 0);
                          const totalParcelas = parseInstallmentCount(parcelaNum);
                          const totalParcelado = totalParcelas * liquido;
+                         const isSelected = String(parcelaNum).trim() === String(parcelamento.parcela_selecionada ?? '').trim();
                          
                          return (
-                           <TableRow key={`budget-parc-${idx}`} className="hover:bg-zinc-50/50">
+                           <TableRow 
+                             key={`budget-parc-${idx}`} 
+                             className={`transition-colors ${isSelected ? 'bg-blue-50/80 hover:bg-blue-100/80 border-l-4 border-l-[#003366] font-medium' : 'hover:bg-zinc-50/50'}`} 
+                           >
                              <TableCell className="text-center font-medium text-blue-700 bg-blue-50/30 whitespace-nowrap">
-                               {parcelaNum}{parcelaNum ? 'x' : ''}
+                               <div className="flex items-center justify-center gap-1.5">
+                                 <span>{parcelaNum}{parcelaNum ? 'x' : ''}</span>
+                                 {isSelected && (
+                                   <span className="text-[10px] bg-[#003366] text-white px-1.5 py-0.5 rounded-full font-semibold">
+                                     Opção Escolhida
+                                   </span>
+                                 )}
+                               </div>
                              </TableCell>
                              <TableCell className="text-center font-mono text-xs">
                                {formatValue(valorNum)}
@@ -509,7 +520,7 @@ export default function BudgetPreview({
                          );
                        })}
                      </TableBody>
-                   </Table>
+                    </Table>
                    
                    {parcelamento.texto_desconto && (
                      <div className="p-4 rounded-xl border border-dashed border-blue-200 bg-blue-50/30">

@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/command";
 import React from "react";
 import { QuickClientSearch } from "@/components/clients/QuickClientSearch";
+import { RouteChangeLoader } from "./RouteChangeLoader";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -43,6 +44,18 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { applyThemeSettings } = useTheme();
   const navigate = useNavigate();
   const [cmdOpen, setCmdOpen] = React.useState(false);
+
+  // Atalho global para a paleta de comandos (Ctrl+K / Cmd+K)
+  React.useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setCmdOpen((open) => !open);
+      }
+    };
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -79,6 +92,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     >
       <div className="min-h-screen flex w-full">
         <AppSidebar />
+        <RouteChangeLoader />
         
         <div className="flex-1 flex flex-col">
           {/* Header */}

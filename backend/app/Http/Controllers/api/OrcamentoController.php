@@ -162,9 +162,6 @@ class OrcamentoController extends Controller
 				}
 			}
 			$nome_completo = $d['cliente_nome']??'';
-			if(isset($_GET['fp'])){
-				dump($arr_periodo);
-			}
 
 			$arr = [
 				'Nome completo' => '<a href="'.Qlib::raiz().'/cad_clientes/?sec=Y2FkX2NsaWVudGVz&acao=alt&id='.base64_encode($d['id_cliente']).'&redirect_base='.base64_encode(Qlib::UrlAtual()).'" style="text-decoration:underline">'.$nome_completo.' </a>',

@@ -39,19 +39,28 @@ class ApiCredentialController extends Controller
 
     private function encodePasswordInConfig(array $config): array
     {
-        if (array_key_exists('pass', $config) && is_string($config['pass']) && $config['pass'] !== '') {
-            $config['pass'] = Crypt::encryptString($config['pass']);
+        // Segredos criptografados: pass (legado) + access_token/webhook_token (Asaas).
+        foreach (['pass', 'access_token', 'webhook_token'] as $secret) {
+            if (array_key_exists($secret, $config) && is_string($config[$secret]) && $config[$secret] !== '') {
+                $config[$secret] = Crypt::encryptString($config[$secret]);
+            }
         }
         return $config;
     }
 
     private function decodePasswordInConfig(array $config): array
     {
-        if (array_key_exists('pass', $config) && is_string($config['pass']) && $config['pass'] !== '') {
-            try {
-                $config['pass'] = Crypt::decryptString($config['pass']);
-            } catch (\Throwable $e) {
-                $config['pass'] = '';
+        foreach (['pass', 'access_token', 'webhook_token'] as $secret) {
+            if (array_key_exists($secret, $config) && is_string($config[$secret]) && $config[$secret] !== '') {
+                try {
+                    $config[$secret] = Crypt::decryptString($config[$secret]);
+                } catch (\Throwable $e) {
+                    // Valor legado em texto puro (ex.: criado antes da cripto): mantém como está.
+                    if ($secret !== 'pass') {
+                        continue;
+                    }
+                    $config[$secret] = '';
+                }
             }
         }
         return $config;
@@ -112,6 +121,17 @@ class ApiCredentialController extends Controller
                 'account_id' => '',
                 'phone_id' => '',
             ]);
+            $ensure('integracao-asaas', 'Integração Asaas', [
+                'url' => 'https://sandbox.asaas.com/api/v3',
+                'access_token' => '',
+                'environment' => 'sandbox',
+                'billing_type' => 'BOLETO',
+                'webhook_token' => '',
+                // Multa/juros de mora (vazio = usa o padrão da conta Asaas)
+                'fine_value' => '',
+                'fine_type' => 'PERCENTAGE',
+                'interest_value' => '',
+            ]);
         } catch (\Throwable $e) {
             // silencioso
         }
@@ -160,6 +180,15 @@ class ApiCredentialController extends Controller
             'config.user' => 'nullable|string|max:255',
             'config.pass' => 'nullable|string|max:1024',
             'config.produto' => 'nullable|string|max:255',
+            // Asaas (integracao-asaas)
+            'config.access_token' => 'nullable|string|max:1024',
+            'config.environment' => 'nullable|string|in:sandbox,production',
+            'config.billing_type' => 'nullable|string|in:BOLETO,PIX,CREDIT_CARD,UNDEFINED',
+            'config.webhook_token' => ['nullable', 'string', 'max:255', 'regex:/^\S*$/'],
+            // Multa/juros de mora (vazio = usa o padrão da conta Asaas)
+            'config.fine_value' => 'nullable|numeric|min:0',
+            'config.fine_type' => 'nullable|string|in:FIXED,PERCENTAGE',
+            'config.interest_value' => 'nullable|numeric|min:0',
             'meta' => 'array',
             'meta.*.key' => 'required|string|max:255',
             'meta.*.value' => 'nullable|string',
@@ -294,6 +323,15 @@ class ApiCredentialController extends Controller
             'config.user' => 'nullable|string|max:255',
             'config.pass' => 'nullable|string|max:1024',
             'config.produto' => 'nullable|string|max:255',
+            // Asaas (integracao-asaas)
+            'config.access_token' => 'nullable|string|max:1024',
+            'config.environment' => 'nullable|string|in:sandbox,production',
+            'config.billing_type' => 'nullable|string|in:BOLETO,PIX,CREDIT_CARD,UNDEFINED',
+            'config.webhook_token' => ['nullable', 'string', 'max:255', 'regex:/^\S*$/'],
+            // Multa/juros de mora (vazio = usa o padrão da conta Asaas)
+            'config.fine_value' => 'nullable|numeric|min:0',
+            'config.fine_type' => 'nullable|string|in:FIXED,PERCENTAGE',
+            'config.interest_value' => 'nullable|numeric|min:0',
             'meta' => 'array',
             'meta.*.key' => 'required|string|max:255',
             'meta.*.value' => 'nullable|string',

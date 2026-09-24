@@ -1716,7 +1716,6 @@ class ZapguruController extends Controller
 
 				$ret['exec'] = Qlib::update_tab('clientes',['zapguru'=>addslashes($config)],$where);
 				// echo $where;
-				dd($ret);
 				if(isset($arr_conf['origem']) && $arr_conf['origem']=='envia_campos'&&is_array($arr_conf['campos_personalizados'])){
 
 					$post['conf'] = 's';

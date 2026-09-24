@@ -7,6 +7,7 @@ export interface ProposalData {
   curso_nome: string;
   turma_nome: string;
   total: number;
+  orc?: any;
   is_expired?: boolean;
   valid_until?: string | null;
   expiration_message?: string | null;

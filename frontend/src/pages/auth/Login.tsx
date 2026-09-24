@@ -7,6 +7,7 @@ import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useRedirect } from '@/hooks/useRedirect';
+import { AuthPreloader } from '@/components/auth/AuthPreloader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -67,6 +68,12 @@ export default function Login() {
       setLoginSuccess(true);
     }
   };
+
+  // Login aprovado: assume o preloader em tela cheia até a rota logada
+  // pintar (cobre primeira carga de dados, sem tela em branco)
+  if (loginSuccess) {
+    return <AuthPreloader message="Login realizado! Levando você ao painel..." />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 flex items-center justify-center p-4">

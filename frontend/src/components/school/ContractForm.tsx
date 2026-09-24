@@ -8,13 +8,14 @@ import { useQuery } from '@tanstack/react-query';
 import { coursesService } from '@/services/coursesService';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { CONTRACT_SHORTCODES, CONTRACT_SHORTCODE_BASE_LIST } from '@/lib/contractShortcodes';
 import { periodsService } from '@/services/periodsService';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckSquare, Copy, Layers3, X } from 'lucide-react';
+import { CheckSquare, Copy, Layers3, X, Search, Sparkles } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -24,6 +25,18 @@ import {
 } from '@/components/ui/select';
 import { Controller } from 'react-hook-form';
 import type { CreateContractInput, UpdateContractInput, ContractRecord } from '@/types/contracts';
+
+/**
+ * Atalhos rápidos de vendas para inserção com um clique
+ */
+const SALES_QUICK_SHORTCODES = [
+  { label: '{total_parcelas}', desc: 'Total de parcelas (Painel de Vendas)' },
+  { label: '{valor_parcela}', desc: 'Valor da parcela (bruto)' },
+  { label: '{desconto_pontualidade}', desc: 'Desconto por pontualidade' },
+  { label: '{parcela_com_desconto}', desc: 'Parcela líquida (com desconto)' },
+  { label: '{tabela_parcelas}', desc: 'Tabela cronograma de parcelas' },
+  { label: '{texto_desconto}', desc: 'Texto de desconto da proposta' },
+];
 
 /**
  * ContractForm
@@ -158,17 +171,21 @@ export function ContractForm({
 
   /**
    * insertTag
-   * pt-BR: Insere um shortcode na posição atual do cursor no editor.
-   * en-US: Inserts a shortcode at the current cursor position in the editor.
+   * pt-BR: Insere um shortcode na posição atual do cursor no editor e sincroniza o formulário.
+   * en-US: Inserts a shortcode at the current cursor position in the editor and syncs the form.
    */
   function insertTag(tag: string) {
-    const editor = document.querySelector('[contenteditable="true"]');
+    const editor = document.querySelector('[contenteditable="true"]') as HTMLElement | null;
     if (editor) {
-      // Tenta inserir diretamente. Se o editor estiver focado, document.execCommand 
-      // usará a posição correta do cursor.
+      editor.focus();
       document.execCommand('insertText', false, tag);
+      form.setValue('conteudo', editor.innerHTML, { shouldDirty: true });
     }
   }
+
+  // Estados de filtro para o catálogo de variáveis
+  const [selectedGroup, setSelectedGroup] = useState<string>('all');
+  const [tagSearch, setTagSearch] = useState<string>('');
 
   // Query de períodos do curso selecionado
   const selectedCourseId = form.watch('id_curso') ? Number(form.watch('id_curso')) : undefined;
@@ -333,78 +350,137 @@ export function ContractForm({
         </div>
       </div>
 
-      {/* Seção de Variáveis (Helper) */}
-      <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-900/30 dark:bg-blue-950/20">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200">Dica</Badge>
-            <span className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wider">Variáveis Dinâmicas</span>
-          </div>
-          <Button 
-            type="button" 
-            variant="ghost" 
-            size="sm" 
-            className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-100"
-            onClick={() => {
-              const vars = [
-                '{aluno}', '{cpf_aluno}', '{identidade}', '{data_nascimento}', 
-                '{logradouro}', '{numero}', '{bairro}', '{cidade}', '{estado}',
-                '{curso}', '{valor_total}', '{dia}', '{mes}', '{ano}'
-              ];
-              navigator.clipboard.writeText(vars.join(', '));
-              toast.success('Variáveis sugeridas copiadas');
-            }}
-          >
-            Copiar Lista Base
-          </Button>
-        </div>
-        <p className="text-[10px] text-blue-700/80 dark:text-blue-300/60 leading-relaxed mb-2">
-          Use as tags abaixo no conteúdo para preenchimento automático. <strong>Clique em uma tag para inseri-la no editor</strong> na posição do cursor.
-        </p>
-        <div className="flex flex-wrap gap-1.5 mt-1">
-          {[
-            { label: '{aluno}', desc: 'Nome do Aluno' },
-            { label: '{cpf_aluno}', desc: 'CPF do Aluno' },
-            { label: '{responsavel_nome}', desc: 'Nome do Fiador' },
-            { label: '{responsavel_cpf}', desc: 'CPF do Fiador' },
-            { label: '{responsavel_identidade}', desc: 'RG do Fiador' },
-            { label: '{responsavel_email}', desc: 'E-mail do Fiador' },
-            { label: '{responsavel_celular}', desc: 'Celular do Fiador' },
-            { label: '{responsavel_endereco}', desc: 'Endereço do Fiador' },
-            { label: '{responsavel_cidade}', desc: 'Cidade do Fiador' },
-            { label: '{responsavel_uf}', desc: 'UF do Fiador' },
-            { label: '{curso}', desc: 'Nome do Curso' },
-            { label: '{data_nascimento}', desc: 'Nasc. Aluno' },
-            { label: '{identidade}', desc: 'RG Aluno' },
-          ].map((v) => (
-            <div 
-              key={v.label} 
-              className="group relative cursor-pointer"
-              onMouseDown={(e) => {
-                e.preventDefault(); // Evita que o editor perca o foco
-                insertTag(v.label);
-              }}
-            >
-              <code className="text-[10px] bg-white dark:bg-zinc-900 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-400 font-mono">
-                {v.label}
-              </code>
-              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-zinc-800 text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-10 shadow-lg">
-                {v.desc}
-              </span>
+      {/* Seção de Variáveis (Helper com Filtros e Categorias) */}
+      {(() => {
+        const filteredShortcodes = CONTRACT_SHORTCODES.filter((s) => {
+          const matchesGroup = selectedGroup === 'all' || s.grupo === selectedGroup;
+          const matchesSearch =
+            !tagSearch.trim() ||
+            s.tag.toLowerCase().includes(tagSearch.trim().toLowerCase()) ||
+            s.desc.toLowerCase().includes(tagSearch.trim().toLowerCase());
+          return matchesGroup && matchesSearch;
+        });
+
+        return (
+          <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 dark:border-blue-900/30 dark:bg-blue-950/20 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200">Dica</Badge>
+                <span className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wider">Variáveis Dinâmicas (Shortcodes)</span>
+              </div>
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                onClick={() => {
+                  navigator.clipboard.writeText(CONTRACT_SHORTCODE_BASE_LIST.join(', '));
+                  toast.success('Variáveis sugeridas copiadas');
+                }}
+              >
+                Copiar Lista Base
+              </Button>
             </div>
-          ))}
-          <span className="text-[10px] text-blue-400 font-medium ml-1 flex items-center">e mais...</span>
-        </div>
-      </div>
+
+            <p className="text-[10px] text-blue-700/80 dark:text-blue-300/60 leading-relaxed">
+              Clique em qualquer shortcode para inseri-lo no contrato na posição do cursor, ou digite <code className="bg-white/80 dark:bg-zinc-800 px-1 py-0.5 rounded font-mono text-blue-900 dark:text-blue-200 font-bold">&#123;</code> dentro do editor.
+            </p>
+
+            {/* Barra de Filtros por Categoria e Busca */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1 border-t border-blue-200/60 dark:border-blue-900/40">
+              <div className="flex flex-wrap gap-1">
+                {[
+                  { id: 'all', label: 'Todos' },
+                  { id: 'Vendas / Parcelamento', label: '⭐ Vendas / Parcelamento' },
+                  { id: 'Aluno', label: 'Aluno' },
+                  { id: 'Responsável', label: 'Responsável' },
+                  { id: 'Curso', label: 'Curso' },
+                  { id: 'Data', label: 'Datas' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setSelectedGroup(cat.id)}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors ${
+                      selectedGroup === cat.id
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white/80 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-blue-50 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-48">
+                <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-zinc-400" />
+                <Input
+                  type="text"
+                  placeholder="Buscar tag ou nome..."
+                  value={tagSearch}
+                  onChange={(e) => setTagSearch(e.target.value)}
+                  className="h-6 text-[11px] pl-7 pr-2 bg-white dark:bg-zinc-900 border-blue-200 dark:border-blue-800"
+                />
+              </div>
+            </div>
+
+            {/* Chips de tags */}
+            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
+              {filteredShortcodes.map((v) => (
+                <div
+                  key={v.tag}
+                  className="group relative cursor-pointer"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    insertTag(`{${v.tag}}`);
+                  }}
+                >
+                  <code className={`text-[10px] border px-2 py-0.5 rounded font-mono flex items-center gap-1 transition-colors ${
+                    v.grupo === 'Vendas / Parcelamento'
+                      ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-300 hover:bg-amber-100'
+                      : 'bg-white dark:bg-zinc-900 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-50'
+                  }`}>
+                    <span>{`{${v.tag}}`}</span>
+                    <span className="text-[9px] font-sans opacity-70">({v.desc})</span>
+                  </code>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-zinc-800 text-white text-[9px] px-2 py-1 rounded whitespace-nowrap z-20 shadow-lg">
+                    Inserir {`{${v.tag}}`} — {v.desc}
+                  </span>
+                </div>
+              ))}
+              {filteredShortcodes.length === 0 && (
+                <span className="text-[11px] text-muted-foreground italic py-1">Nenhum shortcode encontrado para o filtro.</span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="space-y-1">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
           <Label className="flex items-center gap-2">
             Conteúdo do termo/contrato
             <span className="text-[9px] font-normal text-muted-foreground uppercase">(Suporta HTML editor)</span>
           </Label>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={handleCopyContract}>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 mr-1 flex items-center gap-1">
+              <Sparkles className="h-3 w-3" /> Inserir Vendas:
+            </span>
+            {SALES_QUICK_SHORTCODES.map((v) => (
+              <button
+                key={`editor-quick-${v.label}`}
+                type="button"
+                className="text-[10px] bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded text-blue-700 dark:text-blue-300 font-mono hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shadow-xs"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  insertTag(v.label);
+                }}
+                title={v.desc}
+              >
+                {v.label}
+              </button>
+            ))}
+            <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] ml-1" onClick={handleCopyContract}>
               <Copy className="h-3 w-3 mr-1" /> Copiar HTML
             </Button>
           </div>
@@ -413,7 +489,9 @@ export function ContractForm({
         <RichTextEditor
           value={String(form.watch('conteudo') || '')}
           onChange={(html) => form.setValue('conteudo', html, { shouldDirty: true })}
-          placeholder="Comece a digitar o contrato aqui... Use as variáveis dinâmicas para personalização."
+          placeholder="Comece a digitar o contrato aqui... Use as variáveis dinâmicas para personalização. Digite { ou Shift+Espaço para ver os shortcodes."
+          enableShortcodeHints
+          shortcodes={CONTRACT_SHORTCODES}
         />
       </div>
 

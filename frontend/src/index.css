@@ -105,3 +105,55 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* ==========================================================================
+   Melhorias portadas do Help Desk — menu lateral + preloader de rotas
+   ========================================================================== */
+
+/* Esconde a barra de rolagem das pílulas de filtro sem travar a rolagem */
+@layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Hover/atual do menu com suporte a White Label via variáveis CSS */
+.sidebar-item-hover:hover {
+  background-color: var(--sidebar-menu-hover-bg, rgba(0, 0, 0, 0.05)) !important;
+  color: var(--sidebar-menu-hover-fg, inherit) !important;
+}
+.dark .sidebar-item-hover:hover {
+  background-color: var(--sidebar-menu-hover-bg, rgba(255, 255, 255, 0.07)) !important;
+}
+
+.sidebar-item-active {
+  background-color: var(--sidebar-menu-active-bg, hsl(var(--primary))) !important;
+  color: var(--sidebar-menu-active-fg, #ffffff) !important;
+}
+
+.sidebar-subitem-active {
+  background-color: var(--sidebar-menu-hover-bg, rgba(var(--primary), 0.1)) !important;
+  color: var(--sidebar-menu-active-bg, hsl(var(--primary))) !important;
+  font-weight: 600 !important;
+}
+
+/* Barra de progresso da troca de rotas (RouteChangeLoader) */
+@keyframes route-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.route-progress-bar {
+  animation: route-progress-slide 0.9s ease-in-out infinite;
+}

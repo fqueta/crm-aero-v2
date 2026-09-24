@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProtectedRoute } from './ProtectedRoute';
+import { AuthPreloader } from './AuthPreloader';
 import { useEffect, useState } from 'react';
 
 interface AdminProtectedRouteProps {
@@ -38,13 +39,9 @@ export function AdminProtectedRoute({ children, linkLoja = '' }: AdminProtectedR
     );
   }
 
-  // Mostra tela de carregamento enquanto verifica permissões
+  // Mostra preloader com identidade enquanto verifica permissões
   if (isCheckingPermissions) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <AuthPreloader message="Verificando suas permissões..." />;
   }
 
   // Verifica se o usuário tem permissão para acessar o admin

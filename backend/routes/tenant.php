@@ -469,7 +469,7 @@ Route::name('api.')->prefix('api/v1')->middleware([
          ]]);
          Route::get('service-orders/trash', [ServiceOrderController::class, 'trash'])->name('service-orders.trash');
          Route::put('service-orders/{id}/restore', [ServiceOrderController::class, 'restore'])->name('service-orders.restore');
-         Route::put('service-orders/{id}/status ', [ServiceOrderController::class, 'updateStatus'])->name('service-orders.update-status');
+         Route::put('service-orders/{id}/status', [ServiceOrderController::class, 'updateStatus'])->name('service-orders.update-status');
          Route::delete('service-orders/{id}/force', [ServiceOrderController::class, 'forceDelete'])->name('service-orders.forceDelete');
 
          // Rotas para dashboard-metrics
@@ -504,6 +504,14 @@ Route::name('api.')->prefix('api/v1')->middleware([
             'integracoes' => 'id'
         ]]);
         Route::get('integracoes/trash', [\App\Http\Controllers\api\ApiCredentialController::class, 'trash'])->name('integracoes.trash');
+        // Asaas: status e teste de conexão (padrão Help Desk)
+        Route::get('asaas/status', [\App\Http\Controllers\api\AsaasController::class, 'status'])->name('asaas.status');
+        Route::post('asaas/test-connection', [\App\Http\Controllers\api\AsaasController::class, 'testConnection'])->name('asaas.test-connection');
+        // Asaas: edição/exclusão das cobranças da matrícula
+        Route::get('asaas/billing/{matriculaId}', [\App\Http\Controllers\api\AsaasController::class, 'billing'])->name('asaas.billing');
+        Route::put('asaas/billing/payments/{paymentId}', [\App\Http\Controllers\api\AsaasController::class, 'updateBillingPayment'])->name('asaas.billing-payment.update');
+        Route::delete('asaas/billing/payments/{paymentId}', [\App\Http\Controllers\api\AsaasController::class, 'deleteBillingPayment'])->name('asaas.billing-payment.delete');
+        Route::delete('asaas/billing/installments/{installmentId}', [\App\Http\Controllers\api\AsaasController::class, 'cancelBillingInstallment'])->name('asaas.billing-installment.cancel');
         //simulador de comustivel
         Route::get('simulador-combustivel/{id_matricula}', [\App\Http\Controllers\api\MatriculaController::class, 'simuladorCombustivel'])->name('simulador-combustivel');
         Route::put('integracoes/{id}/restore', [\App\Http\Controllers\api\ApiCredentialController::class, 'restore'])->name('integracoes.restore');

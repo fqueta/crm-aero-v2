@@ -1,4 +1,6 @@
 import { Toaster } from "@/components/ui/toaster";
+import { Suspense } from "react";
+import { AuthPreloader } from "@/components/auth/AuthPreloader";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PageTracker } from "@/components/analytics/PageTracker";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -113,8 +115,7 @@ import Interested from "./pages/school/Interested";
 import SiteComponentsList from "./pages/SiteComponentsList";
 import SiteComponentsForm from "./pages/SiteComponentsForm";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
+const queryClient = new QueryClient({  defaultOptions: {
     queries: {
       // Configurações para consultas
       retry: (failureCount, error: any) => {
@@ -145,6 +146,13 @@ const queryClient = new QueryClient({
 });
 
 /**
+ * PageFallback
+ * pt-BR: Preloader exibido durante o carregamento de chunks lazy das páginas.
+ * en-US: Preloader shown while lazy page chunks load.
+ */
+const PageFallback = () => <AuthPreloader message="Carregando página..." />;
+
+/**
  * App — Provider stack and routes
  * pt-BR: Envolve a aplicação com QueryClientProvider, ThemeProvider, AuthProvider
  * e UserPrefsProvider, garantindo o contexto em todas as rotas e layouts.
@@ -164,6 +172,7 @@ const App = () => {
             <Sonner />
           <BrowserRouter>
             <PageTracker />
+            <Suspense fallback={<PageFallback />}>
             <Routes>
               {/* Rotas públicas */}
               <Route path="/"  element={<LandingPage linkLoja={link_loja} />} />
@@ -900,6 +909,7 @@ const App = () => {
               {/* Catch-all */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
           </BrowserRouter>
           </TooltipProvider>
           </UserPrefsProvider>

@@ -3,10 +3,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useForm, type FieldErrors, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, CheckCircle, FileText as LucideFileText, User as LucideUser, ScrollText as LucideScrollText, Check as LucideCheck, Copy as LucideCopy, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle, FileText as LucideFileText, User as LucideUser, ScrollText as LucideScrollText, Check as LucideCheck, Copy as LucideCopy, AlertTriangle, CreditCard, Sparkles, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -14,6 +15,7 @@ import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { proposalService } from "@/services/proposalService";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { currencyRemoveMaskToNumber } from "@/lib/masks/currency";
 import {
   getStudentFacingQuestionLabel,
   PUBLIC_PROPOSAL_QUESTIONS,
@@ -303,6 +305,114 @@ export default function ProposalApproval() {
   const showStatusSection = approvalVisibleSections.status && statusQuestions.length > 0;
   const showInfoSection = approvalVisibleSections.info && infoQuestions.length > 0;
   const showApprovalQuestions = showStatusSection || showInfoSection;
+  const formatCurrencyBRL = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  };
+
+  /**
+   * parcelamentoSummary
+   * pt-BR: Interpreta o objeto de parcelamento da proposta e gera os textos detalhados para o aluno.
+   */
+  const parcelamentoSummary = useMemo(() => {
+    const parcelamento = (proposal as any)?.orc?.parcelamento;
+    if (!parcelamento) return null;
+
+    const linhas = Array.isArray(parcelamento.linhas) ? parcelamento.linhas : [];
+    const parcelaSel = String(parcelamento.parcela_selecionada || '').trim();
+    const activeLine = (parcelaSel && linhas.find((l: any) => String(l.parcela || l.parcelas || '').trim() === parcelaSel))
+      || linhas[0]
+      || null;
+
+    const qtdParcelas = parseInt(parcelaSel || String(activeLine?.parcela || activeLine?.parcelas || '0'), 10) || 0;
+    if (qtdParcelas <= 0 && !activeLine) return null;
+
+    let valorParcelaNum = 0;
+    if (activeLine?.valor) {
+      valorParcelaNum = typeof activeLine.valor === 'number'
+        ? activeLine.valor
+        : (currencyRemoveMaskToNumber(String(activeLine.valor)) || 0);
+    }
+    const descPontualidadeNum = activeLine?.desconto
+      ? (typeof activeLine.desconto === 'number' ? activeLine.desconto : (currencyRemoveMaskToNumber(String(activeLine.desconto)) || 0))
+      : 0;
+
+    const valorEfetivoParcela = Math.max(0, valorParcelaNum - descPontualidadeNum);
+
+    const recebimentoMatricula = String(parcelamento.recebimento_matricula || 'diluida').trim();
+    const matriculaValorRaw = (proposal as any)?.orc?.inscricao ?? (proposal as any)?.inscricao ?? 0;
+    const matriculaValorNum = typeof matriculaValorRaw === 'number'
+      ? matriculaValorRaw
+      : (currencyRemoveMaskToNumber(String(matriculaValorRaw)) || 0);
+
+    const matriculaVencimentoData = parcelamento.matricula_vencimento_data || '';
+
+    // Entrada / primeira parcela
+    const primeiraParcelaValorRaw = parcelamento.primeira_parcela_valor;
+    const primeiraParcelaValorNum = primeiraParcelaValorRaw !== undefined && primeiraParcelaValorRaw !== null && primeiraParcelaValorRaw !== ''
+      ? (typeof primeiraParcelaValorRaw === 'number' ? primeiraParcelaValorRaw : (currencyRemoveMaskToNumber(String(primeiraParcelaValorRaw)) || 0))
+      : null;
+
+    // Se recebimento for junto com a 1ª parcela, computa o valor da 1ª parcela com matrícula
+    const primeiraParcelaComMatriculaNum = recebimentoMatricula === 'primeira_parcela' && matriculaValorNum > 0
+      ? (primeiraParcelaValorNum !== null ? primeiraParcelaValorNum + matriculaValorNum : valorEfetivoParcela + matriculaValorNum)
+      : null;
+
+    const valorParcelaFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
+
+    let summaryText = '';
+    const hasEntrada = primeiraParcelaValorNum !== null && primeiraParcelaValorNum > 0;
+
+    if (recebimentoMatricula === 'primeira_parcela' && primeiraParcelaComMatriculaNum !== null) {
+      const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
+      const restantes = Math.max(0, qtdParcelas - 1);
+      if (restantes > 0) {
+        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaFormatted}`;
+      } else {
+        summaryText = `1x de ${entradaComMatFormatted} (Curso + Matrícula)`;
+      }
+    } else if (hasEntrada) {
+      const entradaFormatted = formatCurrencyBRL(primeiraParcelaValorNum);
+      const restantes = Math.max(0, qtdParcelas - 1);
+      if (restantes > 0) {
+        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaFormatted}`;
+      } else {
+        summaryText = `1x de ${entradaFormatted} (À vista / Entrada)`;
+      }
+    } else if (qtdParcelas === 1) {
+      summaryText = `1x de ${valorParcelaFormatted} (À vista)`;
+    } else if (qtdParcelas > 1) {
+      summaryText = `${qtdParcelas}x de ${valorParcelaFormatted}`;
+    } else {
+      summaryText = valorParcelaFormatted;
+    }
+
+    let paymentMethod = 'Boleto / Carnê Bancário';
+    const diaPagamento = parcelamento.dia_pagamento;
+    if (diaPagamento) {
+      paymentMethod += ` • Vencimento dia ${diaPagamento}`;
+    }
+
+    const dataPrimeiraParcela = parcelamento.primeira_parcela_data;
+
+    return {
+      summaryText,
+      paymentMethod,
+      qtdParcelas,
+      valorParcelaFormatted,
+      descPontualidadeNum,
+      descPontualidadeFormatted: descPontualidadeNum > 0 ? formatCurrencyBRL(descPontualidadeNum) : null,
+      hasEntrada,
+      dataPrimeiraParcela,
+      diaPagamento,
+      activeLine,
+      recebimentoMatricula,
+      matriculaValorNum,
+      matriculaValorFormatted: matriculaValorNum > 0 ? formatCurrencyBRL(matriculaValorNum) : null,
+      matriculaVencimentoData,
+      primeiraParcelaComMatriculaNum,
+    };
+  }, [proposal]);
+
   const isProposalExpired = Boolean(proposal?.is_expired);
   const proposalExpirationMessage = proposal?.expiration_message || 'A validade desta proposta expirou. Solicite uma nova proposta para continuar.';
 
@@ -431,91 +541,197 @@ export default function ProposalApproval() {
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
       <PublicHeader />
 
-      <main className="flex-1 container mx-auto px-4 py-10 md:py-12">
-        <div className="max-w-4xl mx-auto space-y-8">
+      <main className="flex-1 container mx-auto px-3 sm:px-6 py-6 sm:py-10 md:py-12">
+        <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
           
           {/* Header Section */}
-          <div className="text-center space-y-3">
-            <div className="inline-flex items-center justify-center space-x-2 bg-blue-100/50 text-blue-700 px-4 py-1.5 rounded-full text-sm font-medium">
+          <div className="text-center space-y-2 sm:space-y-3">
+            <div className="inline-flex items-center justify-center space-x-2 bg-blue-100/50 text-blue-700 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium">
                <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                 </span>
                <span>Aguardando Aprovação</span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900">Aprovação de Proposta</h1>
-            <p className="text-slate-500 text-lg max-w-2xl mx-auto">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-slate-900">Aprovação de Proposta</h1>
+            <p className="text-slate-500 text-sm sm:text-base md:text-lg max-w-2xl mx-auto px-2">
               Confira os detalhes da sua matrícula e aceite os termos para finalizar o processo.
             </p>
           </div>
 
-          <div className="grid gap-8">
+          <div className="grid gap-6 sm:gap-8">
             {/* Proposal Info Card */}
             <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
-                <div className="bg-slate-50/50 p-6 border-b border-slate-100 flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
-                       <LucideFileText className="w-5 h-5" />
+                <div className="bg-slate-50/50 p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+                           <LucideFileText className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-base sm:text-lg font-semibold text-slate-900">Detalhes da Proposta</h2>
+                            <p className="text-xs sm:text-sm text-slate-500">Resumo do curso e condições contratadas</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Detalhes da Proposta</h2>
-                        <p className="text-sm text-slate-500">Resumo do curso e valores</p>
+                    <div className="font-mono text-xs sm:text-sm text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
+                        #{id_matricula}
                     </div>
                 </div>
-                <CardContent className="p-6 md:p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-6">
-                            <div>
-                                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Curso</label>
-                                <div className="text-lg font-medium text-slate-900">{proposal.curso_nome || 'N/A'}</div>
+                <CardContent className="p-4 sm:p-6 md:p-8 space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50/80 border border-slate-100 space-y-1">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">Curso</span>
+                            <div className="text-base sm:text-lg font-bold text-slate-900">{proposal.curso_nome || 'N/A'}</div>
+                        </div>
+                        <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50/80 border border-slate-100 space-y-1">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block">Turma</span>
+                            <div className="text-base sm:text-lg font-bold text-slate-900">{proposal.turma_nome || 'N/A'}</div>
+                        </div>
+                    </div>
+
+                    {/* Display Period information if course type is 4 */}
+                    {(proposal.curso_tipo === '4' || proposal.curso_tipo === 4) && proposal.orc?.modulos?.[0]?.nome && (
+                        <div className="p-3 rounded-lg bg-blue-50/60 border border-blue-100 flex items-center gap-2">
+                            <span className="text-xs font-semibold text-blue-900">Período Selecionado:</span>
+                            <span className="text-xs font-bold text-blue-800 bg-white px-2.5 py-0.5 rounded border border-blue-200">
+                                {proposal.orc.modulos[0].nome}
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Main Payment & Investment Card */}
+                    <div className="rounded-2xl border-2 border-emerald-500/20 bg-gradient-to-br from-emerald-50/40 via-white to-teal-50/20 p-4 sm:p-6 space-y-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-100/80 pb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                              <CreditCard className="w-5 h-5" />
                             </div>
                             <div>
-                                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Turma</label>
-                                <div className="text-base text-slate-700">{proposal.turma_nome || 'N/A'}</div>
+                              <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-950">Condição de Pagamento</h3>
+                              <p className="text-[11px] sm:text-xs text-emerald-700">Plano acordado na sua proposta</p>
                             </div>
-                            
-                            {/* Display Period information if course type is 4 */}
-                            {(proposal.curso_tipo === '4' || proposal.curso_tipo === 4) && proposal.orc?.modulos?.[0]?.nome && (
-                                <div>
-                                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Período</label>
-                                    <div className="text-base text-slate-700 bg-blue-50 px-2 py-1 rounded inline-block">
-                                        {proposal.orc.modulos[0].nome}
-                                    </div>
+                          </div>
+                          <div className="sm:text-right">
+                            <span className="text-[11px] font-semibold uppercase text-slate-500 block">Total do Curso</span>
+                            <span className="text-xl sm:text-2xl font-black text-slate-900">
+                              {proposal.total 
+                                ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proposal.total) 
+                                : 'R$ 0,00'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Parcelamento Highlights */}
+                        {parcelamentoSummary ? (
+                          <div className="space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 sm:p-3.5 rounded-xl bg-white border border-emerald-200/60 shadow-sm">
+                              <div>
+                                <span className="text-xs text-muted-foreground block font-medium">Plano Escolhido:</span>
+                                <span className="text-base sm:text-xl font-black text-emerald-700 break-words">
+                                  {parcelamentoSummary.summaryText}
+                                </span>
+                              </div>
+                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300 font-semibold text-xs py-1 px-3 self-start sm:self-center">
+                                Condição Aprovada
+                              </Badge>
+                            </div>
+
+                            {/* Condição da Matrícula */}
+                            {parcelamentoSummary.recebimentoMatricula === 'avulsa' && parcelamentoSummary.matriculaValorFormatted && (
+                              <div className="p-3 sm:p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-lg bg-amber-200/80 text-amber-900 flex items-center justify-center font-bold text-xs shrink-0">
+                                    0
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-bold text-amber-950 block">
+                                      Taxa de Inscrição / Matrícula (Parcela Avulsa)
+                                    </span>
+                                    <span className="text-[11px] text-amber-800">
+                                      Cobrança separada prévia para efetivação da vaga
+                                      {parcelamentoSummary.matriculaVencimentoData ? ` • Vencimento em ${parcelamentoSummary.matriculaVencimentoData.split('-').reverse().join('/')}` : ''}
+                                    </span>
+                                  </div>
                                 </div>
+                                <span className="text-sm sm:text-base font-black text-amber-950 sm:text-right">
+                                  {parcelamentoSummary.matriculaValorFormatted}
+                                </span>
+                              </div>
                             )}
-                        </div>
-                        <div className="space-y-6 md:text-right">
-                             <div>
-                                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 block">Valor Total</label>
-                                <div className="text-2xl font-bold text-slate-900">
-                                   {proposal.total 
-                                     ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proposal.total) 
-                                     : 'R$ 0,00'}
+
+                            {parcelamentoSummary.recebimentoMatricula === 'primeira_parcela' && parcelamentoSummary.matriculaValorFormatted && (
+                              <div className="p-3 sm:p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div>
+                                  <span className="text-xs font-bold text-blue-950 block">
+                                    1ª Parcela Inclui Taxa de Matrícula ({parcelamentoSummary.matriculaValorFormatted})
+                                  </span>
+                                  <span className="text-[11px] text-blue-800">
+                                    O valor da matrícula é pago conjuntamente na 1ª mensalidade/entrada.
+                                  </span>
                                 </div>
-                            </div>
-                            <div>
-                                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1 block">ID da Matrícula</label>
-                                <div className="font-mono text-sm text-slate-500 bg-slate-100 inline-block px-2 py-1 rounded">
-                                    #{id_matricula}
+                                <Badge className="bg-blue-100 text-blue-800 border-blue-300 self-start sm:self-center text-xs">
+                                  Matrícula na Entrada
+                                </Badge>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                              <div className="p-3 rounded-lg bg-white/80 border border-slate-200/60 flex items-center gap-2">
+                                <LucideFileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <div>
+                                  <span className="text-slate-500 block">Forma de Pagamento:</span>
+                                  <span className="font-semibold text-slate-800">{parcelamentoSummary.paymentMethod}</span>
                                 </div>
+                              </div>
+
+                              {parcelamentoSummary.descPontualidadeFormatted ? (
+                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center gap-2">
+                                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  <div>
+                                    <span className="text-emerald-700 block">Desconto Pontualidade:</span>
+                                    <span className="font-bold text-emerald-900">
+                                      {parcelamentoSummary.descPontualidadeFormatted} / parcela até o vencimento
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-3 rounded-lg bg-white/80 border border-slate-200/60 flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  <div>
+                                    <span className="text-slate-500 block">Status da Matrícula:</span>
+                                    <span className="font-semibold text-slate-800">
+                                      {parcelamentoSummary.recebimentoMatricula === 'diluida' 
+                                        ? 'Diluída nas mensalidades' 
+                                        : parcelamentoSummary.recebimentoMatricula === 'avulsa' 
+                                          ? 'Boleto/Cobrança avulsa' 
+                                          : 'Integrada na 1ª parcela'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                        </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-500 italic p-3 bg-white/70 rounded-lg border border-slate-200/60">
+                            Condição integral à vista conforme orçamento emitido.
+                          </div>
+                        )}
                     </div>
                 </CardContent>
             </Card>
 
             {/* Student Info Card */}
             <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
-                <div className="bg-slate-50/50 p-6 border-b border-slate-100 flex items-center gap-3">
+                <div className="bg-slate-50/50 p-4 sm:p-6 border-b border-slate-100 flex items-center gap-3">
                     <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
                        <LucideUser className="w-5 h-5" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold text-slate-900">Dados do Aluno</h2>
-                        <p className="text-sm text-slate-500">Informações pessoais cadastradas</p>
+                        <h2 className="text-base sm:text-lg font-semibold text-slate-900">Dados do Aluno</h2>
+                        <p className="text-xs sm:text-sm text-slate-500">Informações pessoais cadastradas</p>
                     </div>
                 </div>
-                <CardContent className="p-6 md:p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-6 gap-x-8">
+                <CardContent className="p-4 sm:p-6 md:p-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 sm:gap-y-6 gap-x-6 sm:gap-x-8">
                          <div className="space-y-1">
                              <label className="text-xs font-medium text-slate-500">Nome Completo</label>
                              <div className="font-medium text-slate-900 break-words">{proposal.cliente?.name}</div>
@@ -692,15 +908,15 @@ export default function ProposalApproval() {
                           </Card>
                         )}
 
-                        <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-4 pt-4">
-                            <Button type="button" variant="ghost" 
+                        <div className="flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-3 sm:gap-4 pt-4">
+                            <Button type="button" variant="outline" 
                                 onClick={() => navigate(`/aluno/matricula/${compositeId}/1`)}
-                                className="text-slate-500 hover:text-slate-900 w-full sm:w-auto"
+                                className="text-slate-600 hover:text-slate-900 border-slate-300 w-full sm:w-auto h-12 text-sm sm:text-base"
                             >
                                 ❮ Voltar e Editar
                             </Button>
                             <Button type="submit" 
-                                className="bg-green-600 hover:bg-green-700 text-white font-bold py-6 px-8 text-lg w-full sm:w-auto shadow-lg shadow-green-600/20 transition-all hover:scale-[1.02]" 
+                                className="bg-green-600 hover:bg-green-700 text-white font-bold h-12 sm:h-14 px-6 sm:px-8 text-base sm:text-lg w-full sm:w-auto shadow-lg shadow-green-600/20 transition-all hover:scale-[1.02]" 
                                 disabled={submitting}
                             >
                                 {submitting ? (

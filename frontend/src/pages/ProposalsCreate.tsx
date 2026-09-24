@@ -5,10 +5,11 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { CONTRACT_SHORTCODES } from '@/lib/contractShortcodes';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 // Removido Select: campos de Funil/Etapa/Tag serão ocultados temporariamente
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useClientById, useClientsList } from '@/hooks/clients';
@@ -23,9 +24,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Save, CheckCircle, Plus, Pencil } from 'lucide-react';
+import { ArrowLeft, FileText, Save, CheckCircle, Plus, Pencil, User, Users, Layers, Wallet, Table as TableIcon, CircleDollarSign, MessageSquare, ArrowRight, Settings, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 
 const DEFAULT_FUEL_TEXT = `<p>O custo estimado de combustível para esta proposta é de <strong>{valor}</strong>. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento. O cálculo final será baseado no preço vigente na data em que o combustível for abastecido, sendo assim, esse valor pode variar.</p>`;
 import SelectGeraValor from '@/components/school/SelectGeraValor';
@@ -34,7 +37,10 @@ import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
 import { clientsService } from '@/services/clientsService';
 import { responsaveisService } from '@/services/responsaveisService';
 import BudgetPreview from '@/components/school/BudgetPreview';
+import PaymentScheduleSection from '@/components/school/PaymentScheduleSection';
+import { getParcelamentoProgramacao } from '@/lib/paymentSchedule';
 import QuickResponsibleModal, { createEmptyQuickResponsibleData } from '@/components/proposals/QuickResponsibleModal';
+import QuickTurmaModal from '@/components/school/QuickTurmaModal';
 
 import { useAircraftList } from '@/hooks/aircraft';
 import CourseModulesSelector from '@/components/school/CourseModulesSelector';
@@ -47,35 +53,47 @@ import CourseModulesSelector from '@/components/school/CourseModulesSelector';
 const proposalSchema = z.object({
   id_cliente: z.string().min(1, 'Selecione o cliente'),
   id_curso: z.string().min(1, 'Selecione o curso'),
-  id_turma: z.string().min(1, 'Selecione a turma'),
+  id_turma: z.string().optional().nullable(),
   /**
    * parcelamento_id
    * pt-BR: ID da Tabela de Parcelamento selecionada para o curso. Opcional.
    * en-US: Selected Installment Table ID for the course. Optional.
    */
-  parcelamento_id: z.string().optional(),
-  obs: z.string().optional(),
-  id_consultor: z.string().min(1, 'Selecione o consultor'),
+  parcelamento_id: z.string().optional().nullable(),
+  /**
+   * Programação de pagamento
+   * pt-BR: Parcela do financiamento + primeira parcela (valor/data) + dia do pagamento.
+   * en-US: Financing installment + first installment (value/date) + due day.
+   */
+  parcela_selecionada: z.string().optional().nullable(),
+  primeira_parcela_valor: z.string().optional().nullable(),
+  primeira_parcela_data: z.string().optional().nullable(),
+  dia_pagamento: z.string().optional().nullable(),
+  recebimento_matricula: z.string().optional().nullable(),
+  matricula_vencimento_data: z.string().optional().nullable(),
+  vencimentos_personalizados: z.any().optional().nullable(),
+  obs: z.string().optional().nullable(),
+  id_consultor: z.string().optional().nullable(),
   // Campos removidos temporariamente: tag, stage_id, funell_id
   // Campo novo opcional: valor gerado a partir de módulos do curso
-  gera_valor: z.string().optional(),
+  gera_valor: z.string().optional().nullable(),
   // Novo campo: identificador de situação da matrícula selecionada no formulário
   // New field: enrollment situation identifier selected from the form
-  situacao_id: z.string().optional(),
-  id_responsavel: z.string().optional(),
-  orc_json: z.string().optional(),
-  desconto: z.string().optional(),
+  situacao_id: z.string().optional().nullable(),
+  id_responsavel: z.string().optional().nullable(),
+  orc_json: z.string().optional().nullable(),
+  desconto: z.string().optional().nullable(),
   // Campo para desconto específico da Etapa 1 (não persistido diretamente no model, mas via meta/orc)
-  etapa1_desconto: z.number().optional(),
-  inscricao: z.string().optional(),
-  subtotal: z.string().optional(),
-  total: z.string().optional(),
-  validade: z.string().optional(),
+  etapa1_desconto: z.any().optional().nullable(),
+  inscricao: z.string().optional().nullable(),
+  subtotal: z.string().optional().nullable(),
+  total: z.string().optional().nullable(),
+  validade: z.string().optional().nullable(),
   // Novo campo do formulário para meta.texto_desconto
   // New form field backing meta.texto_desconto
-  meta_texto_desconto: z.string().optional(),
-  meta_texto_combustivel: z.string().optional(),
-  id: z.string().optional(),
+  meta_texto_desconto: z.string().optional().nullable(),
+  meta_texto_combustivel: z.string().optional().nullable(),
+  id: z.string().optional().nullable(),
 });
 
 type ProposalFormData = z.infer<typeof proposalSchema>;
@@ -100,7 +118,7 @@ export default function ProposalsCreate() {
   // pt-BR: Estado recebido via navegação contendo IDs do funil e da etapa.
   // en-US: Navigation state containing funnel and stage IDs.
   const navState = (location?.state || {}) as { returnTo?: string; funnelId?: string; stageId?: string };
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const idClienteFromUrl = searchParams.get('id_cliente') || '';
   /**
    * idCursoFromUrl
@@ -108,6 +126,35 @@ export default function ProposalsCreate() {
    * en-US: Pre-selected course ID from query string (?id_curso=128).
    */
   const idCursoFromUrl = searchParams.get('id_curso') || '';
+
+  const [activeTab, setActiveTab] = useState<'dados' | 'modulos' | 'pagamento' | 'preview'>(
+    () => {
+      const t = searchParams.get('tab');
+      if (t === 'dados' || t === 'modulos' || t === 'pagamento' || t === 'preview') {
+        return t;
+      }
+      return 'dados';
+    }
+  );
+
+  const handleTabChange = (val: string) => {
+    setActiveTab(val as any);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', val);
+      return next;
+    }, { replace: true });
+  };
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'dados' || t === 'modulos' || t === 'pagamento' || t === 'preview') {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
+
+  const [isBudgetPreviewCollapsed, setIsBudgetPreviewCollapsed] = useState(false);
+  const [isParcelamentoCollapsed, setIsParcelamentoCollapsed] = useState(false);
 
   const [clientSearch, setClientSearch] = useState('');
   // Termos de busca para autocompletes
@@ -147,6 +194,7 @@ export default function ProposalsCreate() {
   const [isQuickResponsibleOpen, setIsQuickResponsibleOpen] = useState(false);
   const [quickResponsibleData, setQuickResponsibleData] = useState(createEmptyQuickResponsibleData());
   const [quickResponsibleLoading, setQuickResponsibleLoading] = useState(false);
+  const [isQuickTurmaOpen, setIsQuickTurmaOpen] = useState(false);
 
   const [isFuelTextOpen, setIsFuelTextOpen] = useState(false);
 
@@ -351,6 +399,15 @@ export default function ProposalsCreate() {
       // pt-BR: Campo opcional para vincular uma tabela de parcelamento.
       // en-US: Optional field to link an installment table.
       parcelamento_id: '',
+      // pt-BR: Programação de pagamento (vale para a matrícula).
+      // en-US: Payment schedule (applies to the enrollment).
+      parcela_selecionada: '',
+      primeira_parcela_valor: '',
+      primeira_parcela_data: '',
+      dia_pagamento: '',
+      recebimento_matricula: 'diluida',
+      matricula_vencimento_data: '',
+      vencimentos_personalizados: {},
       obs: '',
       id_consultor: user?.id ? String(user.id) : '',
       // tag, stage_id e funell_id removidos temporariamente
@@ -545,8 +602,7 @@ export default function ProposalsCreate() {
    * pt-BR: Opções do Combobox para tabelas de parcelamento do curso.
    * en-US: Combobox options for the course's installment tables.
    */
-  const installmentsList = useMemo(() => (installmentsByCourse?.data || installmentsByCourse?.items || []), [installmentsByCourse]);
-  const installmentOptions = useComboboxOptions<any>(
+  const installmentsList = useMemo(() => (installmentsByCourse?.data || installmentsByCourse?.items || []), [installmentsByCourse]);  const installmentOptions = useComboboxOptions<any>(
     installmentsList,
     'id',
     'nome',
@@ -557,6 +613,27 @@ export default function ProposalsCreate() {
     }
   );
 
+  /**
+   * scheduleLines
+   * pt-BR: Linhas da tabela de parcelamento selecionada (config.parcelas) para
+   *        a Programação de Pagamento e o payload orc.parcelamento.linhas.
+   * en-US: Rows of the selected installment table (config.parcelas) for the
+   *        Payment Schedule and the orc.parcelamento.linhas payload.
+   */
+  const selectedParcelamentoId = form.watch('parcelamento_id');
+  const scheduleLines = useMemo(() => {
+    const table: any = (installmentsList || []).find((t: any) => String(t?.id) === String(selectedParcelamentoId || ''));
+    const cfg = table?.config || {};
+    const raw = cfg?.parcelas;
+    const arr: any[] = Array.isArray(raw) ? raw : Object.values(raw || {});
+    return arr
+      .filter((p: any) => String(p?.parcela ?? '').trim() !== '')
+      .map((p: any) => ({
+        parcelas: String(p?.parcela ?? ''),
+        valor: String(p?.valor ?? ''),
+        desconto: String(p?.desconto ?? ''),
+      }));
+  }, [installmentsList, selectedParcelamentoId]);
   /**
    * normalizeSituationsList
    * pt-BR: Normaliza a resposta do hook de situações de matrícula em uma lista simples.
@@ -569,21 +646,27 @@ export default function ProposalsCreate() {
 
   /**
    * useEnrollmentSituationsList
-   * pt-BR: Busca a lista de situações de matrícula usando paginação fixa
-   *        conforme solicitado (GET /situacoes-matricula?page=1&per_page=1).
-   * en-US: Fetches enrollment situations list using fixed pagination
-   *        as requested (GET /situacoes-matricula?page=1&per_page=1).
+   * pt-BR: Busca a lista de situações de matrícula ativas.
+   * en-US: Fetches active enrollment situations list.
    */
   const { data: enrollmentSituationsData, isLoading: isLoadingEnrollmentSituations } =
-    useEnrollmentSituationsList({ page: 1, per_page: 1, slug: 'int' });
+    useEnrollmentSituationsList({ page: 1, per_page: 200, ativo: 's' });
   const enrollmentSituations = useMemo(() => normalizeSituationsList(enrollmentSituationsData), [enrollmentSituationsData]);
+
+  // Define "Interessado" como padrão ao criar a proposta
   useEffect(() => {
     const current = form.getValues('situacao_id');
-    const first = Array.isArray(enrollmentSituations) ? enrollmentSituations[0] : undefined;
-    if (!current && first?.id) {
-      form.setValue('situacao_id', String(first.id));
+    if (!current && Array.isArray(enrollmentSituations) && enrollmentSituations.length > 0) {
+      const interessado = enrollmentSituations.find(
+        (s: any) => String(s?.slug || '').toLowerCase() === 'int' || 
+                    String(s?.name || s?.label || s?.nome || '').toLowerCase().includes('interessad')
+      );
+      if (interessado?.id) {
+        form.setValue('situacao_id', String(interessado.id));
+      } else if (enrollmentSituations[0]?.id) {
+        form.setValue('situacao_id', String(enrollmentSituations[0].id));
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrollmentSituations]);
 
   /**
@@ -806,6 +889,57 @@ export default function ProposalsCreate() {
     }
   }
 
+  const hasModulesTab = Boolean(form.watch('id_turma') && String(selectedCourse?.tipo) !== '1');
+
+  /**
+   * wizardSteps
+   * pt-BR: Etapas dinâmicas do fluxo tipo wizard com seus respectivos rótulos, ícones e estados.
+   * en-US: Dynamic wizard steps with their respective labels, icons and states.
+   */
+  const wizardSteps = useMemo(() => {
+    const steps = [
+      { id: 'dados' as const, label: 'Dados & Curso', description: 'Cliente, turma e observações', icon: User },
+    ];
+    if (hasModulesTab) {
+      steps.push({ id: 'modulos' as const, label: 'Módulos & Preços', description: 'Grade de horas e aeronaves', icon: Layers });
+    }
+    steps.push(
+      { id: 'pagamento' as const, label: 'Condições & Parcelamento', description: 'Valores, prazos e descontos', icon: Wallet },
+      { id: 'preview' as const, label: 'Preview da Proposta', description: 'Revisão final antes de enviar', icon: FileText }
+    );
+    return steps;
+  }, [hasModulesTab]);
+
+  const currentStepIndex = wizardSteps.findIndex((s) => s.id === activeTab);
+  const safeCurrentStepIndex = currentStepIndex === -1 ? 0 : currentStepIndex;
+  const prevStep = safeCurrentStepIndex > 0 ? wizardSteps[safeCurrentStepIndex - 1] : null;
+  const nextStep = safeCurrentStepIndex < wizardSteps.length - 1 ? wizardSteps[safeCurrentStepIndex + 1] : null;
+
+  const handleNextStep = () => {
+    if (nextStep) {
+      handleTabChange(nextStep.id);
+    }
+  };
+
+  const handlePrevStep = () => {
+    if (prevStep) {
+      handleTabChange(prevStep.id);
+    }
+  };
+
+  // Componente auxiliar para cards de métricas
+  const StatCard = ({ label, value, icon: Icon, colorClass }: { label: string; value: string; icon: any; colorClass: string }) => (
+    <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+      <div className={`p-3 rounded-lg ${colorClass} bg-opacity-10 dark:bg-opacity-20`}>
+        <Icon className={`w-5 h-5 ${colorClass.replace('bg-', 'text-')}`} />
+      </div>
+      <div>
+        <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">{label}</p>
+        <p className="text-lg font-bold tracking-tight">{value || 'R$ 0,00'}</p>
+      </div>
+    </div>
+  );
+
   /**
    * recalcTotal
    * pt-BR: Recalcula automaticamente o campo "total" como (subtotal + inscrição - desconto)
@@ -960,15 +1094,11 @@ export default function ProposalsCreate() {
   // en-US: When the selected course has no classes, add a "Wait for class" option (value "0").
   const classOptionsWithFallback = useMemo(() => {
     const hasSelectedCourse = !!selectedCourseId;
+    if (!hasSelectedCourse) return [];
     const list = classOptions || [];
-    if (hasSelectedCourse && list.length === 0) {
-      return [
-        {
-          value: '0',
-          label: 'Aguardar turma',
-          description: 'Sem turmas disponíveis para este curso',
-        },
-      ];
+    const aguardarOption = { value: '0', label: 'Aguardar turma', description: 'Aguardando abertura de turma / Sem turma definida' };
+    if (!list.some(item => String(item.value) === '0')) {
+      return [aguardarOption, ...list];
     }
     return list;
   }, [classOptions, selectedCourseId]);
@@ -997,9 +1127,10 @@ export default function ProposalsCreate() {
         lastCreatedIdRef.current = idStr;
       }
 
-      // Fluxo “Salvar e Continuar”: abrir página de edição com o id da resposta
+      // Fluxo “Salvar e Continuar”: abrir página de edição com o id da resposta mantendo a aba atual
       if (!finishAfterSaveRef.current) {
         if (idStr) {
+          if (activeTab) qs.set('tab', activeTab);
           const suffix = qs.toString() ? `?${qs.toString()}` : '';
           navigate(`/admin/sales/proposals/edit/${idStr}${suffix}`, {
             state: { returnTo: navState?.returnTo, funnelId: navState?.funnelId, stageId: navState?.stageId },
@@ -1228,10 +1359,22 @@ export default function ProposalsCreate() {
        * en-US: Discount text HTML with shortcodes resolved from the active row.
        */
       texto_preview_html: String(discountPreviewHtml || ''),
-      linhas: (discountRows || []).map((r) => ({
-        parcelas: String(r.parcela || ''),
-        valor: currencyRemoveMaskToString(r.valor || '') || '',
-        desconto: currencyRemoveMaskToString(r.desconto || '') || '',
+      /**
+       * parcela_selecionada + programação de pagamento
+       * pt-BR: Parcela do financiamento e 1ª parcela/dia (vale para a matrícula,
+       * alimenta `{tabela_parcelas}` no contrato e a cobrança).
+       */
+      parcela_selecionada: values.parcela_selecionada || '',
+      ...getParcelamentoProgramacao(values),
+      /**
+       * linhas
+       * pt-BR: Na criação, as linhas vêm da tabela selecionada (config.parcelas),
+       * para a validação cruzada do backend (selecionada ∈ linhas).
+       */
+      linhas: ((discountRows || []).length > 0 ? discountRows : scheduleLines).map((r: any) => ({
+        parcelas: String(r.parcela || r.parcelas || ''),
+        valor: currencyRemoveMaskToString(String(r.valor || '')) || '',
+        desconto: currencyRemoveMaskToString(String(r.desconto || '')) || '',
       })),
     };
     payload.orc = { ...(payload.orc || {}), parcelamento: parcelamentoForOrc };
@@ -1249,6 +1392,25 @@ export default function ProposalsCreate() {
     await createEnrollment.mutateAsync(payload as any);
   }
 
+  const onInvalid = (errors: any) => {
+    console.error('Validation errors on create submit:', errors);
+    const messages = Object.entries(errors)
+      .map(([k, v]: [string, any]) => `${k}: ${v?.message || 'inválido'}`)
+      .join(', ');
+
+    if (errors.id_cliente || errors.id_curso || errors.id_turma || errors.id_responsavel) {
+      handleTabChange('dados');
+    } else if (errors.desconto || errors.inscricao || errors.subtotal || errors.validade || errors.parcelamento_id) {
+      handleTabChange('pagamento');
+    }
+
+    toast({
+      title: 'Atenção ao salvar proposta',
+      description: messages || 'Verifique os campos obrigatórios da proposta.',
+      variant: 'destructive',
+    });
+  };
+
   /**
    * handleSaveContinue
    * pt-BR: Envia o formulário e permanece na página para continuar editando.
@@ -1256,7 +1418,7 @@ export default function ProposalsCreate() {
    */
   function handleSaveContinue() {
     finishAfterSaveRef.current = false;
-    form.handleSubmit(onSubmit)();
+    form.handleSubmit(onSubmit, onInvalid)();
   }
 
   /**
@@ -1266,7 +1428,7 @@ export default function ProposalsCreate() {
    */
   function handleSaveFinish() {
     finishAfterSaveRef.current = true;
-    form.handleSubmit(onSubmit)();
+    form.handleSubmit(onSubmit, onInvalid)();
   }
 
   /**
@@ -1328,474 +1490,691 @@ export default function ProposalsCreate() {
           <ArrowLeft className="h-4 w-4 mr-2" /> {backLabel}
         </Button>
       </div>
-      <Card>
-        <CardHeader>
-          {/*
-           * HeaderWithToggle
-           * pt-BR: Cabeçalho com título e botão para mostrar/ocultar o campo Responsável.
-           * en-US: Header with title and button to toggle Responsible field visibility.
-           */}
+      <Card className="border-none shadow-none bg-transparent">
+        <CardHeader className="px-0 pt-0">
           <div className="flex items-center justify-between">
-            <CardTitle>Nova Proposta</CardTitle>
+            <div>
+              <CardTitle className="text-3xl font-bold tracking-tight">Nova Proposta</CardTitle>
+              <CardDescription className="text-zinc-500 dark:text-zinc-400 mt-1">Configure os detalhes comerciais, prazos e condições do curso.</CardDescription>
+            </div>
             <Button
               variant="outline"
               size="sm"
               type="button"
+              className="h-9 px-4 rounded-full border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
               onClick={() => setShowResponsible((s) => !s)}
               aria-label={showResponsible ? 'Ocultar Responsável' : 'Selecionar Responsável'}
             >
-              {showResponsible ? 'Ocultar Responsável' : 'Selecionar Responsável'}
+              {showResponsible ? (
+                <>
+                  <Users className="w-4 h-4 mr-2 text-zinc-500" />
+                  Ocultar Responsável
+                </>
+              ) : (
+                <>
+                  <User className="w-4 h-4 mr-2 text-blue-500" />
+                  Selecionar Responsável
+                </>
+              )}
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Cliente */}
-                <FormField
-                  control={form.control}
-                  name="id_cliente"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cliente *</FormLabel>
-                      {idClienteFromUrl ? (
-                        <div className="text-sm py-2 px-3 border rounded-md bg-muted/30">
-                          {clientDetailData?.name ? String(clientDetailData.name) : `Cliente ${idClienteFromUrl}`}
-                        </div>
+            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+                {/* Wizard Header Sticky com Stepper e Barra de Progresso */}
+                <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 border-b shadow-xs">
+                  {/* Barra de Progresso Fina no Topo */}
+                  <div className="w-full h-1 bg-muted/80 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 transition-all duration-300 ease-out"
+                      style={{ width: `${((safeCurrentStepIndex + 1) / wizardSteps.length) * 100}%` }}
+                    />
+                  </div>
+
+                  <div className="px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    {/* Stepper Interativo de Etapas */}
+                    <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+                      {wizardSteps.map((step, idx) => {
+                        const Icon = step.icon;
+                        const isCurrent = step.id === activeTab;
+                        const isCompleted = idx < safeCurrentStepIndex;
+
+                        return (
+                          <React.Fragment key={step.id}>
+                            <button
+                              type="button"
+                              onClick={() => handleTabChange(step.id)}
+                              className={`group flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                                  : isCompleted
+                                  ? 'bg-muted/70 text-foreground border-border hover:bg-muted hover:border-zinc-300 dark:hover:border-zinc-700'
+                                  : 'bg-background/50 text-muted-foreground border-transparent hover:bg-muted/40 hover:text-foreground'
+                              }`}
+                            >
+                              <div
+                                className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-colors ${
+                                  isCurrent
+                                    ? 'bg-primary-foreground text-primary'
+                                    : isCompleted
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-muted text-muted-foreground group-hover:bg-muted-foreground/20'
+                                }`}
+                              >
+                                {isCompleted ? '✓' : idx + 1}
+                              </div>
+                              <span className="truncate max-w-[130px] sm:max-w-none">{step.label}</span>
+                            </button>
+
+                            {idx < wizardSteps.length - 1 && (
+                              <div className="hidden sm:block text-muted-foreground/40 text-xs px-0.5">
+                                →
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    {/* Controles de Navegação Rápida do Wizard */}
+                    <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePrevStep}
+                        disabled={!prevStep}
+                        className="h-8 text-xs px-2.5 rounded-lg"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                        <span className="hidden sm:inline">Anterior</span>
+                      </Button>
+
+                      {nextStep ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleNextStep}
+                          className="h-8 text-xs px-2.5 rounded-lg font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20"
+                        >
+                          <span>Próximo: {nextStep.label}</span>
+                          <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                        </Button>
                       ) : (
-                        <Combobox
-                          options={clientOptions}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          placeholder="Selecione o cliente"
-                          searchPlaceholder="Pesquisar cliente pelo nome..."
-                          emptyText={clientOptions.length === 0 ? 'Nenhum cliente encontrado' : 'Digite para filtrar'}
-                          disabled={isLoadingClients}
-                          loading={isLoadingClients}
-                          onSearch={setClientSearch}
-                          searchTerm={clientSearch}
-                          debounceMs={250}
-                          header={({ setOpen }) => (
-                            <Button 
-                              variant="ghost" 
-                              className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
-                              onClick={() => {
-                                setIsQuickClientOpen(true);
-                                setOpen(false);
-                              }}
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Criar Novo Cliente
-                            </Button>
-                          )}
-                        />
+                        <Badge variant="outline" className="h-8 px-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          Etapa Final
+                        </Badge>
                       )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Consultor */}
-                <FormField
-                  control={form.control}
-                  name="id_consultor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Consultor *</FormLabel>
-                      <Combobox
-                        options={consultantOptions}
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder="Selecione o consultor"
-                        searchPlaceholder="Pesquisar consultor pelo nome..."
-                        emptyText={consultantOptions.length === 0 ? 'Nenhum consultor encontrado' : 'Digite para filtrar'}
-                        disabled={isLoadingConsultants}
-                        loading={isLoadingConsultants}
-                        onSearch={setConsultantSearch}
-                        searchTerm={consultantSearch}
-                        debounceMs={250}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Curso */}
-                <FormField
-                  control={form.control}
-                  name="id_curso"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Curso *</FormLabel>
-                      <Combobox
-                        options={courseOptions}
-                        value={field.value}
-                        onValueChange={(val) => {
-                          // Ao mudar o curso, limpamos a turma selecionada
-                          // When changing course, clear selected class
-                          field.onChange(val);
-                          form.setValue('id_turma', '');
-                          // Ao mudar o curso, limpamos parcelamento selecionado
-                          // When changing course, clear selected installment table
-                          form.setValue('parcelamento_id', '');
-                        }}
-                        placeholder="Selecione o curso"
-                        searchPlaceholder="Pesquisar curso pelo nome..."
-                        emptyText={courseOptions.length === 0 ? 'Nenhum curso encontrado' : 'Digite para filtrar'}
-                        disabled={isLoadingCourses}
-                        loading={isLoadingCourses}
-                        onSearch={setCourseSearch}
-                        searchTerm={courseSearch}
-                        debounceMs={250}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Turma */}
-                <FormField
-                  control={form.control}
-                  name="id_turma"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Turma *</FormLabel>
-                      <Combobox
-                        options={classOptionsWithFallback}
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder="Selecione a turma"
-                        searchPlaceholder="Pesquisar turma pelo nome..."
-                        emptyText={
-                          !selectedCourseId
-                            ? 'Selecione um curso primeiro'
-                            : classOptionsWithFallback.length === 0
-                              ? 'Nenhuma turma encontrada'
-                              : 'Digite para filtrar'
-                        }
-                        disabled={!selectedCourseId || isLoadingClasses}
-                        loading={isLoadingClasses}
-                        onSearch={setClassSearch}
-                        searchTerm={classSearch}
-                        debounceMs={250}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Tabela de Parcelamento */}
-              {shouldShowInstallmentAndDiscountFields() && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="parcelamento_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tabela de Parcelamento</FormLabel>
-                        <Combobox
-                          options={installmentOptions}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          placeholder="Selecione a tabela de parcelamento"
-                          searchPlaceholder="Pesquisar tabela pelo nome..."
-                          emptyText={
-                            !selectedCourseId
-                              ? 'Selecione um curso primeiro'
-                              : installmentOptions.length === 0
-                                ? 'Nenhuma tabela encontrada'
-                                : 'Digite para filtrar'
-                          }
-                          disabled={!selectedCourseId || isLoadingInstallments}
-                          loading={isLoadingInstallments}
-                        />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              {/**
-               * Texto de Desconto
-               * pt-BR: Campo de texto livre para adicionar observações sobre o desconto.
-               *        Posicionado imediatamente abaixo de "Validade (dias)" e ocupa toda a largura.
-               * en-US: Free text field to add notes about the discount.
-               *        Placed right below "Validity (days)" and spans full width.
-               */}
-              {shouldShowInstallmentAndDiscountFields() && (
-                <FormField
-                  control={form.control}
-                  name="meta_texto_desconto"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Texto de Desconto</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Digite um texto opcional para exibir junto ao desconto"
-                          className="w-full"
-                          value={field.value || ''}
-                          onChange={field.onChange}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              {/* Toggle button moved to header (above). */}
-
-              {showResponsible && (
-                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="id_responsavel"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Responsável</FormLabel>
-                        <Combobox
-                          options={responsibleOptionsWithSelected}
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          placeholder="Selecione o responsável"
-                          searchPlaceholder="Pesquisar responsável pelo nome..."
-                          emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
-                          disabled={isLoadingResponsibles}
-                          loading={isLoadingResponsibles}
-                          onSearch={setResponsibleSearch}
-                          searchTerm={responsibleSearch}
-                          debounceMs={250}
-                          header={({ setOpen }) => (
-                            <Button
-                              variant="ghost"
-                              className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
-                              onClick={() => {
-                                setIsQuickResponsibleOpen(true);
-                                setOpen(false);
-                              }}
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Cadastrar Novo Responsável
-                            </Button>
+                <div className="px-6 pt-6 pb-2">
+                  {/* Aba 1: Dados do Cliente, Curso e Observações */}
+                  <TabsContent value="dados" forceMount className={`space-y-8 ${activeTab !== 'dados' ? 'hidden' : ''}`}>
+                    {/* Seção 1: Identificação */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 border-b pb-2">
+                        <User className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Identificação e Status</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Cliente */}
+                        <FormField
+                          control={form.control}
+                          name="id_cliente"
+                          render={({ field }) => (
+                            <FormItem className="md:col-span-2">
+                              <FormLabel>Cliente *</FormLabel>
+                              {idClienteFromUrl ? (
+                                <div className="text-sm py-2 px-3 border rounded-md bg-muted/30">
+                                  {clientDetailData?.name ? String(clientDetailData.name) : `Cliente ${idClienteFromUrl}`}
+                                </div>
+                              ) : (
+                                <Combobox
+                                  options={clientOptions}
+                                  value={field.value}
+                                  onValueChange={field.onChange}
+                                  placeholder="Selecione o cliente"
+                                  searchPlaceholder="Pesquisar cliente pelo nome..."
+                                  emptyText={clientOptions.length === 0 ? 'Nenhum cliente encontrado' : 'Digite para filtrar'}
+                                  disabled={isLoadingClients}
+                                  loading={isLoadingClients}
+                                  onSearch={setClientSearch}
+                                  searchTerm={clientSearch}
+                                  debounceMs={250}
+                                  header={({ setOpen }) => (
+                                    <Button 
+                                      variant="ghost" 
+                                      className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                                      onClick={() => {
+                                        setIsQuickClientOpen(true);
+                                        setOpen(false);
+                                      }}
+                                    >
+                                      <Plus className="h-4 w-4 mr-2" />
+                                      Criar Novo Cliente
+                                    </Button>
+                                  )}
+                                />
+                              )}
+                              <FormMessage />
+                            </FormItem>
                           )}
                         />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
 
-              {/* Campos de Funil e Etapa removidos temporariamente */}
-
-              {/* Observações */}
-              <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                <FormField
-                  control={form.control}
-                  name="obs"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Observações</FormLabel>
-                      <FormControl>
-                        {/**
-                         * pt-BR: Usa WYSIWYG para Observações, salvando HTML em `obs`.
-                         * en-US: Use WYSIWYG for Observations, saving HTML into `obs`.
-                         */}
-                        <RichTextEditor
-                          value={field.value || ''}
-                          onChange={field.onChange}
-                          placeholder="Digite qualquer observação"
+                        {/* Consultor */}
+                        <FormField
+                          control={form.control}
+                          name="id_consultor"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Consultor *</FormLabel>
+                              <Combobox
+                                options={consultantOptions}
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                placeholder="Selecione o consultor"
+                                searchPlaceholder="Pesquisar consultor pelo nome..."
+                                emptyText={consultantOptions.length === 0 ? 'Nenhum consultor encontrado' : 'Digite para filtrar'}
+                                disabled={isLoadingConsultants}
+                                loading={isLoadingConsultants}
+                                onSearch={setConsultantSearch}
+                                searchTerm={consultantSearch}
+                                debounceMs={250}
+                              />
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                      </div>
 
-              {/* SelectGeraValor — renderiza quando turma selecionada */}
-              {form.watch('id_turma') && String(selectedCourse?.tipo) !== '1' && (
-                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                  {String(selectedCourse?.tipo) === '2' ? (
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <FormLabel>Módulos do Curso (Selecione as fases)</FormLabel>
-                            <Button variant="ghost" size="sm" type="button" onClick={handleOpenFuelText}>
-                                <Pencil className="w-3 h-3 mr-1" /> Editar Texto Combustível
-                            </Button>
+                      {/* Situação */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                        <FormField
+                          control={form.control}
+                          name="situacao_id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Situação</FormLabel>
+                              <Select value={field.value || ''} onValueChange={field.onChange} disabled={isLoadingEnrollmentSituations}>
+                                <SelectTrigger className="w-full h-10">
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {enrollmentSituations.map((s: any) => (
+                                    <SelectItem key={String(s?.id)} value={String(s?.id)}>
+                                      {s?.label || s?.name || s?.nome || s?.description || `Situação ${String(s?.id ?? '')}`}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Seção 2: Curso e Turma */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 border-b pb-2">
+                        <Layers className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Configuração do Curso</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Curso */}
+                        <FormField
+                          control={form.control}
+                          name="id_curso"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Curso *</FormLabel>
+                              <Combobox
+                                options={courseOptions}
+                                value={field.value}
+                                onValueChange={(val) => {
+                                  field.onChange(val);
+                                  form.setValue('id_turma', '');
+                                  form.setValue('parcelamento_id', '');
+                                  form.setValue('parcela_selecionada', '');
+                                  form.setValue('primeira_parcela_valor', '');
+                                  form.setValue('primeira_parcela_data', '');
+                                  form.setValue('dia_pagamento', '');
+                                }}
+                                placeholder="Selecione o curso"
+                                searchPlaceholder="Pesquisar curso pelo nome..."
+                                emptyText={courseOptions.length === 0 ? 'Nenhum curso encontrado' : 'Digite para filtrar'}
+                                disabled={isLoadingCourses}
+                                loading={isLoadingCourses}
+                                onSearch={setCourseSearch}
+                                searchTerm={courseSearch}
+                                debounceMs={250}
+                              />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        {/* Turma */}
+                        <FormField
+                          control={form.control}
+                          name="id_turma"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Turma *</FormLabel>
+                              <Combobox
+                                options={classOptionsWithFallback}
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                placeholder="Selecione a turma"
+                                searchPlaceholder="Pesquisar turma pelo nome..."
+                                emptyText={
+                                  !selectedCourseId
+                                    ? 'Selecione um curso primeiro'
+                                    : classOptionsWithFallback.length === 0
+                                      ? 'Nenhuma turma encontrada'
+                                      : 'Digite para filtrar'
+                                }
+                                disabled={!selectedCourseId || isLoadingClasses}
+                                loading={isLoadingClasses}
+                                onSearch={setClassSearch}
+                                searchTerm={classSearch}
+                                debounceMs={250}
+                                header={({ setOpen }) => (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10 text-xs font-medium"
+                                    onClick={() => {
+                                      setIsQuickTurmaOpen(true);
+                                      setOpen(false);
+                                    }}
+                                  >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Cadastrar Nova Turma
+                                  </Button>
+                                )}
+                              />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      {showResponsible && (
+                        <div className="grid grid-cols-1 gap-4 pt-2">
+                          <FormField
+                            control={form.control}
+                            name="id_responsavel"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Responsável</FormLabel>
+                                <Combobox
+                                  options={responsibleOptionsWithSelected}
+                                  value={field.value}
+                                  onValueChange={field.onChange}
+                                  placeholder="Selecione o responsável"
+                                  searchPlaceholder="Pesquisar responsável pelo nome..."
+                                  emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
+                                  disabled={isLoadingResponsibles}
+                                  loading={isLoadingResponsibles}
+                                  onSearch={setResponsibleSearch}
+                                  searchTerm={responsibleSearch}
+                                  debounceMs={250}
+                                  header={({ setOpen }) => (
+                                    <Button
+                                      variant="ghost"
+                                      className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                                      onClick={() => {
+                                        setIsQuickResponsibleOpen(true);
+                                        setOpen(false);
+                                      }}
+                                    >
+                                      <Plus className="h-4 w-4 mr-2" />
+                                      Cadastrar Novo Responsável
+                                    </Button>
+                                  )}
+                                />
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
                         </div>
-                        <CourseModulesSelector
+                      )}
+                    </div>
+
+                    {/* Seção 3: Observações Gerais */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 border-b pb-2">
+                        <MessageSquare className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Observações Gerais</h3>
+                      </div>
+                      
+                      <FormField
+                        control={form.control}
+                        name="obs"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <RichTextEditor
+                                value={field.value || ''}
+                                onChange={field.onChange}
+                                placeholder="Digite observações internas ou comerciais... Digite { ou Shift+Espaço para ver os shortcodes."
+                                enableShortcodeHints
+                                shortcodes={CONTRACT_SHORTCODES}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                  </TabsContent>
+
+                  {/* Aba 2: Módulos do Curso (se aplicável) */}
+                  {hasModulesTab && (
+                    <TabsContent value="modulos" forceMount className={`space-y-6 ${activeTab !== 'modulos' ? 'hidden' : ''}`}>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b pb-3">
+                          <div className="flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-primary" />
+                            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Seleção de Módulos e Preços</h3>
+                          </div>
+                          {String(selectedCourse?.tipo) === '2' && (
+                            <Button variant="ghost" size="sm" type="button" onClick={handleOpenFuelText}>
+                              <Pencil className="w-3.5 h-3.5 mr-1" /> Editar Texto Combustível
+                            </Button>
+                          )}
+                        </div>
+
+                        {String(selectedCourse?.tipo) === '2' ? (
+                          <CourseModulesSelector
                             course={selectedCourseNormalized}
                             aircrafts={allAircraft}
                             onChange={handleModulesSelectionChange}
                             getAircraftHourlyRate={getAircraftHourlyRate}
                             formatCurrencyBRL={formatCurrencyBRL}
-                        />
-                    </div>
-                  ) : (
-                    <FormField
-                      control={form.control}
-                      name="gera_valor"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            {selectedCourseNormalized?.tipo === '4' ? 'Selecionar período' : 'Gerar Valor'}
-                          </FormLabel>
-
-                          <SelectGeraValor
-                            course={selectedCourseNormalized}
-                            value={field.value}
-                            onChange={handleGeraValorChange}
-                            name="gera_valor"
-                            disabled={!selectedCourse}
                           />
-                          <FormMessage />
-                        </FormItem>
+                        ) : (
+                          <FormField
+                            control={form.control}
+                            name="gera_valor"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>
+                                  {selectedCourseNormalized?.tipo === '4' ? 'Selecionar período' : 'Gerar Valor'}
+                                </FormLabel>
+                                <SelectGeraValor
+                                  course={selectedCourseNormalized}
+                                  value={field.value}
+                                  onChange={handleGeraValorChange}
+                                  name="gera_valor"
+                                  disabled={!selectedCourse}
+                                />
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        )}
+                      </div>
+
+                    </TabsContent>
+                  )}
+
+                  {/* Aba 3: Condições Comerciais e Parcelamento */}
+                  <TabsContent value="pagamento" forceMount className={`space-y-8 ${activeTab !== 'pagamento' ? 'hidden' : ''}`}>
+                    {/* Seção 1: Resumo e Condições Financeiras */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 border-b pb-2">
+                        <Wallet className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Resumo e Condições Financeiras</h3>
+                      </div>
+
+                      {/* Cards de Métricas */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <StatCard
+                          label="Subtotal Bruto"
+                          value={form.watch('subtotal')}
+                          icon={CircleDollarSign}
+                          colorClass="bg-blue-500 text-blue-500"
+                        />
+                        <StatCard
+                          label="Taxa de Inscrição"
+                          value={form.watch('inscricao')}
+                          icon={TableIcon}
+                          colorClass="bg-amber-500 text-amber-500"
+                        />
+                        <StatCard
+                          label="Desconto Aplicado"
+                          value={form.watch('desconto')}
+                          icon={CircleDollarSign}
+                          colorClass="bg-rose-500 text-rose-500"
+                        />
+                        <StatCard
+                          label="Total Líquido"
+                          value={form.watch('total')}
+                          icon={Wallet}
+                          colorClass="bg-emerald-500 text-emerald-500"
+                        />
+                      </div>
+
+                      {/* Inputs Financeiros */}
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800">
+                        {/* Desconto Input */}
+                        <FormField control={form.control} name="desconto" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Valor do Desconto</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  className="pl-8"
+                                  placeholder="R$ 0,00"
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                                />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        
+                        {/* Inscrição Input */}
+                        <FormField control={form.control} name="inscricao" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Taxa de Inscrição</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  className="pl-8"
+                                  placeholder="R$ 0,00"
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                                />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+
+                        {/* Subtotal Input */}
+                        <FormField control={form.control} name="subtotal" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Ajuste de Subtotal</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  className="pl-8"
+                                  placeholder="R$ 0,00"
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                                />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+
+                        {/* Validade */}
+                        <FormField
+                          control={form.control}
+                          name="validade"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Validade da Proposta</FormLabel>
+                              <Select value={field.value || ''} onValueChange={field.onChange}>
+                                <SelectTrigger className="w-full h-10 rounded-xl">
+                                  <SelectValue placeholder="Selecione prazo..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="7">7 dias</SelectItem>
+                                  <SelectItem value="14">14 dias</SelectItem>
+                                  <SelectItem value="30">30 dias</SelectItem>
+                                  <SelectItem value="60">60 dias</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Card de Gerenciamento de Parcelamento */}
+                    {shouldShowInstallmentAndDiscountFields() && (
+                      <Card>
+                        <CardHeader 
+                          className="flex flex-row items-center justify-between cursor-pointer group"
+                          onClick={() => setIsParcelamentoCollapsed(!isParcelamentoCollapsed)}
+                        >
+                          <div className="flex items-center gap-2">
+                            {isParcelamentoCollapsed ? <ChevronDown className="h-5 w-5 transition-transform" /> : <ChevronUp className="h-5 w-5 transition-transform" />}
+                            <CardTitle>Gerenciamento de Parcelamento</CardTitle>
+                          </div>
+                        </CardHeader>
+                        {!isParcelamentoCollapsed && (
+                          <CardContent className="animate-in fade-in duration-300 space-y-6">
+                            {/* Seleção de Tabela de Parcelamento */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="parcelamento_id"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Tabela de Parcelamento</FormLabel>
+                                    <Combobox
+                                      options={installmentOptions}
+                                      value={field.value}
+                                      onValueChange={field.onChange}
+                                      placeholder="Selecione a tabela de parcelamento"
+                                      searchPlaceholder="Pesquisar tabela pelo nome..."
+                                      emptyText={
+                                        !selectedCourseId
+                                          ? 'Selecione um curso primeiro'
+                                          : installmentOptions.length === 0
+                                            ? 'Nenhuma tabela encontrada'
+                                            : 'Digite para filtrar'
+                                      }
+                                      disabled={!selectedCourseId || isLoadingInstallments}
+                                      loading={isLoadingInstallments}
+                                    />
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+
+                            {/* Programação de Pagamento da matrícula */}
+                            <PaymentScheduleSection
+                              control={form.control}
+                              setValue={form.setValue}
+                              lines={scheduleLines}
+                            />
+
+                            {/* Texto de Desconto */}
+                            <div className="space-y-2">
+                              <FormField
+                                control={form.control}
+                                name="meta_texto_desconto"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Texto de Desconto</FormLabel>
+                                    <FormControl>
+                                      <RichTextEditor
+                                        placeholder="Digite um texto opcional para exibir junto ao desconto (suporta HTML). Digite { ou Shift+Espaço para ver os shortcodes."
+                                        value={field.value || ''}
+                                        onChange={field.onChange}
+                                        enableShortcodeHints
+                                        shortcodes={CONTRACT_SHORTCODES}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          </CardContent>
+                        )}
+                      </Card>
+                    )}
+
+                  </TabsContent>
+
+                  {/* Aba 4: Preview da Proposta Comercial */}
+                  <TabsContent value="preview" forceMount className={`space-y-4 ${activeTab !== 'preview' ? 'hidden' : ''}`}>
+                    <Card>
+                      <CardHeader 
+                        className="flex flex-row items-center justify-between cursor-pointer group"
+                        onClick={() => setIsBudgetPreviewCollapsed(!isBudgetPreviewCollapsed)}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isBudgetPreviewCollapsed ? <ChevronDown className="h-5 w-5 transition-transform" /> : <ChevronUp className="h-5 w-5 transition-transform" />}
+                          <CardTitle>Proposta Comercial (Preview)</CardTitle>
+                        </div>
+                      </CardHeader>
+                      {!isBudgetPreviewCollapsed && (
+                        <CardContent className="animate-in fade-in duration-300">
+                          <BudgetPreview
+                            title="Proposta Comercial"
+                            clientName={selectedClient?.name || selectedClient?.nome || ''}
+                            clientId={selectedClient?.id ? String(selectedClient.id) : undefined}
+                            clientPhone={selectedClient?.config?.celular || selectedClient?.config?.telefone_residencial || ''}
+                            clientEmail={selectedClient?.email || ''}
+                            course={selectedCourseNormalized as any}
+                            courseName={selectedCourseNormalized?.titulo || selectedCourseNormalized?.nome || ''}
+                            turmaName={classOptionsWithFallback.find(t => String(t.value) === String(form.watch('id_turma')))?.label || ''}
+                            module={normalizeModuleForTipo4(selectedModule) as any}
+                            modules={previewModules}
+                            discountLabel="Desconto"
+                            discountAmountMasked={form.watch('desconto') || ''}
+                            subtotalMasked={form.watch('subtotal') || ''}
+                            totalMasked={form.watch('total') || ''}
+                            validityDate={computeValidityDate(form.watch('validade'))}
+                            validityDays={form.watch('validade')}
+                            etapa1Discount={form.watch('etapa1_desconto') || 0}
+                            inscricaoMasked={form.watch('inscricao') || ''}
+                            fuelExternalText={form.watch('meta_texto_combustivel')}
+                            parcelamento={{
+                              linhas: scheduleLines.map((l: any) => ({ parcela: l.parcelas, valor: l.valor, desconto: l.desconto })),
+                              texto_desconto: form.watch('meta_texto_desconto')
+                            }}
+                          />
+                        </CardContent>
                       )}
-                    />
-                  )}
+                    </Card>
+                  </TabsContent>
                 </div>
-              )}
-
-              {/* (relocado) Campo de Validade movido para a linha de Status/Total */}
-
-              {/* Valores opcionais */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField control={form.control} name="desconto" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Desconto</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="R$ 0,00"
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="inscricao" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Inscrição</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="R$ 0,00"
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="subtotal" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Subtotal</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="R$ 0,00"
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField control={form.control} name="total" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Total</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="R$ 0,00"
-                        value={field.value || ''}
-                        readOnly
-                        onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                {/* Situação — substitui o antigo campo Status */}
-                <FormField
-                  control={form.control}
-                  name="situacao_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Situação</FormLabel>
-                      <Select value={field.value || ''} onValueChange={field.onChange} disabled={isLoadingEnrollmentSituations}>
-                        <SelectTrigger className="w-full h-10">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {enrollmentSituations.map((s: any) => (
-                            <SelectItem key={String(s?.id)} value={String(s?.id)}>
-                              {s?.label || s?.name || s?.nome || s?.description || `Situação ${String(s?.id ?? '')}`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {/* Validade (dias) — substitui o antigo campo ID (opcional) */}
-                <FormField
-                  control={form.control}
-                  name="validade"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Validade (dias)</FormLabel>
-                      <Select value={field.value || ''} onValueChange={field.onChange}>
-                        <SelectTrigger className="w-full h-10">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="7">7</SelectItem>
-                          <SelectItem value="14">14</SelectItem>
-                          <SelectItem value="30">30</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* Preview visual do orçamento (substitui o campo JSON) */}
-              <BudgetPreview
-                title="Proposta Comercial"
-                clientName={selectedClient?.name || selectedClient?.nome || ''}
-                clientId={selectedClient?.id ? String(selectedClient.id) : undefined}
-                clientPhone={selectedClient?.config?.celular || selectedClient?.config?.telefone_residencial || ''}
-                clientEmail={selectedClient?.email || ''}
-                course={selectedCourseNormalized as any}
-                courseName={selectedCourseNormalized?.titulo || selectedCourseNormalized?.nome || ''}
-                turmaName={classOptionsWithFallback.find(t => String(t.value) === String(form.watch('id_turma')))?.label || ''}
-                module={normalizeModuleForTipo4(selectedModule) as any}
-                modules={previewModules}
-                discountLabel="Desconto"
-                discountAmountMasked={form.watch('desconto') || ''}
-                subtotalMasked={form.watch('subtotal') || ''}
-                totalMasked={form.watch('total') || ''}
-                validityDate={computeValidityDate(form.watch('validade'))}
-                validityDays={form.watch('validade')}
-                etapa1Discount={form.watch('etapa1_desconto') || 0}
-                inscricaoMasked={form.watch('inscricao') || ''}
-                fuelExternalText={form.watch('meta_texto_combustivel')}
-                parcelamento={{
-                  linhas: discountRows,
-                  texto_desconto: form.watch('meta_texto_desconto')
-                }}
-              />
+              </Tabs>
 
               <Dialog open={isFuelTextOpen} onOpenChange={setIsFuelTextOpen}>
                   <DialogContent className="max-w-3xl">
@@ -1814,7 +2193,9 @@ export default function ProposalsCreate() {
                                       <RichTextEditor
                                           value={field.value || ''}
                                           onChange={field.onChange}
-                                          placeholder="Digite o texto personalizado"
+                                          placeholder="Digite o texto personalizado. Digite { para ver os shortcodes."
+                                          enableShortcodeHints
+                                          shortcodes={CONTRACT_SHORTCODES}
                                       />
                                   </FormControl>
                               </FormItem>
@@ -1832,37 +2213,85 @@ export default function ProposalsCreate() {
           </Form>
         </CardContent>
       </Card>
-      {/* Rodapé fixo com ações */}
-      <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto py-3 flex flex-wrap items-center gap-2 justify-start">
-          <Button type="button" variant="ghost" onClick={handleBack}>
-            {/**
-             * pt-BR: Ícone de seta para esquerda para o botão Voltar.
-             * en-US: Left arrow icon for the Back button.
-             */}
-            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
-          </Button>
-          <Button type="button" variant="outline" onClick={handleViewDetails} disabled={!lastCreatedIdRef.current}>
-            {/**
-             * pt-BR: Botão para ver detalhes da proposta criada.
-             * en-US: Button to view details of the created proposal.
-             */}
-            <FileText className="h-4 w-4 mr-2" /> Ver detalhes
-          </Button>
-          <div className="ml-auto flex items-center gap-2">
-            <Button type="button" onClick={handleSaveContinue} disabled={createEnrollment.isPending}>
-              {/**
-               * pt-BR: Ícone de salvar para o fluxo “Salvar e Continuar”.
-               * en-US: Save icon for the “Save and Continue” flow.
-               */}
-              <Save className="h-4 w-4 mr-2" /> Salvar e Continuar
+      {/* Rodapé fixo com ações e navegação do Wizard */}
+      <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg">
+        <div className="container mx-auto py-2.5 px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+          {/* Lado Esquerdo: Navegação de Etapas (Anterior / Próximo / Etapa X de Y), Ver Detalhes e Total */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-start">
+            {/* Botão Anterior (se estiver na 1ª etapa, volta ao funil) */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={prevStep ? handlePrevStep : handleBack}
+              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+              <span>Anterior</span>
             </Button>
-            <Button type="button" onClick={handleSaveFinish} disabled={createEnrollment.isPending}>
-              {/**
-               * pt-BR: Ícone de confirmação para o fluxo “Salvar e Finalizar”.
-               * en-US: Confirmation icon for the “Save and Finish” flow.
-               */}
-              <CheckCircle className="h-4 w-4 mr-2" /> Salvar e Finalizar
+
+            {/* Botão Próximo */}
+            {nextStep && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleNextStep}
+                className="h-8 px-2.5 text-xs rounded-md font-medium text-primary border-primary/30 hover:bg-primary/5"
+              >
+                <span>Próximo</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            )}
+
+            <span className="text-xs text-muted-foreground font-medium px-1">
+              {safeCurrentStepIndex + 1} de {wizardSteps.length}
+            </span>
+
+            {/* Botão Ver Detalhes (quando ID existir) */}
+            {lastCreatedIdRef.current && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleViewDetails}
+                className="h-8 px-2.5 text-xs border-blue-200 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+              >
+                <FileText className="h-3.5 w-3.5 mr-1" /> Ver detalhes
+              </Button>
+            )}
+
+            <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
+
+            {/* Total Inline Discreto */}
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 text-xs">
+              <span className="text-muted-foreground">Total:</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {form.watch('total') ? (typeof form.watch('total') === 'number' ? `R$ ${form.watch('total').toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : form.watch('total')) : 'R$ 0,00'}
+              </span>
+            </div>
+          </div>
+
+          {/* Lado Direito: Ações de Salvar */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleSaveContinue}
+              disabled={createEnrollment.isPending}
+              className="h-8 px-3 text-xs"
+            >
+              <Save className="h-3.5 w-3.5 mr-1.5" /> Salvar e Continuar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSaveFinish}
+              disabled={createEnrollment.isPending}
+              className="h-8 px-3.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+            >
+              <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Salvar e Finalizar
             </Button>
           </div>
         </div>
@@ -1943,6 +2372,17 @@ export default function ProposalsCreate() {
         onChange={setQuickResponsibleData}
         onClose={handleCloseQuickResponsibleModal}
         onSubmit={handleQuickResponsibleSubmit}
+      />
+      <QuickTurmaModal
+        open={isQuickTurmaOpen}
+        onOpenChange={setIsQuickTurmaOpen}
+        idCurso={selectedCourseId}
+        courseName={selectedCourse?.nome || selectedCourse?.titulo}
+        onSuccess={(newTurma) => {
+          if (newTurma?.id) {
+            form.setValue('id_turma', String(newTurma.id), { shouldDirty: true, shouldValidate: true });
+          }
+        }}
       />
     </div>
   );

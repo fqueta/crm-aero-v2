@@ -43,7 +43,12 @@ class MatriculaController extends Controller
         $this->permissionService = new PermissionService();
         $this->default_funil_vendas_id = Qlib::qoption('default_funil_vendas_id');
         $this->default_etapa_vendas_id = Qlib::qoption('default_etapa_vendas_id');
-        $this->default_proposal_situacao_id = Qlib::qoption('default_proposal_situacao_id');
+        $defaultSituacao = Qlib::qoption('default_proposal_situacao_id');
+        if (empty($defaultSituacao)) {
+            $intPost = \App\Models\EnrollmentSituation::where('post_name', 'int')->first();
+            $defaultSituacao = $intPost ? $intPost->ID : 100;
+        }
+        $this->default_proposal_situacao_id = $defaultSituacao;
         $this->campos_status_assinatura = 'status_assinatura';
     }
 
@@ -1253,6 +1258,229 @@ class MatriculaController extends Controller
     }
 
     /**
+     * Validação cruzada da programação de pagamento (orc.parcelamento).
+     * pt-BR: Garante que a parcela selecionada existe nas linhas e que a
+     *        programação é construtível (PaymentScheduleService).
+     * @return array|null Mapa de erros por campo, ou null quando válido/ausente.
+     */
+    private function validateParcelamentoSnapshot(?array $orc): ?array
+    {
+        $parc = is_array($orc) ? ($orc['parcelamento'] ?? null) : null;
+        if (!is_array($parc)) {
+            return null;
+        }
+        $sel = trim((string) ($parc['parcela_selecionada'] ?? ''));
+        $linhas = $parc['linhas'] ?? [];
+        $hasInputs = $sel !== ''
+            || ($parc['primeira_parcela_valor'] ?? null) !== null
+            || ($parc['primeira_parcela_data'] ?? null) !== null
+            || ($parc['dia_pagamento'] ?? null) !== null;
+        if (!$hasInputs) {
+            return null;
+        }
+        if ($sel === '') {
+            return ['orc.parcelamento.parcela_selecionada' => ['Selecione a parcela do financiamento.']];
+        }
+        $found = false;
+        if (is_array($linhas)) {
+            foreach ($linhas as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                if ((string) ($row['parcelas'] ?? $row['parcela'] ?? '') === $sel) {
+                    $found = true;
+                    break;
+                }
+            }
+        }
+        if (!$found) {
+            return ['orc.parcelamento.parcela_selecionada' => ['Parcela selecionada não existe nas linhas da tabela.']];
+        }
+        if (isset($parc['primeira_parcela_valor']) && $parc['primeira_parcela_valor'] !== null && $parc['primeira_parcela_valor'] !== '') {
+            if (!is_numeric($parc['primeira_parcela_valor']) || (float) $parc['primeira_parcela_valor'] < 0) {
+                return ['orc.parcelamento.primeira_parcela_valor' => ['O valor da primeira parcela deve ser um número maior ou igual a zero.']];
+            }
+        }
+        if (isset($parc['primeira_parcela_data']) && $parc['primeira_parcela_data'] !== null && $parc['primeira_parcela_data'] !== '') {
+            if (!strtotime((string) $parc['primeira_parcela_data'])) {
+                return ['orc.parcelamento.primeira_parcela_data' => ['Data da primeira parcela inválida.']];
+            }
+        }
+        if (isset($parc['dia_pagamento']) && $parc['dia_pagamento'] !== null && $parc['dia_pagamento'] !== '') {
+            $dia = (int) $parc['dia_pagamento'];
+            if ($dia < 1 || $dia > 31) {
+                return ['orc.parcelamento.dia_pagamento' => ['O dia do pagamento deve ser entre 1 e 31.']];
+            }
+        }
+        $service = new \App\Services\PaymentSchedule\PaymentScheduleService();
+        if (empty($service->build($parc)['programacao'])) {
+            return ['orc.parcelamento' => ['Programação de pagamento inválida para os dados informados.']];
+        }
+        return null;
+    }
+
+    /**
+     * Injeta a programação de pagamento no $dm para os shortcodes
+     * {tabela_parcelas} / {cronograma_parcelas} (+ escalares de apoio).
+     * pt-BR: Sem plano válido, injeta strings vazias para não quebrar o contrato.
+     */
+    private function injectTabelaParcelas(array $dm, $matriculaId): array
+    {
+        $dm['tabela_parcelas'] = '';
+        $dm['cronograma_parcelas'] = '';
+        $dm['dia_vencimento_parcelas'] = '';
+        $dm['dia_pagamento'] = '';
+        $dm['data_primeira_parcela'] = '';
+        $dm['primeira_parcela_data'] = '';
+        $dm['primeira_parcela_valor'] = '';
+        $dm['qtd_parcelas'] = '';
+        $dm['total_parcelas'] = '';
+        $dm['valor_parcela'] = '';
+        $dm['desconto_pontualidade'] = '';
+        $dm['parcela_com_desconto'] = '';
+        $dm['texto_desconto'] = '';
+
+        $dm['valor_matricula'] = '';
+        $dm['taxa_matricula'] = '';
+        $dm['vencimento_matricula'] = '';
+        $dm['data_vencimento_matricula'] = '';
+        $dm['recebimento_matricula'] = '';
+        $dm['forma_recebimento_matricula'] = '';
+        $dm['numero_matricula'] = '';
+        $dm['id_matricula'] = '';
+        $dm['forma_pagamento'] = '';
+        $dm['metodo_pagamento'] = '';
+        $dm['tabela_parcelamento'] = '';
+        $dm['nome_tabela_parcelamento'] = '';
+
+        try {
+            $matricula = \App\Models\Matricula::find($matriculaId);
+            if ($matricula) {
+                $service = new \App\Services\PaymentSchedule\PaymentScheduleService();
+                $dm['numero_matricula'] = (string) $matricula->id;
+                $dm['id_matricula'] = (string) $matricula->id;
+
+                $valorMatriculaNum = (float) ($matricula->inscricao ?? 0);
+                if ($valorMatriculaNum > 0) {
+                    $dm['valor_matricula'] = $service->formatBRL($valorMatriculaNum);
+                    $dm['taxa_matricula'] = $dm['valor_matricula'];
+                }
+
+                $schedule = $service->forMatricula($matricula);
+                if (!empty($schedule)) {
+                    $recMat = $schedule['recebimento_matricula'] ?? 'diluida';
+                    $recLabels = [
+                        'avulsa' => 'Parcela avulsa (cobrança separada)',
+                        'primeira_parcela' => 'Junto com a 1ª parcela',
+                        'diluida' => 'Diluída nas parcelas',
+                    ];
+                    $dm['recebimento_matricula'] = $recLabels[$recMat] ?? $recMat;
+                    $dm['forma_recebimento_matricula'] = $dm['recebimento_matricula'];
+
+                    $matVencData = $schedule['matricula_vencimento'] ?? ($schedule['matricula_vencimento_data'] ?? null);
+                    if (!empty($matVencData)) {
+                        $dm['vencimento_matricula'] = $service->formatDateBR($matVencData);
+                        $dm['data_vencimento_matricula'] = $dm['vencimento_matricula'];
+                    }
+
+                    // Identificação da tabela de parcelamento e forma de pagamento empregada
+                    $tabelaId = $schedule['tabela_id'] 
+                        ?? ($matricula->parcelamento_id 
+                        ?? ($matricula->orc['parcelamento']['tabela_id'] ?? null));
+
+                    if (!empty($tabelaId)) {
+                        $tabela = \App\Models\Parcelamento::find($tabelaId);
+                        if ($tabela) {
+                            $dm['tabela_parcelamento'] = (string) $tabela->nome;
+                            $dm['nome_tabela_parcelamento'] = (string) $tabela->nome;
+
+                            $metodo = $tabela->metodo_pagamento 
+                                ?? ($tabela->config['metodo_pagamento'] 
+                                ?? ($tabela->config['forma_pagamento'] ?? null));
+
+                            $metodoMap = [
+                                'boleto' => 'Boleto Bancário',
+                                'credit_card' => 'Cartão de Crédito',
+                                'cartao' => 'Cartão de Crédito',
+                                'cartao_credito' => 'Cartão de Crédito',
+                                'debit_card' => 'Cartão de Débito',
+                                'cartao_debito' => 'Cartão de Débito',
+                                'pix' => 'PIX',
+                                'cash' => 'Dinheiro',
+                                'dinheiro' => 'Dinheiro',
+                                'bank_transfer' => 'Transferência Bancária',
+                                'transferencia' => 'Transferência Bancária',
+                                'check' => 'Cheque',
+                                'cheque' => 'Cheque',
+                            ];
+
+                            if (!empty($metodo) && isset($metodoMap[strtolower((string) $metodo)])) {
+                                $dm['forma_pagamento'] = $metodoMap[strtolower((string) $metodo)];
+                            } elseif (!empty($metodo)) {
+                                $dm['forma_pagamento'] = ucfirst((string) $metodo);
+                            } else {
+                                $dm['forma_pagamento'] = (string) $tabela->nome;
+                            }
+                            $dm['metodo_pagamento'] = $dm['forma_pagamento'];
+                        }
+                    }
+                }
+
+                // Fallback para forma_pagamento em meta/orc se ainda não definido
+                if (empty($dm['forma_pagamento'])) {
+                    $fpMeta = $matricula->meta['forma_pagamento'] 
+                        ?? ($matricula->orc['meta']['forma_pagamento'] 
+                        ?? ($matricula->config['forma_pagamento'] ?? null));
+                    if (!empty($fpMeta)) {
+                        $dm['forma_pagamento'] = (string) $fpMeta;
+                        $dm['metodo_pagamento'] = (string) $fpMeta;
+                    }
+                }
+
+                if (!empty($schedule['programacao'])) {
+                    $dm['tabela_parcelas'] = $service->toHtmlTable($schedule['programacao'], (float) ($schedule['total'] ?? 0));
+                    $dm['cronograma_parcelas'] = $dm['tabela_parcelas'];
+                    $dm['dia_vencimento_parcelas'] = $schedule['dia_pagamento'] ?? '';
+                    $dm['dia_pagamento'] = $dm['dia_vencimento_parcelas'];
+                    $dm['data_primeira_parcela'] = $service->formatDateBR($schedule['primeira_parcela']['data'] ?? '');
+                    $dm['primeira_parcela_data'] = $dm['data_primeira_parcela'];
+                    if (isset($schedule['primeira_parcela']['valor']) && $schedule['primeira_parcela']['valor'] !== null && $schedule['primeira_parcela']['valor'] !== '') {
+                        $dm['primeira_parcela_valor'] = $service->formatBRL((float) $schedule['primeira_parcela']['valor']);
+                    }
+                    $dm['qtd_parcelas'] = (string) ($schedule['qtd'] ?? '');
+                    $dm['total_parcelas'] = $dm['qtd_parcelas'];
+
+                    // Detalhes de desconto da linha selecionada (Vendas / Parcelamento)
+                    $disc = $service->resolveDiscountDetails($schedule);
+                    $dm['valor_parcela'] = $disc['valor'] > 0 ? $service->formatBRL($disc['valor']) : (isset($schedule['valor_parcela']) ? $service->formatBRL((float) $schedule['valor_parcela']) : '');
+                    $dm['desconto_pontualidade'] = $service->formatBRL($disc['desconto']);
+                    $dm['parcela_com_desconto'] = $service->formatBRL($disc['liquido']);
+
+                    // Texto de desconto configurado na proposta (com shortcodes resolvidos)
+                    $textoDesc = $schedule['texto_preview_html'] ?? ($schedule['texto_desconto'] ?? '');
+                    if (!empty($textoDesc)) {
+                        $dm['texto_desconto'] = str_ireplace(
+                            ['{total_parcelas}', '{qtd_parcelas}', '{valor_parcela}', '{desconto_pontualidade}', '{parcela_com_desconto}'],
+                            [$dm['total_parcelas'], $dm['qtd_parcelas'], $dm['valor_parcela'], $dm['desconto_pontualidade'], $dm['parcela_com_desconto']],
+                            $textoDesc
+                        );
+                    }
+                }
+
+                // Injeta valor_total se ausente
+                if (empty($dm['valor_total'])) {
+                    if (isset($matricula->total) && is_numeric($matricula->total)) {
+                        $dm['valor_total'] = $service->formatBRL((float) $matricula->total);
+                    } elseif (!empty($schedule['total']) && is_numeric($schedule['total'])) {
+                        $dm['valor_total'] = $service->formatBRL((float) $schedule['total']);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+        return $dm;
+    }
+
+    /**
      * Verifica se um valor parece ser um UUID (v4).
      * Checks whether a value looks like a UUID (v4).
      */
@@ -1312,6 +1540,17 @@ class MatriculaController extends Controller
                 if (is_string($v)) {
                     $v = str_replace([','], ['.'], trim($v));
                     $data[$k] = ($v === '' ? null : (float)$v);
+                }
+            }
+        }
+        // Normalizar programação de pagamento (orc.parcelamento): '' -> null
+        if (isset($data['orc']['parcelamento']) && is_array($data['orc']['parcelamento'])) {
+            foreach (['parcela_selecionada','primeira_parcela_valor','primeira_parcela_data','dia_pagamento'] as $k) {
+                if (array_key_exists($k, $data['orc']['parcelamento'])) {
+                    $v = $data['orc']['parcelamento'][$k];
+                    if (is_string($v) && trim($v) === '') {
+                        $data['orc']['parcelamento'][$k] = null;
+                    }
                 }
             }
         }
@@ -1452,6 +1691,14 @@ class MatriculaController extends Controller
         $validated = $validator->validated();
 
         // Pós-validação removida: validação via regra exists já garante integridade
+
+        // Validação cruzada da programação de pagamento (orc.parcelamento)
+        if ($snapshotErrors = $this->validateParcelamentoSnapshot($input['orc'] ?? null)) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => $snapshotErrors,
+            ], 422);
+        }
 
         $matricula = new Matricula();
         // se o funnel_id não foi informado, usar o default
@@ -2178,6 +2425,15 @@ class MatriculaController extends Controller
         $validated = $validator->validated();
 
         // Pós-validação removida: validação via regra exists já garante integridade
+
+        // Validação cruzada da programação de pagamento (orc.parcelamento)
+        if ($snapshotErrors = $this->validateParcelamentoSnapshot($input['orc'] ?? null)) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => $snapshotErrors,
+            ], 422);
+        }
+
         $matricula->fill($validated);
         $matricula->save();
 
@@ -2665,6 +2921,7 @@ class MatriculaController extends Controller
                 $dm['nome_testemunha2'] = $testemunhas[1]['name']??'';
                 $dm['cpf_testemunha2'] = $testemunhas[1]['cpf']??'';
                 $dm['data_contrato_aceito'] = Qlib::dataLocal();
+                $dm = $this->injectTabelaParcelas($dm, $id);
                 $assinar = $this->helper_assinar($testemunhas);
                 if(is_array($assinar) && count($assinar)){
                     $dm = array_merge($dm,$assinar);
@@ -2915,6 +3172,7 @@ class MatriculaController extends Controller
                 $dm['cpf_testemunha2'] = $testemunhas[1]['cpf'] ?? '';
                 $dm['data_contrato_aceito'] = Qlib::dataLocal();
 
+                $dm = $this->injectTabelaParcelas($dm, $id);
                 $assinar = $this->helper_assinar($testemunhas);
                 if (is_array($assinar) && count($assinar)) {
                     $dm = array_merge($dm, $assinar);
@@ -3268,6 +3526,21 @@ class MatriculaController extends Controller
             $matricula->config = $config;
 
             $matricula->save();
+
+            // Congelar programação de pagamento aprovada (inputs + cronograma calculado).
+            // pt-BR: Snapshot imutável p/ contrato ({tabela_parcelas}) e cobrança Asaas.
+            try {
+                $schedule = (new \App\Services\PaymentSchedule\PaymentScheduleService())->forMatricula($matricula->fresh());
+                if (!empty($schedule['programacao'])) {
+                    $frozen = $matricula->config ?? [];
+                    $frozen['financiamento_aprovado'] = array_merge($schedule, [
+                        'approved_at' => now()->toDateTimeString(),
+                    ]);
+                    $matricula->config = $frozen;
+                    $matricula->save();
+                }
+            } catch (\Throwable $e) {}
+
             $this->persistMatriculaMeta($matricula->id, $this->extractPublicAdministrationMeta($request));
 
             //mudança de etapa da matricula

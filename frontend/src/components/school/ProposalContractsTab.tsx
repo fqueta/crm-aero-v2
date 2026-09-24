@@ -20,7 +20,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { proposalService } from '@/services/proposalService';
 import {
   Loader2, AlertCircle, FileText, ExternalLink, Pencil, Save, X,
-  RotateCcw, Send, Copy, Check, CheckCircle2, Zap, Info, User, Eye, Code,
+  RotateCcw, Send, Copy, Check, CheckCircle2, Zap, Info, User, Eye, Code, CreditCard,
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -431,6 +431,12 @@ export default function ProposalContractsTab({
           {/* Barra de Ações (modo leitura) */}
           {canEdit && !isEditing && (
             <div className="flex gap-2 flex-wrap justify-end">
+              {onGoToOverview && (
+                <Button variant="outline" size="sm" onClick={onGoToOverview} className="border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Ver Parcelamento
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={handlePreviewPdf} disabled={isPreviewingPdf}>
                 {isPreviewingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
                 Preview PDF
@@ -502,20 +508,39 @@ export default function ProposalContractsTab({
               <CardContent>
                 {!isEditing ? (
                   pdfsToSend.length > 0 ? (
-                    <ul className="space-y-2">
-                      {pdfsToSend.map((doc, idx) => (
-                        <li key={idx} className="flex items-center justify-between text-sm p-2 bg-background rounded border">
-                          <span className="truncate mr-2" title={doc.name}>{doc.name}</span>
-                          <Button variant="ghost" size="sm" asChild className="h-6 w-6 p-0">
-                            <a href={doc.url} target="_blank" rel="noopener noreferrer" title="Abrir PDF">
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
+                    <div className="space-y-3">
+                      <ul className="space-y-2">
+                        {pdfsToSend.map((doc, idx) => (
+                          <li key={idx} className="flex items-center justify-between text-sm p-2 bg-background rounded border">
+                            <span className="truncate mr-2" title={doc.name}>{doc.name}</span>
+                            <Button variant="ghost" size="sm" asChild className="h-6 w-6 p-0">
+                              <a href={doc.url} target="_blank" rel="noopener noreferrer" title="Abrir PDF">
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                      {onGoToOverview && (
+                        <div className="pt-2 border-t flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Condições e tabela de parcelas:</span>
+                          <Button variant="link" size="sm" onClick={onGoToOverview} className="h-auto p-0 text-emerald-600 dark:text-emerald-400 font-semibold gap-1">
+                            <CreditCard className="h-3.5 w-3.5" />
+                            Ver parcelamento na aba Geral
                           </Button>
-                        </li>
-                      ))}
-                    </ul>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground italic">Nenhum documento PDF gerado.</p>
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground italic">Nenhum documento PDF gerado.</p>
+                      {onGoToOverview && (
+                        <Button variant="outline" size="sm" onClick={onGoToOverview} className="w-full text-xs h-8 border-dashed border-emerald-300 text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 gap-1.5">
+                          <CreditCard className="h-3.5 w-3.5" />
+                          Consultar parcelamento da proposta (Aba Geral)
+                        </Button>
+                      )}
+                    </div>
                   )
                 ) : (
                   <div className="space-y-4">

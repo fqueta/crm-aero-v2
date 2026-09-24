@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { CONTRACT_SHORTCODES } from '@/lib/contractShortcodes';
 import { Badge } from '@/components/ui/badge';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -969,7 +970,9 @@ export default function TableInstallment() {
                   { label: '{total_parcelas}', desc: 'Total Parc.' },
                   { label: '{valor_parcela}', desc: 'Vlr. Parc.' },
                   { label: '{desconto_pontualidade}', desc: 'Desc.' },
-                  { label: '{parcela_com_desconto}', desc: 'Líquido' }
+                  { label: '{parcela_com_desconto}', desc: 'Líquido' },
+                  { label: '{forma_pagamento}', desc: 'Forma Pgto.' },
+                  { label: '{taxa_matricula}', desc: 'Matrícula' },
                 ].map((v) => (
                   <button
                     key={`obs-${v.label}`}
@@ -990,7 +993,9 @@ export default function TableInstallment() {
               <RichTextEditor
                 value={obs}
                 onChange={setObs}
-                placeholder="Adicione observações da tabela para o contrato..."
+                placeholder="Adicione observações da tabela para o contrato... Digite { ou Shift+Espaço para ver os shortcodes."
+                enableShortcodeHints
+                shortcodes={CONTRACT_SHORTCODES}
               />
             </div>
           </div>

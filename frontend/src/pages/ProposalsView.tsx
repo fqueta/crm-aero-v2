@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import ProposalViewContent from '@/components/school/ProposalViewContent';
+import AsaasBillingSection from '@/components/school/AsaasBillingSection';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
 import { useAuth } from '@/contexts/AuthContext';
@@ -179,6 +180,9 @@ export default function ProposalsView() {
     <div className="container mx-auto py-6 space-y-6">
       {/* Conteúdo principal */}
       {id ? <ProposalViewContent id={String(id)} /> : null}
+
+      {/* Cobranças Asaas da matrícula */}
+      {id ? <AsaasBillingSection matriculaId={String(id)} /> : null}
 
       {/* Overlay de carregamento do PDF */}
       {isPdfLoading && (

@@ -6,8 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\api\MatriculaController;
 use App\Http\Controllers\api\ZapguruController;
 use App\Http\Controllers\api\ApiCredentialController;
-use App\Jobs\GeraPdfContratoJoub;
-use App\Jobs\SendZapsingJoub;
+use App\Jobs\GenerateAsaasBillingJob;
 use App\Models\User;
 use App\Services\Qlib;
 use App\Services\BrevoService;
@@ -185,6 +184,17 @@ class ZapsingController extends Controller
             $emails = Qlib::qoption('zapsing_notify_emails') ?: ['quetafernando1@gmail.com','ger.maisaqui3@gmail.com'];
             if (is_string($emails)) $emails = \App\Services\Qlib::lib_json_array($emails);
             $ret['notify_brevo'] = BrevoService::notifySignatureCompleted($emails, $d);
+            // Cobrança Asaas a partir do financiamento aprovado (só envelope do aluno;
+            // o job é idempotente e a conta financeira serve à conciliação do webhook).
+            if ($id_matricula && !$is_resp) {
+                try {
+                    GenerateAsaasBillingJob::dispatch((int) $id_matricula);
+                    $ret['asaas_billing_queued'] = true;
+                } catch (\Throwable $e) {
+                    Log::warning('Asaas: falha ao enfileirar cobrança.', ['matricula_id' => $id_matricula, 'error' => $e->getMessage()]);
+                    $ret['asaas_billing_queued'] = false;
+                }
+            }
         }
 
         return $ret;

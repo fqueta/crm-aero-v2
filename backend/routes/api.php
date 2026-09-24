@@ -190,7 +190,7 @@ Route::name('api.')->prefix('v1')->middleware([
          ]]);
          Route::get('service-orders/trash', [ServiceOrderController::class, 'trash'])->name('service-orders.trash');
          Route::put('service-orders/{id}/restore', [ServiceOrderController::class, 'restore'])->name('service-orders.restore');
-         Route::put('service-orders/{id}/status ', [ServiceOrderController::class, 'updateStatus'])->name('service-orders.update-status');
+         Route::put('service-orders/{id}/status', [ServiceOrderController::class, 'updateStatus'])->name('service-orders.update-status');
          Route::delete('service-orders/{id}/force', [ServiceOrderController::class, 'forceDelete'])->name('service-orders.forceDelete');
 
          // Rotas para dashboard-metrics
@@ -291,24 +291,4 @@ Route::post('matriculas/{id}/revoke-approval', [\App\Http\Controllers\api\Matric
     // Rotas para webhooks
     Route::any('webhook/{endp1}', [WebhookController::class, 'handleSingleEndpoint'])->name('webhook.single');
     Route::any('webhook/{endp1}/{endp2}', [WebhookController::class, 'handleDoubleEndpoint'])->name('webhook.double');
-});
-
-// Rota de teste sem middleware de tenancy
-Route::post('/v1/teste-json-simple', function(\Illuminate\Http\Request $request) {
-    \Log::info('Teste JSON Simple - request->all():', $request->all());
-    \Log::info('Teste JSON Simple - request->json()->all():', $request->json()->all() ?? []);
-    \Log::info('Teste JSON Simple - request->getContent():', [$request->getContent()]);
-    \Log::info('Teste JSON Simple - Content-Type:', [$request->header('Content-Type')]);
-
-    // Tratar codificação UTF-8
-    $rawContent = $request->getContent();
-    $cleanContent = mb_convert_encoding($rawContent, 'UTF-8', 'UTF-8');
-
-    return response()->json([
-        'request_all' => $request->all(),
-        'request_json' => $request->json()->all() ?? [],
-        'raw_content' => $cleanContent,
-        'content_type' => $request->header('Content-Type'),
-        'encoding_fixed' => true
-    ]);
 });
