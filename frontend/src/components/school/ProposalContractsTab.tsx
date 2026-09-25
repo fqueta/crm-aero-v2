@@ -768,8 +768,8 @@ export default function ProposalContractsTab({
           </CardHeader>
           <CardContent className="pt-6">
             {!responsavelManager.localResponsavel && (
-              <Alert className="mb-6 bg-amber-50 border-amber-200 text-amber-800 py-3">
-                <Info className="h-4 w-4 text-amber-600" />
+              <Alert className="mb-6 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 py-3">
+                <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 <AlertDescription className="text-xs font-medium">
                   Nenhum responsável financeiro vinculado a esta matrícula. Vincule um fiador acima para habilitar a geração de contratos e o envio para assinatura.
                 </AlertDescription>
@@ -807,8 +807,8 @@ export default function ProposalContractsTab({
                   ) : (
                     <div className="space-y-4">
                       {editableContractsResp.map((contract, idx) => (
-                        <div key={idx} className="p-2.5 border border-indigo-100 rounded-md bg-white space-y-2 shadow-sm">
-                          <Label className="text-[10px] text-indigo-600 font-bold uppercase">Contrato do Responsável {idx + 1}</Label>
+                        <div key={idx} className="p-2.5 border border-indigo-100 dark:border-indigo-900/40 rounded-md bg-white dark:bg-zinc-900 space-y-2 shadow-sm">
+                          <Label className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase">Contrato do Responsável {idx + 1}</Label>
                           <Input 
                             value={contract.nome_contrato || contract.name || ''} 
                             onChange={(e) => handleContractChangeResp(idx, 'nome_contrato', e.target.value)} 

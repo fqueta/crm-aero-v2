@@ -84,7 +84,7 @@ function getStatusMeta(status?: string) {
       code: 'g' as const,
       label: 'Ganho',
       description: 'A proposta foi convertida em venda.',
-      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
     };
   }
 
@@ -93,7 +93,7 @@ function getStatusMeta(status?: string) {
       code: 'p' as const,
       label: 'Perda',
       description: 'A proposta foi encerrada como perdida.',
-      badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+      badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800',
     };
   }
 
@@ -101,7 +101,7 @@ function getStatusMeta(status?: string) {
     code: 'a' as const,
     label: 'Atendimento',
     description: 'A proposta segue em acompanhamento comercial.',
-    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
   };
 }
 
@@ -854,7 +854,7 @@ export default function ProposalAttendanceCard({
 
   return (
     <>
-      <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">
+      <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/40 border border-border/40">
         <CardHeader className="pb-3 border-b border-border/40">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-primary/10 text-primary">

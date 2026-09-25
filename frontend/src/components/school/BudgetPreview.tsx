@@ -213,10 +213,10 @@ export default function BudgetPreview({
     }
 
     return (
-      <div key={stageName} className="mb-6">
+      <div key={stageName} className="mb-6 rounded-md border border-border overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-[#003366] hover:bg-[#003366]">
+            <TableRow className="bg-[#003366] dark:bg-slate-900/90 hover:bg-[#003366] dark:hover:bg-slate-900/90 border-b border-border">
                 <TableHead className="w-[100px] text-center text-white font-bold whitespace-nowrap">{stageName}</TableHead>
                 <TableHead className="text-white font-bold">Conteúdo</TableHead>
                 <TableHead className="text-white font-bold">{isEtapa1 ? 'Aula' : 'Aeronave'}</TableHead>
@@ -231,23 +231,23 @@ export default function BudgetPreview({
               
               if (isEtapa1) {
                  return (
-                  <TableRow key={`${stageName}-${idx}`} className="even:bg-muted/10">
-                    <TableCell className="text-center font-medium">{idx + 1}</TableCell>
-                    <TableCell>{modTitle}</TableCell>
-                    <TableCell>Ground School</TableCell>
-                    <TableCell className="text-right pr-4">{modValor}</TableCell>
+                  <TableRow key={`${stageName}-${idx}`} className="even:bg-muted/10 border-b border-border">
+                    <TableCell className="text-center font-medium text-foreground">{idx + 1}</TableCell>
+                    <TableCell className="text-foreground">{modTitle}</TableCell>
+                    <TableCell className="text-foreground">Ground School</TableCell>
+                    <TableCell className="text-right pr-4 text-foreground">{modValor}</TableCell>
                   </TableRow>
                  );
               } else {
                 const modCreditos = parseToNumber(mod?.limite);
                 const modAircraft = mod?.aircraft_name || mod?.aviao_nome || '—';
                 return (
-                  <TableRow key={`${stageName}-${idx}`} className="even:bg-muted/10">
-                    <TableCell className="font-medium pl-4">{idx + (stageModules.length > 8 ? 8 : 1)}</TableCell>
-                    <TableCell>{modTitle}</TableCell>
-                    <TableCell>{modAircraft}</TableCell>
-                    <TableCell className="text-center">{modCreditos}</TableCell>
-                    <TableCell className="text-right pr-4">{modValor}</TableCell>
+                  <TableRow key={`${stageName}-${idx}`} className="even:bg-muted/10 border-b border-border">
+                    <TableCell className="font-medium pl-4 text-foreground">{idx + (stageModules.length > 8 ? 8 : 1)}</TableCell>
+                    <TableCell className="text-foreground">{modTitle}</TableCell>
+                    <TableCell className="text-foreground">{modAircraft}</TableCell>
+                    <TableCell className="text-center text-foreground">{modCreditos}</TableCell>
+                    <TableCell className="text-right pr-4 text-foreground">{modValor}</TableCell>
                   </TableRow>
                 );
               }
@@ -255,27 +255,27 @@ export default function BudgetPreview({
             
             {/* Footer da Etapa */}
             {!isEtapa1 && (
-            <TableRow className="bg-[#22c55e] hover:bg-[#22c55e] border-t-0">
+            <TableRow className="border-t-0 hover:bg-transparent">
                <TableCell colSpan={5} className="p-0 border-0">
-                   <div className="flex flex-col w-full bg-white">
+                   <div className="flex flex-col w-full bg-card dark:bg-zinc-900 border-t border-border">
                         {/* Subtotal */}
-                        <div className="flex justify-end items-center py-1 pr-4 border-b">
-                            <span className="font-bold mr-4 text-sm">Subtotal:</span>
-                            <span className="font-bold text-sm">{formatValue(stageSubtotal)}</span>
+                        <div className="flex justify-end items-center py-2 pr-4 border-b border-border">
+                            <span className="font-bold mr-4 text-sm text-muted-foreground">Subtotal:</span>
+                            <span className="font-bold text-sm text-foreground">{formatValue(stageSubtotal)}</span>
                         </div>
                         {/* Desconto */}
                         {stageDiscount > 0 && (
-                            <div className="flex justify-end items-center py-1 pr-4 border-b">
-                                <span className="font-bold mr-4 text-sm text-red-600 uppercase">
+                            <div className="flex justify-end items-center py-2 pr-4 border-b border-border">
+                                <span className="font-bold mr-4 text-sm text-red-600 dark:text-red-400 uppercase">
                                     {isEtapa1 ? 'Desconto especial' : (discountLabel || 'Desconto')}:
                                 </span>
-                                <span className="font-bold text-sm text-red-600">- {formatValue(stageDiscount)}</span>
+                                <span className="font-bold text-sm text-red-600 dark:text-red-400">- {formatValue(stageDiscount)}</span>
                             </div>
                         )}
                         {/* Total Etapa */}
-                        <div className="flex justify-end items-center py-1 pr-4 bg-muted/10">
-                            <span className="font-bold mr-4 text-sm text-green-600 uppercase">Total {stageName}:</span>
-                            <span className="font-bold text-sm text-green-600">{formatValue(stageTotal)}</span>
+                        <div className="flex justify-end items-center py-2 pr-4 bg-muted/20">
+                            <span className="font-bold mr-4 text-sm text-emerald-600 dark:text-emerald-400 uppercase">Total {stageName}:</span>
+                            <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{formatValue(stageTotal)}</span>
                         </div>
                    </div>
                </TableCell>
@@ -288,58 +288,58 @@ export default function BudgetPreview({
   };
 
   return (
-    <Card className="mt-6">
+    <Card className="mt-6 border-border bg-card">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
         {/* Cabeçalho com dados do cliente */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 p-6 rounded-2xl bg-zinc-50/50 border border-zinc-100 print:bg-white print:border-0 print:p-0 print:grid-cols-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-800 print:bg-white print:border-0 print:p-0 print:grid-cols-2">
           {clientName && (
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Cliente</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Cliente</span>
               <div className="flex items-center gap-2">
-                 <span className='font-bold text-sm'>{clientName}</span>
+                 <span className='font-bold text-sm text-foreground'>{clientName}</span>
                  {clientId && (
-                   <Badge variant="outline" className="text-[10px] h-4 px-1 font-normal opacity-70">#{String(clientId)}</Badge>
+                   <Badge variant="outline" className="text-[10px] h-4 px-1 font-normal opacity-80 border-border">#{String(clientId)}</Badge>
                  )}
               </div>
             </div>
           )}
           {clientPhone && (
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">WhatsApp / Contato</span>
-              <span className='font-bold text-sm'>{clientPhone}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">WhatsApp / Contato</span>
+              <span className='font-bold text-sm text-foreground'>{clientPhone}</span>
             </div>
           )}
           {clientEmail && (
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">E-mail</span>
-              <span className='font-bold text-sm'>{clientEmail}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">E-mail</span>
+              <span className='font-bold text-sm text-foreground'>{clientEmail}</span>
             </div>
           )}
           {courseName && (
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Plano / Curso</span>
-              <span className='font-bold text-sm'>{courseName}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Plano / Curso</span>
+              <span className='font-bold text-sm text-foreground'>{courseName}</span>
             </div>
           )}
           {turmaName && (
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Turma</span>
-              <span className='font-bold text-sm'>{turmaName}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Turma</span>
+              <span className='font-bold text-sm text-foreground'>{turmaName}</span>
             </div>
           )}
           <div className="flex gap-8">
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Emissão</span>
-              <span className='font-bold text-sm'>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Emissão</span>
+              <span className='font-bold text-sm text-foreground'>
                 {emissionDate ? new Date(emissionDate).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}
               </span>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Validade</span>
-              <span className='font-bold text-sm text-amber-600'>{validityDate || '—'}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">Validade</span>
+              <span className='font-bold text-sm text-amber-600 dark:text-amber-400'>{validityDate || '—'}</span>
             </div>
           </div>
         </div>
@@ -354,16 +354,18 @@ export default function BudgetPreview({
 
             {/* Etapa 3 - Combustível Estimado */}
             {fuelData && fuelData.valor > 0 && (
-              <div className="mb-6">
+              <div className="mb-6 rounded-md border border-border overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-[#003366] hover:bg-[#003366]">
-                       <TableHead className="w-[100px] text-white font-bold pl-4 whitespace-nowrap">Etapa 3</TableHead><TableHead className="text-white font-bold text-center">Conteúdo</TableHead><TableHead className="text-right text-white font-bold pr-4">Valor</TableHead>
+                    <TableRow className="bg-[#003366] dark:bg-slate-900/90 hover:bg-[#003366] dark:hover:bg-slate-900/90 border-b border-border">
+                       <TableHead className="w-[100px] text-white font-bold pl-4 whitespace-nowrap">Etapa 3</TableHead>
+                       <TableHead className="text-white font-bold text-center">Conteúdo</TableHead>
+                       <TableHead className="text-right text-white font-bold pr-4">Valor</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow className="even:bg-muted/10">
-                        <TableCell colSpan={3} className="p-4 text-sm leading-relaxed text-center">
+                    <TableRow className="even:bg-muted/10 border-b border-border">
+                        <TableCell colSpan={3} className="p-4 text-sm leading-relaxed text-center text-foreground">
                             {fuelExternalText ? (
                                 <div dangerouslySetInnerHTML={{ __html: fuelExternalText.replace('{valor}', formatValue(fuelData.valor)) }} />
                             ) : (
@@ -374,7 +376,7 @@ export default function BudgetPreview({
                         </TableCell>
                     </TableRow>
                     {/* Footer with total */}
-                    <TableRow className="bg-[#003366] hover:bg-[#003366] border-t-0">
+                    <TableRow className="bg-[#003366] dark:bg-slate-900/90 hover:bg-[#003366] dark:hover:bg-slate-900/90 border-t-0">
                        <TableCell colSpan={3} className="p-0 border-0">
                            <div className="flex justify-end items-center py-2 pr-4 text-white">
                                <span className="font-bold mr-4 text-sm uppercase">Valor Total com estimado de combustível:</span>
@@ -390,30 +392,31 @@ export default function BudgetPreview({
             {/* Resumo Financeiro Global / Total Final */}
              <div className="mt-0">
                {/* Tabela de Resumo Detalhado (Substitui o card de taxas e resumo anterior) */}
-               <Table className="border rounded-md bg-white shadow-sm mb-4">
+               <Table className="border border-border rounded-md bg-card dark:bg-zinc-900 shadow-sm mb-4 overflow-hidden">
                   <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="font-bold text-black">Descrição</TableHead><TableHead className="text-right font-bold text-black">Total</TableHead>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border">
+                      <TableHead className="font-bold text-foreground">Descrição</TableHead>
+                      <TableHead className="text-right font-bold text-foreground">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {/* Matrícula */}
-                    <TableRow>
-                      <TableCell className="font-medium">Matrícula</TableCell>
-                      <TableCell className="text-right font-bold">{formatValue(parseToNumber(inscricaoMasked))}</TableCell>
+                    <TableRow className="border-b border-border">
+                      <TableCell className="font-medium text-foreground">Matrícula</TableCell>
+                      <TableCell className="text-right font-bold text-foreground">{formatValue(parseToNumber(inscricaoMasked))}</TableCell>
                     </TableRow>
                     
                     {/* Totais por Etapa */}
                     {Object.keys(groupedModules).map((stageName) => (
-                      <TableRow key={`summary-${stageName}`}>
-                        <TableCell className="font-medium">{stageName}</TableCell>
-                        <TableCell className="text-right font-bold">{formatValue(getStageTotal(stageName))}</TableCell>
+                      <TableRow key={`summary-${stageName}`} className="border-b border-border">
+                        <TableCell className="font-medium text-foreground">{stageName}</TableCell>
+                        <TableCell className="text-right font-bold text-foreground">{formatValue(getStageTotal(stageName))}</TableCell>
                       </TableRow>
                     ))}
 
                     {/* Taxas do Curso */}
                     {course?.config?.taxas && Array.isArray(course.config.taxas) && course.config.taxas.map((taxa: any, idx: number) => (
-                      <TableRow key={`taxa-${idx}`}>
+                      <TableRow key={`taxa-${idx}`} className="border-b border-border">
                         <TableCell className="text-muted-foreground">{taxa.titulo}</TableCell>
                         <TableCell className="text-right text-muted-foreground">{formatValue(parseToNumber(taxa.valor))}</TableCell>
                       </TableRow>
@@ -424,9 +427,9 @@ export default function BudgetPreview({
                       const taxasTotal = (course?.config?.taxas || []).reduce((acc: number, t: any) => acc + parseToNumber(t.valor), 0);
                       if (taxasTotal > 0) {
                         return (
-                          <TableRow>
-                            <TableCell className="font-bold text-red-600">Total de taxas não inclusas no orçamento:</TableCell>
-                            <TableCell className="text-right font-bold text-red-600">{formatValue(taxasTotal)}</TableCell>
+                          <TableRow className="border-b border-border">
+                            <TableCell className="font-bold text-red-600 dark:text-red-400">Total de taxas não inclusas no orçamento:</TableCell>
+                            <TableCell className="text-right font-bold text-red-600 dark:text-red-400">{formatValue(taxasTotal)}</TableCell>
                           </TableRow>
                         );
                       }
@@ -434,8 +437,9 @@ export default function BudgetPreview({
                     })()}
 
                     {/* TOTAL DA PROPOSTA */}
-                    <TableRow className="bg-muted/20 border-t-2">
-                      <TableCell className="font-bold text-green-600 text-lg uppercase">TOTAL DA PROPOSTA A VISTA:</TableCell><TableCell className="text-right font-bold text-green-600 text-lg">{totalMasked}</TableCell>
+                    <TableRow className="bg-muted/20 border-t-2 border-border">
+                      <TableCell className="font-bold text-emerald-600 dark:text-emerald-400 text-lg uppercase">TOTAL DA PROPOSTA A VISTA:</TableCell>
+                      <TableCell className="text-right font-bold text-emerald-600 dark:text-emerald-400 text-lg">{totalMasked}</TableCell>
                     </TableRow>
                   </TableBody>
                </Table>
@@ -446,14 +450,14 @@ export default function BudgetPreview({
                  </div>
                )}
                
-               <div className="mt-4 p-4 border rounded-lg bg-blue-50 text-sm text-blue-900">
-                    <p className="font-bold mb-2">Observações Importantes</p>
+               <div className="mt-4 p-4 border rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/50 text-sm text-blue-950 dark:text-blue-200">
+                    <p className="font-bold mb-2 text-blue-900 dark:text-blue-100">Observações Importantes</p>
                     <p>Este orçamento possui validade de {validityDays}{validityDaysText ? ` (${validityDaysText})` : ''} dias a contar da data de envio. O valor apresentado poderá ser pago:</p>
                     <ul className="list-disc pl-5 mt-1 space-y-1">
                         <li>À vista, <strong>com desconto</strong> (já aplicado se houver);</li>
                         <li>Parcelado em até 12x no cartão de crédito (consulte condições).</li>
                     </ul>
-                    <p className="mt-2">
+                    <p className="mt-2 text-blue-900/80 dark:text-blue-300/80">
                         O custo estimado de combustível para esta proposta é variável. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento.
                     </p>
                </div>
@@ -462,18 +466,18 @@ export default function BudgetPreview({
                {parcelamento && Array.isArray(parcelamento.linhas) && parcelamento.linhas.length > 0 && (
                  <div className="mt-8 space-y-4">
                    <div className="flex items-center gap-2 mb-4">
-                     <div className="h-6 w-1 bg-[#003366] rounded-full" />
-                     <h3 className="text-sm font-bold uppercase tracking-wider text-[#003366]">Opções de Parcelamento</h3>
+                     <div className="h-6 w-1 bg-primary dark:bg-sky-500 rounded-full" />
+                     <h3 className="text-sm font-bold uppercase tracking-wider text-primary dark:text-sky-400">Opções de Parcelamento</h3>
                    </div>
                    
-                   <Table className="border rounded-md bg-white shadow-sm overflow-hidden">
+                   <Table className="border border-border rounded-md bg-card dark:bg-zinc-900 shadow-sm overflow-hidden">
                      <TableHeader>
-                       <TableRow className="bg-muted/50">
-                         <TableHead className="font-bold text-black text-center pr-0 uppercase text-[10px]">Parcelamento</TableHead>
-                         <TableHead className="font-bold text-black text-center uppercase text-[10px]">Valor da Parcela</TableHead>
-                         <TableHead className="font-bold text-black text-center uppercase text-[10px]">Desconto Pontualidade</TableHead>
-                         <TableHead className="font-bold text-black text-right uppercase text-[10px]">Parcela Líquida</TableHead>
-                         <TableHead className="font-bold text-black text-right uppercase text-[10px]">Total</TableHead>
+                       <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border">
+                         <TableHead className="font-bold text-foreground text-center pr-0 uppercase text-[10px]">Parcelamento</TableHead>
+                         <TableHead className="font-bold text-foreground text-center uppercase text-[10px]">Valor da Parcela</TableHead>
+                         <TableHead className="font-bold text-foreground text-center uppercase text-[10px]">Desconto Pontualidade</TableHead>
+                         <TableHead className="font-bold text-foreground text-right uppercase text-[10px]">Parcela Líquida</TableHead>
+                         <TableHead className="font-bold text-foreground text-right uppercase text-[10px]">Total</TableHead>
                        </TableRow>
                      </TableHeader>
                      <TableBody>
@@ -492,28 +496,28 @@ export default function BudgetPreview({
                          return (
                            <TableRow 
                              key={`budget-parc-${idx}`} 
-                             className={`transition-colors ${isSelected ? 'bg-blue-50/80 hover:bg-blue-100/80 border-l-4 border-l-[#003366] font-medium' : 'hover:bg-zinc-50/50'}`} 
+                             className={`transition-colors border-b border-border ${isSelected ? 'bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100/80 dark:hover:bg-blue-950/60 border-l-4 border-l-primary dark:border-l-sky-500 font-medium' : 'hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40'}`} 
                            >
-                             <TableCell className="text-center font-medium text-blue-700 bg-blue-50/30 whitespace-nowrap">
+                             <TableCell className="text-center font-medium text-blue-700 dark:text-blue-300 bg-blue-50/30 dark:bg-blue-950/20 whitespace-nowrap">
                                <div className="flex items-center justify-center gap-1.5">
                                  <span>{parcelaNum}{parcelaNum ? 'x' : ''}</span>
                                  {isSelected && (
-                                   <span className="text-[10px] bg-[#003366] text-white px-1.5 py-0.5 rounded-full font-semibold">
+                                   <span className="text-[10px] bg-primary dark:bg-sky-600 text-white px-1.5 py-0.5 rounded-full font-semibold">
                                      Opção Escolhida
                                    </span>
                                  )}
                                </div>
                              </TableCell>
-                             <TableCell className="text-center font-mono text-xs">
+                             <TableCell className="text-center font-mono text-xs text-foreground">
                                {formatValue(valorNum)}
                              </TableCell>
-                             <TableCell className="text-center font-mono text-xs text-red-600">
+                             <TableCell className="text-center font-mono text-xs text-red-600 dark:text-red-400">
                                {formatValue(descontoNum)}
                              </TableCell>
-                             <TableCell className="text-right font-bold text-green-700">
+                             <TableCell className="text-right font-bold text-emerald-600 dark:text-emerald-400">
                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(liquido)}
                              </TableCell>
-                             <TableCell className="text-right font-bold text-blue-700">
+                             <TableCell className="text-right font-bold text-blue-700 dark:text-blue-400">
                                {formatValue(totalParcelado)}
                              </TableCell>
                            </TableRow>
@@ -523,9 +527,9 @@ export default function BudgetPreview({
                     </Table>
                    
                    {parcelamento.texto_desconto && (
-                     <div className="p-4 rounded-xl border border-dashed border-blue-200 bg-blue-50/30">
+                     <div className="p-4 rounded-xl border border-dashed border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20">
                        <div 
-                         className="text-xs text-blue-800 leading-relaxed space-y-1"
+                         className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed space-y-1"
                          dangerouslySetInnerHTML={{ __html: (() => {
                             if (parcelamento.texto_preview_html) return parcelamento.texto_preview_html;
 
@@ -554,14 +558,14 @@ export default function BudgetPreview({
           </>
         ) : (
           /* Tabela para Módulo Único (Legacy) */
-          <Table>
+          <Table className="border border-border rounded-md bg-card dark:bg-zinc-900 shadow-sm overflow-hidden">
             <TableHeader>
-              <TableRow>
-                <TableHead>Descrição</TableHead>
-                <TableHead>Etapa</TableHead>
-                <TableHead>H. Teóricas</TableHead>
-                <TableHead>H. Práticas</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
+              <TableRow className="bg-muted/50 hover:bg-muted/50 border-b border-border">
+                <TableHead className="font-bold text-foreground">Descrição</TableHead>
+                <TableHead className="font-bold text-foreground">Etapa</TableHead>
+                <TableHead className="font-bold text-foreground">H. Teóricas</TableHead>
+                <TableHead className="font-bold text-foreground">H. Práticas</TableHead>
+                <TableHead className="text-right font-bold text-foreground">Valor</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -577,36 +581,36 @@ export default function BudgetPreview({
                   })();
 
                   return (
-                      <TableRow>
-                        <TableCell>{moduleTitle}</TableCell>
-                        <TableCell>{etapa || '—'}</TableCell>
-                        <TableCell>{horasTeoricas}</TableCell>
-                        <TableCell>{horasPraticas}</TableCell>
-                        <TableCell className="text-right">{valorItemMasked}</TableCell>
+                      <TableRow className="border-b border-border">
+                        <TableCell className="text-foreground">{moduleTitle}</TableCell>
+                        <TableCell className="text-foreground">{etapa || '—'}</TableCell>
+                        <TableCell className="text-foreground">{horasTeoricas}</TableCell>
+                        <TableCell className="text-foreground">{horasPraticas}</TableCell>
+                        <TableCell className="text-right text-foreground">{valorItemMasked}</TableCell>
                       </TableRow>
                   );
               })()}
 
               {discountAmountMasked && (
-                  <TableRow>
+                  <TableRow className="border-b border-border">
                     <TableCell colSpan={4}>
-                      <span className="text-red-600 font-medium">{discountLabel}</span>
+                      <span className="text-red-600 dark:text-red-400 font-medium">{discountLabel}</span>
                     </TableCell>
-                    <TableCell className="text-right text-red-600">- {discountAmountMasked}</TableCell>
+                    <TableCell className="text-right text-red-600 dark:text-red-400">- {discountAmountMasked}</TableCell>
                   </TableRow>
                 )}
 
               {subtotalMasked && (
-                <TableRow>
-                  <TableCell colSpan={4} className="font-medium">Subtotal</TableCell>
-                  <TableCell className="text-right font-medium">{subtotalMasked}</TableCell>
+                <TableRow className="border-b border-border">
+                  <TableCell colSpan={4} className="font-medium text-foreground">Subtotal</TableCell>
+                  <TableCell className="text-right font-medium text-foreground">{subtotalMasked}</TableCell>
                 </TableRow>
               )}
 
               {totalMasked && (
-                <TableRow>
-                  <TableCell colSpan={4} className="font-semibold">Total do Orçamento</TableCell>
-                  <TableCell className="text-right font-semibold">{totalMasked}</TableCell>
+                <TableRow className="border-b border-border">
+                  <TableCell colSpan={4} className="font-semibold text-emerald-600 dark:text-emerald-400">Total do Orçamento</TableCell>
+                  <TableCell className="text-right font-semibold text-emerald-600 dark:text-emerald-400">{totalMasked}</TableCell>
                 </TableRow>
               )}
             </TableBody>

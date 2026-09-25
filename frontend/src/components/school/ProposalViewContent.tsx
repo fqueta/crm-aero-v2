@@ -722,7 +722,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
           <TabsContent value="admin" className="mt-0 pt-4 animate-in fade-in slide-in-from-right-2 duration-500 outline-none">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               <div className="lg:col-span-8 space-y-8">
-                <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30">
+                <Card className="border-none shadow-sm rounded-2xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/40 border border-border/40">
                   <CardHeader className="pb-3 border-b border-border/40">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2">

@@ -2362,22 +2362,22 @@ export default function ProposalsCreate() {
             <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
 
             {/* Total da Proposta + Valor médio/hora */}
-            <div className="inline-flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-emerald-900 shadow-sm">
-              <div className="rounded-lg bg-emerald-100 p-2">
-                <CircleDollarSign className="h-4 w-4 text-emerald-700" />
+            <div className="inline-flex items-center gap-3 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-2 text-emerald-900 dark:text-emerald-200 shadow-sm">
+              <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/60 p-2">
+                <CircleDollarSign className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
               </div>
               <div className="leading-tight">
-                <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-700">Total da Proposta</p>
-                <p className="text-sm font-bold md:text-base">{footerTotalValue}{footerTotalCredits > 0 ? <span className="ml-2 text-xs font-semibold text-emerald-700/80">• {footerTotalCredits}h</span> : null}</p>
+                <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-700 dark:text-emerald-400">Total da Proposta</p>
+                <p className="text-sm font-bold md:text-base">{footerTotalValue}{footerTotalCredits > 0 ? <span className="ml-2 text-xs font-semibold text-emerald-700/80 dark:text-emerald-400/80">• {footerTotalCredits}h</span> : null}</p>
               </div>
             </div>
             {footerAvgHourly ? (
-              <div className="inline-flex items-center gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sky-900 shadow-sm">
-                <div className="rounded-lg bg-sky-100 p-2">
-                  <Clock className="h-4 w-4 text-sky-700" />
+              <div className="inline-flex items-center gap-3 rounded-xl border border-sky-200 dark:border-sky-800/60 bg-sky-50 dark:bg-sky-950/40 px-4 py-2 text-sky-900 dark:text-sky-200 shadow-sm">
+                <div className="rounded-lg bg-sky-100 dark:bg-sky-900/60 p-2">
+                  <Clock className="h-4 w-4 text-sky-700 dark:text-sky-400" />
                 </div>
                 <div className="leading-tight">
-                  <p className="text-[10px] uppercase font-bold tracking-widest text-sky-700">Valor médio / hora</p>
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-sky-700 dark:text-sky-400">Valor médio / hora</p>
                   <p className="text-sm font-bold md:text-base">{footerAvgHourly}/h</p>
                 </div>
               </div>

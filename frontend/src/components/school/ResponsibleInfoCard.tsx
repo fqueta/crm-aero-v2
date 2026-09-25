@@ -55,14 +55,14 @@ export default function ResponsibleInfoCard({ data, signatureLink }: Responsible
   if (!data?.name && !signatureLink) return null;
 
   return (
-    <Card className="border-amber-200 bg-amber-50/30 dark:bg-amber-900/10">
-      <CardHeader className="pb-3 text-sm">
+    <Card className="border-amber-200/80 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20">
+      <CardHeader className="pb-3 text-sm border-b border-amber-200/40 dark:border-amber-900/30">
         <CardTitle className="text-base font-semibold flex items-center gap-2 text-amber-900 dark:text-amber-400">
            <UserCheck className="h-5 w-5" />
            Responsável Financeiro
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2">
             <UserCheck className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -83,33 +83,33 @@ export default function ResponsibleInfoCard({ data, signatureLink }: Responsible
         </div>
 
         {signatureLink && (
-          <div className="pt-2 border-t border-amber-200/50">
-            <p className="text-xs font-medium text-amber-800 dark:text-amber-500 mb-2">Link para Assinatura (Responsável):</p>
+          <div className="pt-2 border-t border-amber-200/50 dark:border-amber-900/50">
+            <p className="text-xs font-medium text-amber-800 dark:text-amber-400 mb-2">Link para Assinatura (Responsável):</p>
             <div className="flex items-center space-x-2">
               <Input 
                 value={signatureLink} 
                 readOnly 
-                className="font-mono text-sm bg-white/80 dark:bg-zinc-950/50 border-amber-200" 
+                className="font-mono text-sm bg-white dark:bg-zinc-900/90 border-amber-200 dark:border-amber-800/80 text-foreground" 
                 onClick={(e) => e.currentTarget.select()}
               />
               <Button
                 variant="outline"
                 size="icon"
                 onClick={handleCopy}
-                className="border-amber-200 hover:bg-amber-100 h-10 w-10 shrink-0"
+                className="border-amber-200 dark:border-amber-800 bg-white dark:bg-zinc-900 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-300 h-10 w-10 shrink-0"
               >
-                {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                {copied ? <Check className="h-4 w-4 text-green-600 dark:text-green-400" /> : <Copy className="h-4 w-4" />}
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleOpen}
-                className="hover:bg-amber-100 h-10 w-10 shrink-0"
+                className="hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-300 h-10 w-10 shrink-0"
               >
                  <ExternalLink className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-[10px] text-amber-700/70 mt-1 italic">
+            <p className="text-[10px] text-amber-700/80 dark:text-amber-400/80 mt-1 italic">
               Este link deve ser enviado ao responsável financeiro para assinatura digital.
             </p>
           </div>

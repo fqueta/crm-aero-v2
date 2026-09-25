@@ -392,3 +392,8 @@ Tabela: Matrícula, etapas (exceto combustível), taxas, **desconto** (linha ver
    - `AppSidebar`: atualiza a logo automaticamente quando o evento `appearanceSettingsUpdated` é disparado.
    - `Login`: consome dinamicamente a logo salva pelo sistema com fallback para `/logo.png`.
 
+## Modo Escuro — Preview da Proposta Comercial (`BudgetPreview`)
+- **Problema:** Tabelas de subtotal por etapa, resumo financeiro ("Descrição \| Total") e opções de parcelamento continham `bg-white`, `text-black` e bordas claras hardcoded, causando blocos brancos com texto branco/invisível no modo escuro.
+- **Solução:** `frontend/src/components/school/BudgetPreview.tsx` totalmente adaptado com classes semânticas (`bg-card dark:bg-zinc-900`, `text-foreground`, `border-border`, `dark:bg-slate-900/90` para headers de etapas, e variações adequadas para badges de parcelamento e observações).
+- **Footer:** badges "Total da Proposta" e "Valor médio / hora" em `ProposalsEdit.tsx` e `ProposalsCreate.tsx` ajustadas com bordas e backgrounds suaves em dark mode (`dark:bg-emerald-950/40`, `dark:text-emerald-200`, `dark:border-emerald-800/60`).
+

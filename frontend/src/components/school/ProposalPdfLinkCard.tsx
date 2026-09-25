@@ -53,9 +53,9 @@ export default function ProposalPdfLinkCard({ pdfUrl }: ProposalPdfLinkCardProps
   if (!safeUrl) return null;
 
   return (
-    <Card className="border-none shadow-sm rounded-2xl bg-rose-50/30 overflow-hidden border border-rose-100/50">
-      <CardHeader className="pb-3 border-b border-rose-100/30">
-        <CardTitle className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-rose-800">
+    <Card className="border-none shadow-sm rounded-2xl bg-rose-50/40 dark:bg-rose-950/30 overflow-hidden border border-rose-200/60 dark:border-rose-900/40">
+      <CardHeader className="pb-3 border-b border-rose-100/40 dark:border-rose-900/40">
+        <CardTitle className="text-xs font-bold uppercase tracking-widest flex items-center gap-2 text-rose-700 dark:text-rose-300">
            <FileText className="h-4 w-4" /> Link da Proposta em PDF
         </CardTitle>
       </CardHeader>
@@ -64,7 +64,7 @@ export default function ProposalPdfLinkCard({ pdfUrl }: ProposalPdfLinkCardProps
           <Input 
             value={safeUrl} 
             readOnly 
-            className="font-mono text-[11px] bg-white border-rose-100 h-10 focus-visible:ring-rose-500" 
+            className="font-mono text-[11px] bg-white dark:bg-zinc-900/90 border-rose-200/80 dark:border-rose-900/50 text-slate-800 dark:text-slate-100 h-10 focus-visible:ring-rose-500" 
             onClick={(e) => e.currentTarget.select()}
           />
           <Button
@@ -72,7 +72,7 @@ export default function ProposalPdfLinkCard({ pdfUrl }: ProposalPdfLinkCardProps
             size="icon"
             onClick={handleCopy}
             title="Copiar link"
-            className="shrink-0 h-10 w-10 border-rose-100 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800"
+            className="shrink-0 h-10 w-10 border-rose-200 dark:border-rose-900/60 bg-white dark:bg-zinc-900 hover:bg-rose-50 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300"
           >
             {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
           </Button>
@@ -81,13 +81,13 @@ export default function ProposalPdfLinkCard({ pdfUrl }: ProposalPdfLinkCardProps
             size="icon"
             onClick={handleOpen}
             title="Visualizar PDF"
-            className="shrink-0 h-10 w-10 bg-rose-600 hover:bg-rose-700 shadow-sm text-white"
+            className="shrink-0 h-10 w-10 bg-rose-600 hover:bg-rose-700 dark:bg-rose-600 dark:hover:bg-rose-500 shadow-sm text-white"
           >
              <FileText className="h-4 w-4" />
           </Button>
         </div>
-        <p className="text-[11px] font-medium text-rose-700/60 mt-3 flex items-center gap-2">
-          <Info className="h-3.5 w-3.5" /> Acesse ou copie o link do arquivo PDF desta proposta.
+        <p className="text-[11px] font-medium text-rose-700/80 dark:text-rose-300/80 mt-3 flex items-center gap-2">
+          <Info className="h-3.5 w-3.5 shrink-0" /> Acesse ou copie o link do arquivo PDF desta proposta.
         </p>
       </CardContent>
     </Card>

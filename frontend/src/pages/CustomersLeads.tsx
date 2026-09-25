@@ -160,9 +160,9 @@ const getEnrollmentStatusLabel = (status?: string): string => {
  */
 const getEnrollmentStatusBadgeClass = (status?: string): string => {
   const normalized = String(status || 'a').toLowerCase();
-  if (normalized === 'g') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (normalized === 'p') return 'bg-rose-50 text-rose-700 border-rose-200';
-  return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (normalized === 'g') return 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60';
+  if (normalized === 'p') return 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60';
+  return 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60';
 };
 
 /**
@@ -1753,9 +1753,9 @@ function StageColumn({
 
   return (
     <div
-      className={`flex flex-col rounded-2xl border-none bg-zinc-50/50 backdrop-blur-sm transition-all duration-300 shadow-inner ${
+      className={`flex flex-col rounded-2xl border border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-100/70 dark:bg-zinc-900/40 backdrop-blur-sm transition-all duration-300 shadow-inner ${
         // Drag-over visual feedback
-        dropActive ? 'ring-2 ring-primary/50 bg-primary/5 shadow-2xl' : ''
+        dropActive ? 'ring-2 ring-primary/50 bg-primary/5 dark:bg-primary/10 shadow-2xl' : ''
       }`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -1770,7 +1770,7 @@ function StageColumn({
        * pt-BR: Mantém apenas a cor na borda inferior do header.
        * en-US: Keep only color on the header bottom border.
        */}
-      <div className="sticky top-0 z-10 rounded-t-xl overflow-hidden glass-header backdrop-blur-sm bg-background/80 border-b border-border/50 supports-[backdrop-filter]:bg-background/60">
+      <div className="sticky top-0 z-10 rounded-t-2xl overflow-hidden glass-header backdrop-blur-sm bg-card/90 dark:bg-zinc-900/90 border-b border-border/50 supports-[backdrop-filter]:bg-card/75">
         <div className="h-1.5 w-full" style={{ backgroundColor: stageColor }} />
         <div className="flex flex-col p-3.5 gap-2">
           <div className="flex items-center justify-between w-full">
@@ -1842,7 +1842,7 @@ function StageColumn({
        */}
       <div className={`p-3 min-h-[360px] max-h-[75vh] overflow-y-auto custom-scrollbar ${dense ? 'space-y-2' : 'space-y-3'}`}>
         {clients.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-muted-foreground/10 rounded-xl bg-muted/20">
+          <div className="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-muted-foreground/15 dark:border-zinc-800/70 rounded-xl bg-muted/15 dark:bg-zinc-900/30">
             <p className="text-xs font-medium text-muted-foreground">Nenhum lead</p>
           </div>
         ) : (
@@ -2247,7 +2247,7 @@ function EnrollmentKanbanCard({
             </div>
             {signUrl && (
               <button
-                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 hover:border-amber-400 transition-all shrink-0"
+                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 hover:border-amber-400 dark:hover:border-amber-700 transition-all shrink-0"
                 title="Abrir link de assinatura"
                 onClick={(e) => { e.stopPropagation(); window.open(signUrl, '_blank'); }}
               >
@@ -2368,12 +2368,12 @@ function StageColumnSales({
 
   return (
     <div
-      className={`flex flex-col rounded-2xl border-none bg-zinc-50/50 backdrop-blur-sm transition-all duration-300 shadow-inner ${dropActive ? 'ring-2 ring-primary/50 bg-primary/5 shadow-2xl' : ''}`}
+      className={`flex flex-col rounded-2xl border border-zinc-200/60 dark:border-zinc-800/80 bg-zinc-100/70 dark:bg-zinc-900/40 backdrop-blur-sm transition-all duration-300 shadow-inner ${dropActive ? 'ring-2 ring-primary/50 bg-primary/5 dark:bg-primary/10 shadow-2xl' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setDropTargetStageId(stage.id); }}
       onDragLeave={() => setDropTargetStageId(null)}
       onDrop={() => onDropEnrollmentOnStage(String(stage.id))}
     >
-      <div className="sticky top-0 z-10 rounded-t-xl overflow-hidden glass-header backdrop-blur-sm bg-background/80 border-b border-border/50 supports-[backdrop-filter]:bg-background/60">
+      <div className="sticky top-0 z-10 rounded-t-2xl overflow-hidden glass-header backdrop-blur-sm bg-card/90 dark:bg-zinc-900/90 border-b border-border/50 supports-[backdrop-filter]:bg-card/75">
         <div className="h-1.5 w-full" style={{ backgroundColor: stageColor }} />
         <div className="flex flex-col p-3.5 gap-2">
           <div className="flex items-center justify-between w-full">
@@ -2441,7 +2441,7 @@ function StageColumnSales({
       </div>
       <div className={`p-3 min-h-[360px] max-h-[75vh] overflow-y-auto custom-scrollbar ${dense ? 'space-y-2' : 'space-y-3'}`}>
         {enrollments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-muted-foreground/10 rounded-xl bg-muted/20">
+          <div className="flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-muted-foreground/15 dark:border-zinc-800/70 rounded-xl bg-muted/15 dark:bg-zinc-900/30">
             <p className="text-xs font-medium text-muted-foreground">Nenhuma matrícula</p>
           </div>
         ) : (

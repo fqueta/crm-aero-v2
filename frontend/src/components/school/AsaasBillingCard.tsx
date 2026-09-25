@@ -72,7 +72,7 @@ function getStatusBadge(status?: string) {
       return <Badge className="bg-zinc-600 text-white text-[10px]">Estornado</Badge>;
     case 'PENDING':
     default:
-      return <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-[10px]">Aguardando</Badge>;
+      return <Badge variant="outline" className="text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-[10px]">Aguardando</Badge>;
   }
 }
 
