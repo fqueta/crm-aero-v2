@@ -85,10 +85,6 @@
                 "url": "/settings/cupom_desconto"
             },
             {
-                "title": "Tabelas de preço",
-                "url": "/settings/table-price"
-            },
-            {
                 "title": "Funil e etapas",
                 "url": "/settings/stages"
             },

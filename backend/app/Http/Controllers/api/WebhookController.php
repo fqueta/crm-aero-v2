@@ -182,6 +182,7 @@ class WebhookController extends Controller
                 return $this->processMetricsWebhook($endp2, $payload, $headers);
 
             case 'zapsing':
+            case 'zapsign':
                 return $this->processZapsingWebhook($endp1, $endp2, $payload, $headers);
             case 'brevo':
                 return $this->processBrevoWebhook($payload, $headers);

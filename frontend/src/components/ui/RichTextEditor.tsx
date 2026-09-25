@@ -21,8 +21,8 @@ export interface RichTextEditorProps {
   disabled?: boolean;
   /** Ativa as dicas de shortcode (`{` + Ctrl+Espaço) */
   enableShortcodeHints?: boolean;
-  /** Catálogo exibido nas dicas (default: vazio = dicas desativadas) */
-  shortcodes?: ContractShortcode[];
+  /** Catálogo exibido nas dicas (aceita ContractShortcode[] ou string[]) */
+  shortcodes?: (ContractShortcode | string)[];
 }
 
 /**
@@ -56,8 +56,31 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const [hintsFilter, setHintsFilter] = useState('');
   const [hintsIndex, setHintsIndex] = useState(0);
   const [hintsPos, setHintsPos] = useState<CaretPos>({ x: 0, y: 0 });
+  const [isSourceMode, setIsSourceMode] = useState(false);
 
-  const hintsEnabled = !!enableShortcodeHints && Array.isArray(shortcodes) && shortcodes.length > 0 && !disabled;
+  // Normaliza o catálogo aceitando tanto objetos ContractShortcode quanto strings ex: "{tag}" ou "tag"
+  const normalizedShortcodes = React.useMemo<ContractShortcode[]>(() => {
+    if (!Array.isArray(shortcodes)) return [];
+    return shortcodes
+      .map((s) => {
+        if (!s) return null;
+        if (typeof s === 'string') {
+          const cleanTag = s.replace(/^\{+|\}+$/g, '').trim();
+          return cleanTag ? { tag: cleanTag, desc: '', grupo: '' } : null;
+        }
+        if (typeof s === 'object' && (s as any).tag) {
+          return {
+            tag: String((s as any).tag).replace(/^\{+|\}+$/g, '').trim(),
+            desc: (s as any).desc ? String((s as any).desc) : '',
+            grupo: (s as any).grupo ? String((s as any).grupo) : '',
+          };
+        }
+        return null;
+      })
+      .filter((s): s is ContractShortcode => Boolean(s && s.tag));
+  }, [shortcodes]);
+
+  const hintsEnabled = !isSourceMode && !!enableShortcodeHints && normalizedShortcodes.length > 0 && !disabled;
 
   /**
    * useEffect sync
@@ -65,10 +88,10 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
    * en-US: Sync external value with editor content.
    */
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== (value || '')) {
+    if (!isSourceMode && ref.current && ref.current.innerHTML !== (value || '')) {
       ref.current.innerHTML = value || '';
     }
-  }, [value]);
+  }, [value, isSourceMode]);
 
   /**
    * detectTrigger
@@ -104,11 +127,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
   const filteredHints = React.useMemo(() => {
     if (!hintsEnabled) return [];
-    const f = hintsFilter.toLowerCase();
+    const f = (hintsFilter || '').toLowerCase();
     // Sem limite de itens: a paleta tem scroll (max-h-56) e o filtro refina.
-    if (!f) return shortcodes!;
-    return shortcodes!.filter((s) => s.tag.toLowerCase().includes(f));
-  }, [hintsEnabled, hintsFilter, shortcodes]);
+    if (!f) return normalizedShortcodes;
+    return normalizedShortcodes.filter(
+      (s) => s.tag.toLowerCase().includes(f) || (s.desc && s.desc.toLowerCase().includes(f))
+    );
+  }, [hintsEnabled, hintsFilter, normalizedShortcodes]);
 
   React.useEffect(() => {
     setHintsIndex(0);
@@ -208,13 +233,23 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   return (
     <div className="border rounded-md">
       {/* Toolbar */}
-      <div className="flex gap-2 p-2 border-b bg-muted">
-        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('bold')} disabled={disabled}>B</button>
-        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('italic')} disabled={disabled}>I</button>
-        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('underline')} disabled={disabled}>U</button>
-        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('insertUnorderedList')} disabled={disabled}>• Lista</button>
-        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('insertOrderedList')} disabled={disabled}>1. Lista</button>
-        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('formatBlock', 'p')} disabled={disabled}>Parágrafo</button>
+      <div className="flex gap-2 p-2 border-b bg-muted items-center flex-wrap">
+        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10 font-bold" onClick={() => execCmd('bold')} disabled={disabled || isSourceMode} title="Negrito">B</button>
+        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10 italic" onClick={() => execCmd('italic')} disabled={disabled || isSourceMode} title="Itálico">I</button>
+        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10 underline" onClick={() => execCmd('underline')} disabled={disabled || isSourceMode} title="Sublinhado">U</button>
+        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('insertUnorderedList')} disabled={disabled || isSourceMode} title="Lista com marcadores">• Lista</button>
+        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('insertOrderedList')} disabled={disabled || isSourceMode} title="Lista numerada">1. Lista</button>
+        <button type="button" className="text-sm px-2 py-1 rounded hover:bg-muted-foreground/10" onClick={() => execCmd('formatBlock', 'p')} disabled={disabled || isSourceMode} title="Parágrafo">Parágrafo</button>
+        <div className="h-4 w-[1px] bg-border mx-1" />
+        <button
+          type="button"
+          className={`text-xs px-2 py-1 rounded font-mono font-bold transition-colors ${isSourceMode ? 'bg-primary text-primary-foreground' : 'hover:bg-muted-foreground/10 text-muted-foreground'}`}
+          onClick={() => setIsSourceMode(!isSourceMode)}
+          disabled={disabled}
+          title={isSourceMode ? "Voltar para editor visual" : "Editar código HTML"}
+        >
+          {'</> HTML'}
+        </button>
         {hintsEnabled && (
           <span className="ml-auto self-center text-[10px] text-muted-foreground hidden sm:block" title="Digite { para filtrar shortcodes">
             {'{} Shift+Espaço'}
@@ -223,15 +258,25 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       </div>
       {/* Editable area */}
       <div className="relative" ref={wrapRef}>
-        <div
-          ref={ref}
-          contentEditable={!disabled}
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          className="min-h-[120px] p-3 text-sm"
-          data-placeholder={placeholder || ''}
-          suppressContentEditableWarning
-        />
+        {isSourceMode ? (
+          <textarea
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            className="w-full min-h-[160px] p-3 text-xs font-mono bg-slate-900 text-slate-100 rounded-b-md outline-none resize-y"
+            placeholder={placeholder || ''}
+          />
+        ) : (
+          <div
+            ref={ref}
+            contentEditable={!disabled}
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            className="min-h-[120px] p-3 text-sm"
+            data-placeholder={placeholder || ''}
+            suppressContentEditableWarning
+          />
+        )}
         {hintsEnabled && hintsOpen && filteredHints.length > 0 && (
           <div
             className="absolute z-50 w-64 max-h-56 overflow-y-auto rounded-md border bg-popover shadow-lg"
@@ -241,7 +286,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           >
             {filteredHints.map((s, i) => (
               <button
-                key={s.tag}
+                key={`${s.tag}-${i}`}
                 type="button"
                 role="option"
                 aria-selected={i === hintsIndex}
@@ -254,7 +299,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
                 onMouseEnter={() => setHintsIndex(i)}
               >
                 <code className="font-mono">{`{${s.tag}}`}</code>
-                <span className="truncate text-muted-foreground">{s.desc}</span>
+                {s.desc && <span className="truncate text-muted-foreground">{s.desc}</span>}
               </button>
             ))}
           </div>

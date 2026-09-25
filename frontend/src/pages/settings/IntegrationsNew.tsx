@@ -7,7 +7,9 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, ArrowLeft, CheckCircle2, Info, Mail, CreditCard, FileSignature, MessageSquare, Blocks, Zap, Check } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft, CheckCircle2, Info, Mail, CreditCard, FileSignature, MessageSquare, Blocks, Zap, Check, Copy, Link2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { getWebhookUrlForIntegration } from '@/lib/webhookUrls';
 
 export default function IntegrationsNew() {
   const qc = useQueryClient();
@@ -84,6 +86,19 @@ export default function IntegrationsNew() {
 
   const isBrevo = name.toLowerCase().includes('brevo') || name.toLowerCase().includes('email');
   const isAsaas = name.toLowerCase().includes('asaas') || name.toLowerCase().includes('pagamento');
+  const isZapsign = name.toLowerCase().includes('zapsign') || name.toLowerCase().includes('zapsing');
+  const isZapguru = name.toLowerCase().includes('zapguru') || name.toLowerCase().includes('chat');
+
+  const webhookUrl = getWebhookUrlForIntegration(name);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+
+  const handleCopyWebhook = () => {
+    if (!webhookUrl) return;
+    navigator.clipboard.writeText(webhookUrl);
+    setCopiedWebhook(true);
+    toast.success('URL do webhook copiada para a área de transferência!');
+    setTimeout(() => setCopiedWebhook(false), 2000);
+  };
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 pb-12">
@@ -210,6 +225,39 @@ export default function IntegrationsNew() {
                   />
                 </div>
 
+                {/* URL do Webhook */}
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-1.5">
+                      <Link2 className="w-4 h-4 text-blue-600" />
+                      URL do Webhook
+                    </label>
+                    <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 uppercase font-semibold">
+                      Retorno de Eventos
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input 
+                      value={webhookUrl} 
+                      readOnly 
+                      className="h-10 font-mono text-xs bg-white dark:bg-zinc-950 border-slate-300 select-all" 
+                    />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="icon" 
+                      className="h-10 w-10 shrink-0 border-slate-300 hover:bg-slate-100" 
+                      onClick={handleCopyWebhook} 
+                      title="Copiar URL do webhook"
+                    >
+                      {copiedWebhook ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4 text-slate-600" />}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Copie esta URL e cole nas configurações de Webhooks do <strong>{name || 'provedor'}</strong> para receber atualizações automáticas de status em tempo real.
+                  </p>
+                </div>
+
                 {/* Metacampos */}
                 <div className="pt-4 border-t border-slate-100">
                   <div className="flex items-center justify-between mb-4">
@@ -273,6 +321,10 @@ export default function IntegrationsNew() {
                       <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">2</div>
                       <p className="text-sm text-slate-600 leading-relaxed">Em <strong>Senders, Domains & Dedicated IPs</strong>, verifique o e-mail remetente e cole no campo Usuário.</p>
                     </div>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">3</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">Em <strong>Transacional &gt; Configurações &gt; Webhooks</strong>, cadastre a <strong>URL do Webhook</strong> acima para rastrear entregas, aberturas e cliques.</p>
+                    </div>
                   </>
                 ) : isAsaas ? (
                   <>
@@ -284,6 +336,40 @@ export default function IntegrationsNew() {
                       <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">2</div>
                       <p className="text-sm text-slate-600 leading-relaxed">Adicione o <strong>Webhook Token</strong> nos metacampos com a chave <code className="bg-slate-100 px-1 rounded text-pink-600">webhook_token</code> se precisar processar retornos de cobrança.</p>
                     </div>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">3</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">Em <strong>Configurações &gt; Integrações &gt; Webhooks</strong> no Asaas, cadastre a <strong>URL do Webhook</strong> acima para receber baixas e pagamentos.</p>
+                    </div>
+                  </>
+                ) : isZapsign ? (
+                  <>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">1</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">No ZapSign, acesse <strong>Configurações</strong> &gt; <strong>Integrações</strong> (ou API) e copie seu <strong>Token de API</strong>.</p>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">2</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">Cole o token no campo <strong>Senha / Token / Chave de API</strong> e clique em <strong>Testar Conexão</strong>.</p>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">3</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">Em <strong>Configurações &gt; Webhooks</strong> no ZapSign, cadastre a <strong>URL do Webhook</strong> acima para sincronizar os contratos assinados automaticamente no CRM.</p>
+                    </div>
+                  </>
+                ) : isZapguru ? (
+                  <>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">1</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">No Zapguru, obtenha seu <strong>Token de API</strong> e a <strong>URL da API</strong>.</p>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">2</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">Cole as credenciais e clique em <strong>Testar Conexão</strong>.</p>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">3</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">Cadastre a <strong>URL do Webhook</strong> acima no Zapguru para sincronizar status de mensagens e envios.</p>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -294,6 +380,10 @@ export default function IntegrationsNew() {
                     <div className="flex gap-4">
                       <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">2</div>
                       <p className="text-sm text-slate-600 leading-relaxed">Cole a chave no campo de Senha/Token, clique em <strong>Testar Conexão</strong> e depois em <strong>Salvar</strong>.</p>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold flex items-center justify-center flex-shrink-0 text-sm">3</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">Cadastre a <strong>URL do Webhook</strong> acima no painel do serviço parceiro para receber notificações automáticas.</p>
                     </div>
                   </>
                 )}

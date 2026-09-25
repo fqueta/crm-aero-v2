@@ -28,6 +28,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { enrollmentsService } from '@/services/enrollmentsService';
+import { contractsService } from '@/services/contractsService';
+import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { CONTRACT_SHORTCODES } from '@/lib/contractShortcodes';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getApiUrl } from '@/lib/qlib';
@@ -47,6 +50,7 @@ import { ResponsibleManagerCard } from './ResponsibleManagerCard';
 // Utilitários
 import { getDocStatusLabel, getDocBadgeClass, isZapsignActive } from '@/lib/zapsign';
 import { normalizeUrl } from '@/lib/urls';
+import { prepareContractHtml } from '@/lib/htmlUtils';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Tipos
@@ -83,11 +87,21 @@ export default function ProposalContractsTab({
   const { toast } = useToast();
   const isAdmin = user && Number(user.permission_id) === 1;
   const isStandard = user && Number(user.permission_id) > 1;
+  // pt-BR: Edição do texto do contrato liberada para administradores (grupos 1 e 2).
+  const canEditContractText = !!user && (Number(user.permission_id) === 1 || Number(user.permission_id) === 2);
 
   // ── Contratos HTML (legado) ────────────────────────────────────────────────
   const [contracts, setContracts] = useState<{ aluno: any[], responsavel: any[] }>({ aluno: [], responsavel: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [htmlViewMode, setHtmlViewMode] = useState<Record<string, 'visual' | 'code'>>({});
+
+  const toggleHtmlViewMode = (contractId: string) => {
+    setHtmlViewMode((prev) => ({
+      ...prev,
+      [contractId]: prev[contractId] === 'code' ? 'visual' : 'code',
+    }));
+  };
 
   useEffect(() => {
     if (!clientId || !enrollmentId) return;
@@ -200,6 +214,52 @@ export default function ProposalContractsTab({
       toast({ title: 'Erro', description: 'Falha ao salvar alterações.', variant: 'destructive' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // ── Edição do Texto do Contrato (template, grupos 1 e 2) ───────────────────
+  const [editingTemplate, setEditingTemplate] = useState<{ id: number; nome: string } | null>(null);
+  const [editingTemplateContent, setEditingTemplateContent] = useState('');
+  const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+
+  const handleEditContractText = async (contract: { id?: number | string; nome?: string }) => {
+    const id = Number(contract?.id);
+    if (!id) {
+      toast({ title: 'Erro', description: 'Contrato sem identificador para edição.', variant: 'destructive' });
+      return;
+    }
+    setEditingTemplate({ id, nome: contract?.nome || `Contrato ${id}` });
+    setEditingTemplateContent('');
+    setIsLoadingTemplate(true);
+    try {
+      const tpl = await contractsService.getContract(id);
+      setEditingTemplateContent(tpl?.conteudo ?? '');
+    } catch {
+      toast({ title: 'Erro', description: 'Não foi possível carregar o modelo do contrato.', variant: 'destructive' });
+      setEditingTemplate(null);
+    } finally {
+      setIsLoadingTemplate(false);
+    }
+  };
+  const handleCancelEditContractText = () => {
+    if (isSavingTemplate) return;
+    setEditingTemplate(null);
+    setEditingTemplateContent('');
+  };
+  const handleSaveContractText = async () => {
+    if (!editingTemplate) return;
+    setIsSavingTemplate(true);
+    try {
+      await contractsService.updateContract(editingTemplate.id, { conteudo: editingTemplateContent });
+      toast({ title: 'Sucesso', description: 'Texto do contrato atualizado. A pré-visualização será recarregada.' });
+      setEditingTemplate(null);
+      setEditingTemplateContent('');
+      window.location.reload();
+    } catch {
+      toast({ title: 'Erro', description: 'Falha ao salvar o texto do contrato.', variant: 'destructive' });
+    } finally {
+      setIsSavingTemplate(false);
     }
   };
 
@@ -830,21 +890,51 @@ export default function ProposalContractsTab({
                 <Accordion type="single" collapsible className="w-full space-y-2 border-none">
                   {contracts.aluno.map((contract: any, index: number) => {
                     const contractId = contract.id || `aluno-${index}`;
+                    const isCode = htmlViewMode[String(contractId)] === 'code';
                     return (
                       <AccordionItem key={contractId} value={String(contractId)} className="border rounded-md px-4 bg-white dark:bg-zinc-950">
                         <AccordionTrigger className="hover:no-underline py-3">
-                          <div className="flex items-center gap-3 text-left">
+                          <div className="flex items-center gap-3 text-left w-full">
                             <span className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">
                               {index + 1}
                             </span>
-                            <span className="font-medium text-sm text-slate-700 dark:text-slate-300">{contract.nome || `Contrato ${index + 1}`}</span>
+                            <span className="font-medium text-sm text-slate-700 dark:text-slate-300 flex-1">{contract.nome || `Contrato ${index + 1}`}</span>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              title={isCode ? "Alternar para visualização formatada" : "Visualizar código HTML"}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:underline mr-2 flex-shrink-0"
+                              onClick={(e) => { e.stopPropagation(); toggleHtmlViewMode(String(contractId)); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleHtmlViewMode(String(contractId)); } }}
+                            >
+                              {isCode ? <Eye className="h-3 w-3" /> : <Code className="h-3 w-3" />}
+                              {isCode ? 'Visualizar' : 'Código HTML'}
+                            </span>
+                            {canEditContractText && Number(contract.id) > 0 && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                title="Editar texto do modelo (admin)"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 hover:underline mr-2 flex-shrink-0"
+                                onClick={(e) => { e.stopPropagation(); handleEditContractText(contract); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleEditContractText(contract); } }}
+                              >
+                                <Pencil className="h-3 w-3" /> Editar texto
+                              </span>
+                            )}
                           </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                          <div
-                            className="prose prose-sm max-w-none p-4 mt-2 bg-slate-50 rounded-md border text-slate-800 dark:bg-zinc-900 dark:text-slate-200 overflow-x-auto selection:bg-blue-100"
-                            dangerouslySetInnerHTML={{ __html: contract.conteudo }}
-                          />
+                          {isCode ? (
+                            <pre className="text-xs p-4 mt-2 bg-slate-900 text-slate-100 rounded-md border overflow-x-auto font-mono whitespace-pre-wrap selection:bg-slate-700">
+                              <code>{prepareContractHtml(contract.conteudo)}</code>
+                            </pre>
+                          ) : (
+                            <div
+                              className="prose prose-sm max-w-none p-4 mt-2 bg-slate-50 rounded-md border text-slate-800 dark:bg-zinc-900 dark:text-slate-200 overflow-x-auto selection:bg-blue-100"
+                              dangerouslySetInnerHTML={{ __html: prepareContractHtml(contract.conteudo) }}
+                            />
+                          )}
                         </AccordionContent>
                       </AccordionItem>
                     );
@@ -863,21 +953,51 @@ export default function ProposalContractsTab({
                 <Accordion type="single" collapsible className="w-full space-y-2 border-none">
                   {contracts.responsavel.map((contract: any, index: number) => {
                     const contractId = contract.id || `resp-${index}`;
+                    const isCode = htmlViewMode[String(contractId)] === 'code';
                     return (
                       <AccordionItem key={contractId} value={String(contractId)} className="border border-indigo-100 rounded-md px-4 bg-white dark:bg-zinc-950 shadow-sm">
                         <AccordionTrigger className="hover:no-underline py-3">
-                          <div className="flex items-center gap-3 text-left">
+                          <div className="flex items-center gap-3 text-left w-full">
                             <span className="flex items-center justify-center h-5 w-5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold">
                               {index + 1}
                             </span>
-                            <span className="font-medium text-sm text-indigo-900 dark:text-indigo-400">{contract.nome || `Contrato Responsável ${index + 1}`}</span>
+                            <span className="font-medium text-sm text-indigo-900 dark:text-indigo-400 flex-1">{contract.nome || `Contrato Responsável ${index + 1}`}</span>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              title={isCode ? "Alternar para visualização formatada" : "Visualizar código HTML"}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:underline mr-2 flex-shrink-0"
+                              onClick={(e) => { e.stopPropagation(); toggleHtmlViewMode(String(contractId)); }}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleHtmlViewMode(String(contractId)); } }}
+                            >
+                              {isCode ? <Eye className="h-3 w-3" /> : <Code className="h-3 w-3" />}
+                              {isCode ? 'Visualizar' : 'Código HTML'}
+                            </span>
+                            {canEditContractText && Number(contract.id) > 0 && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                title="Editar texto do modelo (admin)"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline mr-2 flex-shrink-0"
+                                onClick={(e) => { e.stopPropagation(); handleEditContractText(contract); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleEditContractText(contract); } }}
+                              >
+                                <Pencil className="h-3 w-3" /> Editar texto
+                              </span>
+                            )}
                           </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                          <div
-                            className="prose prose-sm max-w-none p-4 mt-2 bg-indigo-50/30 rounded-md border border-indigo-100 text-slate-800 dark:bg-zinc-900 dark:text-slate-200 overflow-x-auto selection:bg-indigo-100"
-                            dangerouslySetInnerHTML={{ __html: contract.conteudo }}
-                          />
+                          {isCode ? (
+                            <pre className="text-xs p-4 mt-2 bg-slate-900 text-slate-100 rounded-md border overflow-x-auto font-mono whitespace-pre-wrap selection:bg-slate-700">
+                              <code>{prepareContractHtml(contract.conteudo)}</code>
+                            </pre>
+                          ) : (
+                            <div
+                              className="prose prose-sm max-w-none p-4 mt-2 bg-indigo-50/30 rounded-md border border-indigo-100 text-slate-800 dark:bg-zinc-900 dark:text-slate-200 overflow-x-auto selection:bg-indigo-100"
+                              dangerouslySetInnerHTML={{ __html: prepareContractHtml(contract.conteudo) }}
+                            />
+                          )}
                         </AccordionContent>
                       </AccordionItem>
                     );
@@ -894,6 +1014,48 @@ export default function ProposalContractsTab({
           <p className="text-sm text-muted-foreground italic">Nenhum contrato disponível para visualização.</p>
         </div>
       )}
+
+      {/* ── Dialog: Editar texto do contrato (modelo, grupos 1 e 2) ─────────── */}
+      <Dialog open={!!editingTemplate} onOpenChange={(open) => { if (!open) handleCancelEditContractText(); }}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-blue-600" /> Editar texto do contrato
+            </DialogTitle>
+            <DialogDescription className="py-1 space-y-1">
+              <span className="block font-semibold text-slate-700 dark:text-slate-300">{editingTemplate?.nome}</span>
+              <span className="block text-xs">
+                Edita o <strong>modelo</strong> (vale para todas as propostas que usam este contrato).
+                PDFs já gerados e envelopes ZapSign não mudam — use <strong>Gerar Novamente</strong> após salvar.
+                Digite <code className="bg-slate-100 px-1 rounded">{'{'}</code> para ver os shortcodes disponíveis.
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          {isLoadingTemplate ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <RichTextEditor
+              value={editingTemplateContent}
+              onChange={setEditingTemplateContent}
+              placeholder="Conteúdo do contrato..."
+              disabled={isSavingTemplate}
+              enableShortcodeHints
+              shortcodes={CONTRACT_SHORTCODES}
+            />
+          )}
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" className="w-full flex-1" onClick={handleCancelEditContractText} disabled={isSavingTemplate || isLoadingTemplate}>
+              <X className="h-4 w-4 mr-2" /> Cancelar
+            </Button>
+            <Button variant="default" className="w-full flex-1" onClick={handleSaveContractText} disabled={isSavingTemplate || isLoadingTemplate}>
+              {isSavingTemplate ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Salvar texto
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Dialog: Aprovação necessária ──────────────────────────────────── */}
       <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>

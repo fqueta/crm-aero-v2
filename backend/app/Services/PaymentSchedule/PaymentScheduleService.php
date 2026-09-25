@@ -161,9 +161,17 @@ class PaymentScheduleService
                     $this->formatBRL($valorParcelaLiquida)
                 );
 
+            // Verifica se a mensagem contém tags HTML (diretas ou codificadas como entidades &lt;...&gt;)
+            $decodedMsg = html_entity_decode($msg, ENT_QUOTES, 'UTF-8');
+            $hasHtmlTags = (strip_tags($msg) !== $msg) || (strip_tags($decodedMsg) !== $decodedMsg);
+
+            $formattedMsg = $hasHtmlTags
+                ? $decodedMsg
+                : nl2br(htmlspecialchars($msg, ENT_QUOTES, 'UTF-8'));
+
             $html .= '<tr style="background-color:#ffffff;border-top:1px solid #e2e8f0;">';
             $html .= '<td colspan="3" style="padding:8px 12px;font-size:11px;color:#1e293b;line-height:1.4;text-align:left;">';
-            $html .= '<strong>Observação:</strong> ' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+            $html .= '<strong>Observação:</strong> ' . $formattedMsg;
             $html .= '</td>';
             $html .= '</tr>';
         }

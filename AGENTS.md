@@ -30,7 +30,7 @@
 - `matchesPath()` trata equivalência com barra final (Dashboard tem `url: "/"`, resolvida para `/admin/`).
 - Melhorias portadas do Help Desk: sanfona única, flyout no modo encolhido, pílulas por módulo, agrupamento por seção (`section`), `bestMatch`, auto-scroll na troca de rota.
 - Preloader: `components/auth/AuthPreloader.tsx` (ícone `Plane`) usado em `ProtectedRoute`, `AuthRedirect`, `AdminProtectedRoute`, `Login` + `Suspense` no `App.tsx` e `RouteChangeLoader` no `AppLayout`.
-- **Atenção — URLs do JSON sem rota no frontend** (caem no `NotFound`): `/school/ganhos`, `/site/paginas`, `/site/content-types`, `/reports/relatorio-escola`, `/reports/relatorio-balanco`, `/reports/relatorio-turmas`, `/reports/relatorio-atendimento`, `/reports/horas_voadas`, `/reports/contratos_vencidos`, `/settings/cupom_desconto`, `/settings/table-price`, `/settings/table-discount`. Vale o mesmo para o menu vindo da API (mesma origem).
+- **Atenção — URLs do JSON sem rota no frontend** (caem no `NotFound`): `/school/ganhos`, `/site/paginas`, `/site/content-types`, `/reports/relatorio-escola`, `/reports/relatorio-balanco`, `/reports/relatorio-turmas`, `/reports/relatorio-atendimento`, `/reports/horas_voadas`, `/settings/cupom_desconto`, `/settings/table-price`, `/settings/table-discount`. Vale o mesmo para o menu vindo da API (mesma origem).
 
 ## Importação de dados (ImportController)
 
@@ -354,3 +354,18 @@ Tabela: Matrícula, etapas (exceto combustível), taxas, **desconto** (linha ver
   - `GET /api/v1/consulta-geral?table=matriculas|cursos&id=&descricao=&nome=&titulo=` — consulta filtrada por tabela
   - `GET /api/v1/consulta-geral/search?q=texto&per_page=10` — busca unificada nas 3 tabelas
 - **Rotas:** `backend/routes/tenant.php:369-370` — dentro do grupo `auth:sanctum`
+
+## Relatório de Contratos Vencidos (espelho do legado)
+
+### Frontend
+- **SPA:** `/admin/reports/contratos_vencidos` → `frontend/src/pages/reports/ContratosVencidosReport.tsx` (molde `WonProposalsReport`, rota em `App.tsx` com `PermissionGuard reports.view`)
+- **Service:** `frontend/src/services/contratosVencidosService.ts` (`list`, `exportCsv` via blob, `setValidade` PATCH, `sendWhatsapp` POST)
+- **Tabela:** `#/Aluno/Curso/Validade(+badge origem e dias)/Telefone/Ação` (ícone → `/admin/clients/{id}/view`; verde → confirma e dispara ZapGuru)
+- **Extras:** edição inline da validade (vazio = volta à calculada), Imprimir (janela nova com tabela completa), Exportar CSV, filtro por curso, busca, paginação
+
+### Backend
+- **Regra híbrida:** `backend/app/Services/ContratoValidadeService.php` — `config.validade_contrato` (origem `cadastrada`) ou `data_contrato|data_inicio + vigencia_meses` (origem `calculada`); vigência via `qoption('contrato_vigencia_meses')`, default 12; `duracao` do curso é carga horária (seg) e NÃO serve de base
+- **Controller:** `backend/app/Http/Controllers/api/ContratosVencidosController.php`
+- **Endpoints:** `GET relatorios/contratos-vencidos` (lista + `total_vencidos` + `data_consulta`), `GET .../export` (CSV `;` com BOM), `PATCH .../{id}/validade` (gate `edit`), `POST .../{id}/whatsapp` (gate `view`, via `ZapguruController::enviar_mensagem` + `EventLog`)
+- **Permissão:** rotas mapeadas em `PermissionService::get_url_by_route` → `/reports/contratos_vencidos` (sem isso caem no 403 "Acesso negado")
+- **Teste:** `tests/Unit/ContratoValidadeServiceTest.php` (6 testes, sem DB)

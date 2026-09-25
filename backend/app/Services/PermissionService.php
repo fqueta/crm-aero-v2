@@ -133,6 +133,8 @@ class PermissionService
             $url = '/settings/users';
         }elseif($name=='api.integracoes.index' || $name == 'api.integracoes.update' || $name == 'api.integracoes.show' || $name == 'api.integracoes.store' || $name == 'api.integracoes.destroy' || $name == 'api.integracoes.test-connection' || $name == 'api.integracoes.trash' || $name == 'api.integracoes.restore' || $name == 'api.integracoes.forceDelete'){
             $url = '/admin/settings/integrations';
+        }elseif($name=='api.relatorios.contratos-vencidos.index' || $name == 'api.relatorios.contratos-vencidos.export' || $name == 'api.relatorios.contratos-vencidos.validade' || $name == 'api.relatorios.contratos-vencidos.whatsapp'){
+            $url = '/reports/contratos_vencidos';
         }elseif($name=='api.workflows.index' || $name == 'api.workflows.update' || $name == 'api.workflows.show' || $name == 'api.workflows.store' || $name == 'api.workflows.destroy' || $name == 'api.workflows.toggle-active'){
             $url = '/admin/settings/workflows';
         }elseif($name=='api.workflow-rules.index' || $name == 'api.workflow-rules.update' || $name == 'api.workflow-rules.show' || $name == 'api.workflow-rules.store' || $name == 'api.workflow-rules.destroy'){

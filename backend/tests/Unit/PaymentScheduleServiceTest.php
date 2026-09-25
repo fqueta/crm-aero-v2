@@ -219,5 +219,29 @@ it('renderiza nota explicativa de desconto de pontualidade no rodapé da tabela 
         ->and($html)->toContain('O não pagamento até o vencimento implicará na perda do desconto');
 });
 
+it('renderiza nota explicativa com HTML rico e entidades decodificadas sem escapar tags', function () {
+    $service = new PaymentScheduleService();
+
+    $programacao = [
+        ['n' => 1, 'vencimento' => '2026-10-10', 'valor' => 2410.83, 'descricao' => '1ª Parcela'],
+    ];
+
+    // Caso 1: HTML direto
+    $html1 = $service->toHtmlTable($programacao, 2410.83, [
+        'nota_desconto' => '<p class="MsoBodyText"><b>DESCONTO DE PONTUALIDADE</b></p>',
+    ]);
+
+    expect($html1)->toContain('<p class="MsoBodyText"><b>DESCONTO DE PONTUALIDADE</b></p>')
+        ->and($html1)->not->toContain('&lt;b&gt;');
+
+    // Caso 2: HTML codificado como entidades (&lt;...&gt;)
+    $html2 = $service->toHtmlTable($programacao, 2410.83, [
+        'nota_desconto' => '&lt;p class=&quot;MsoBodyText&quot;&gt;&lt;b&gt;DESCONTO&lt;/b&gt;&lt;/p&gt;',
+    ]);
+
+    expect($html2)->toContain('<p class="MsoBodyText"><b>DESCONTO</b></p>')
+        ->and($html2)->not->toContain('&lt;b&gt;');
+});
+
 
 

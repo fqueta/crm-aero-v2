@@ -72,6 +72,7 @@ import FinancialCategories from "./pages/FinancialCategories";
 import GeneralConversionReport from "./pages/reports/GeneralConversionReport";
 import WonProposalsReport from "./pages/reports/WonProposalsReport";
 import UserAccessReport from "./pages/reports/UserAccessReport";
+import ContratosVencidosReport from "./pages/reports/ContratosVencidosReport";
 import PublicClientForm from "@/pages/PublicClientForm";
 import PublicTerminationRequest from "@/pages/PublicTerminationRequest";
 import ProposalSignature from "@/pages/ProposalSignature";
@@ -858,6 +859,19 @@ const App = () => {
                       <UserAccessReport />
                     </AppLayout>
                   </SuperAdminGuard>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/reports/contratos_vencidos" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <PermissionGuard
+                      required="reports.view"
+                      menuPath="/admin/reports/contratos_vencidos"
+                      requireRemote={false}
+                    >
+                      <ContratosVencidosReport />
+                    </PermissionGuard>
+                  </AppLayout>
                 </AdminProtectedRoute>
               } />
 

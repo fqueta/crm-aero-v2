@@ -506,6 +506,11 @@ Route::name('api.')->prefix('api/v1')->middleware([
             'integracoes' => 'id'
         ]]);
         Route::get('integracoes/trash', [\App\Http\Controllers\api\ApiCredentialController::class, 'trash'])->name('integracoes.trash');
+        // Relatório de contratos vencidos (SPA /admin/reports/contratos_vencidos)
+        Route::get('relatorios/contratos-vencidos', [\App\Http\Controllers\api\ContratosVencidosController::class, 'index'])->name('relatorios.contratos-vencidos.index');
+        Route::get('relatorios/contratos-vencidos/export', [\App\Http\Controllers\api\ContratosVencidosController::class, 'export'])->name('relatorios.contratos-vencidos.export');
+        Route::patch('relatorios/contratos-vencidos/{id}/validade', [\App\Http\Controllers\api\ContratosVencidosController::class, 'setValidade'])->name('relatorios.contratos-vencidos.validade');
+        Route::post('relatorios/contratos-vencidos/{id}/whatsapp', [\App\Http\Controllers\api\ContratosVencidosController::class, 'whatsapp'])->name('relatorios.contratos-vencidos.whatsapp');
         // Assistente de IA (guia do sistema — padrão Help Desk)
         Route::post('ai/assistant', [\App\Http\Controllers\api\AiChatController::class, 'chat'])->name('ai.assistant.chat');
         Route::get('ai/assistant/suggestions', [\App\Http\Controllers\api\AiChatController::class, 'suggestions'])->name('ai.assistant.suggestions');

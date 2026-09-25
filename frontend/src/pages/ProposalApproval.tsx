@@ -28,6 +28,7 @@ import {
 import { cpfApplyMask } from "@/lib/masks/cpf-apply-mask";
 import { phoneApplyMask } from "@/lib/masks/phone-apply-mask";
 import { cepApplyMask } from "@/lib/masks/cep-apply-mask";
+import { prepareContractHtml } from "@/lib/htmlUtils";
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return 'N/A';
@@ -822,7 +823,7 @@ export default function ProposalApproval() {
                                     <h3 className="font-semibold text-lg border-b pb-2">{contract.nome || 'Contrato'}</h3>
                                     <div 
                                         className="prose prose-sm max-w-none text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 overflow-y-auto max-h-[500px]"
-                                        dangerouslySetInnerHTML={{ __html: contract.conteudo }}
+                                        dangerouslySetInnerHTML={{ __html: prepareContractHtml(contract.conteudo) }}
                                     ></div>
                                 </div>
                             ))}
