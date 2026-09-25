@@ -264,6 +264,48 @@ class OptionController extends Controller
     }
 
     /**
+     * Atualiza apenas o preço global do litro de combustível (options.url = preco_litro).
+     * Permissão vinculada ao menu de Aeronaves (/settings/aircrafts).
+     */
+    public function update_fuel_price(Request $request)
+    {
+        $user = request()->user();
+        if (!$user) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+        if (!$this->permissionService->isHasPermission('create')) {
+            return response()->json(['error' => 'Acesso negado'], 403);
+        }
+        $value = trim((string)$request->input('preco_litro', ''));
+        if ($value !== '') {
+            $normalized = str_replace(',', '.', $value);
+            if (!is_numeric($normalized) || (float)$normalized < 0) {
+                return response()->json(['message' => 'Preço inválido'], 422);
+            }
+            $value = number_format((float)$normalized, 2, '.', '');
+        }
+        Option::updateOrInsert(
+            [
+                'url' => 'preco_litro',
+            ],
+            [
+                'name' => 'Preco Litro',
+                'url' => 'preco_litro',
+                'value' => $value,
+                'ativo' => 's',
+                'excluido' => 'n',
+                'deletado' => 'n',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+        $ret['data'] = ['preco_litro' => $value];
+        $ret['message'] = 'Preço do combustível salvo com sucesso';
+        $ret['status'] = 201;
+        return response()->json($ret, 201);
+    }
+
+    /**
      * Exibir uma opção específica
      */
     public function show(Request $request, string $id)

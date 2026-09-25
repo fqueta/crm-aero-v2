@@ -2987,7 +2987,7 @@ class Qlib
     }
     static function getFrontUrl(){
         $front_url = self::buscaValorDb('options','url','front_url','value');
-        return $front_url;
+        return rtrim((string)$front_url, '/');
     }
     /**
      * Substitui shortcodes no conteúdo com valores vindos de $config.

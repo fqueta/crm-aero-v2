@@ -295,6 +295,8 @@ export default function SystemSettings() {
     toast.success('Configurações de aparência salvas!');
   };
 
+
+
   /**
    * Manipula mudanças nas configurações de API (apenas localmente)
    */
@@ -1229,6 +1231,7 @@ export default function SystemSettings() {
               </div>
             </CardContent>
           </Card>
+
         </TabsContent>
 
         {/* Aba de Configurações de API */}

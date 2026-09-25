@@ -321,6 +321,9 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
 
   const linkAssinatura = useMemo(() => {
     let signUrl = (enrollment as any)?.link_assinatura || '';
+    if (signUrl.startsWith('/')) {
+      signUrl = `${window.location.origin}${signUrl}`;
+    }
     if (!signUrl) {
       const clientId = (enrollment as any)?.id_cliente || (enrollment as any)?.client_id;
       const id = (enrollment as any)?.id;

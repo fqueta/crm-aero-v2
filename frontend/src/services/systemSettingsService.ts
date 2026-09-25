@@ -30,6 +30,7 @@ export interface AdvancedSystemSettings {
   email_logo_url?: string;
   email_nome?: string;
   ai_chat_provider?: string;
+  preco_litro?: string;
 }
 
 /**
@@ -53,6 +54,22 @@ class SystemSettingsService extends BaseApiService {
   async getAdvancedSettings(endpoint : string | null): Promise<AdvancedSystemSettings> {
     const response = await this.get<ApiResponse<AdvancedSystemSettings>>(endpoint || this.endpoint);
     return response.data;
+  }
+
+  /**
+   * Obtém o preço global do litro de combustível (options.url = preco_litro)
+   */
+  async getFuelPrice(): Promise<string> {
+    const data = await this.getAdvancedSettings('/options');
+    return String((data as any)?.preco_litro || '');
+  }
+
+  /**
+   * Salva o preço global do litro de combustível.
+   * Endpoint com permissão vinculada ao menu de Aeronaves.
+   */
+  async updateFuelPrice(preco_litro: string): Promise<void> {
+    await this.post<ApiResponse<void>>('/options/fuel-price', { preco_litro });
   }
 }
 

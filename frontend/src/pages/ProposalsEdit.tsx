@@ -21,10 +21,9 @@ import { turmasService } from '@/services/turmasService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Save, CheckCircle, Pencil, Plus, Trash2, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings, FileText, ArrowRight, Eye } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Pencil, Plus, Trash2, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings, FileText, ArrowRight, Eye, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import EditFooterBar from '@/components/ui/edit-footer-bar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 const DEFAULT_FUEL_TEXT = `<p>O custo estimado de combustível para esta proposta é de <strong>{valor}</strong>. É importante notar que este valor é uma estimativa e pode variar conforme os preços do combustível no momento do abastecimento. O cálculo final será baseado no preço vigente na data em que o combustível for abastecido, sendo assim, esse valor pode variar.</p>`;
@@ -2029,6 +2028,27 @@ export default function ProposalsEdit() {
    * en-US: Total amount displayed fixed in the footer action bar.
    */
   const footerTotalValue = form.watch('total') || 'R$ 0,00';
+  const footerTotalCredits = useMemo(() => {
+    try {
+      const orc = JSON.parse(orcJsonWatched || '{}');
+      if (Array.isArray(orc?.modulos)) {
+        return orc.modulos.reduce((acc: number, m: any) => {
+          const etapaStr = String(m?.etapa || '').toLowerCase().replace(/\s/g, '');
+          if (etapaStr.includes('etapa1') || etapaStr.includes('teoria')) return acc;
+          const price = typeof m?.valor === 'number' ? m.valor : currencyRemoveMaskToNumber(String(m?.valor ?? '0'));
+          const lim = Number(m?.limite) || 0;
+          if (price > 0 && lim > 0) return acc + lim;
+          return acc;
+        }, 0);
+      }
+    } catch {}
+    return 0;
+  }, [orcJsonWatched]);
+  const footerAvgHourly = useMemo(() => {
+    const totalNum = currencyRemoveMaskToNumber(String(footerTotalValue || '0')) || 0;
+    if (footerTotalCredits <= 0 || totalNum <= 0) return '';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalNum / footerTotalCredits);
+  }, [footerTotalValue, footerTotalCredits]);
 
   return (
     <div className="container mx-auto py-3 space-y-3">
@@ -3198,13 +3218,27 @@ export default function ProposalsEdit() {
 
             <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
 
-            {/* Total Inline Discreto */}
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 text-xs">
-              <span className="text-muted-foreground">Total:</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                {footerTotalValue}
-              </span>
+            {/* Total da Proposta + Valor médio/hora */}
+            <div className="inline-flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-emerald-900 shadow-sm">
+              <div className="rounded-lg bg-emerald-100 p-2">
+                <CircleDollarSign className="h-4 w-4 text-emerald-700" />
+              </div>
+              <div className="leading-tight">
+                <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-700">Total da Proposta</p>
+                <p className="text-sm font-bold md:text-base">{footerTotalValue}{footerTotalCredits > 0 ? <span className="ml-2 text-xs font-semibold text-emerald-700/80">• {footerTotalCredits}h</span> : null}</p>
+              </div>
             </div>
+            {footerAvgHourly ? (
+              <div className="inline-flex items-center gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sky-900 shadow-sm">
+                <div className="rounded-lg bg-sky-100 p-2">
+                  <Clock className="h-4 w-4 text-sky-700" />
+                </div>
+                <div className="leading-tight">
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-sky-700">Valor médio / hora</p>
+                  <p className="text-sm font-bold md:text-base">{footerAvgHourly}/h</p>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Lado Direito: Ações de Salvar e Próxima Etapa */}
