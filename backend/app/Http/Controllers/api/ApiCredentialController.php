@@ -9,6 +9,7 @@ use App\Services\Qlib;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Schema;
@@ -303,6 +304,371 @@ class ApiCredentialController extends Controller
             'config' => $cfg,
             'meta' => $this->fetchMetaPairs($item->ID ?? $item->id),
         ];
+    }
+
+    /**
+     * Testa a conexão com o provedor usando as credenciais informadas
+     * (não salvas) ou as salvas quando `id` é enviado.
+     * pt-BR: Substitui o mock do frontend — faz chamada real à API do
+     * provedor (Asaas/Brevo/ZapSign/ChatGuru) ou GET genérico na URL base.
+     */
+    public function testConnection(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Acesso negado'], 403);
+        }
+        if (!$this->permissionService->isHasPermission('view')) {
+            return response()->json(['success' => false, 'message' => 'Acesso negado'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id' => 'nullable',
+            'name' => 'nullable|string|max:255',
+            'slug' => 'nullable|string|max:255',
+            'url' => 'nullable|string|max:1024',
+            'user' => 'nullable|string|max:1024',
+            'pass' => 'nullable|string|max:2048',
+            'produto' => 'nullable|string|max:255',
+            'environment' => 'nullable|string|max:64',
+            'api_key' => 'nullable|string|max:2048',
+            'token' => 'nullable|string|max:2048',
+            'key' => 'nullable|string|max:2048',
+            'account_id' => 'nullable|string|max:255',
+            'phone_id' => 'nullable|string|max:255',
+            'config' => 'nullable|array',
+            'meta' => 'nullable|array',
+        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dados inválidos para o teste.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+        $input = $validator->validated();
+
+        // Base salva (quando o teste parte da tela de edição).
+        $baseName = '';
+        $baseSlug = '';
+        $baseConfig = [];
+        $baseMetaMap = [];
+        if (!empty($input['id'])) {
+            try {
+                $item = ApiCredential::findOrFail($input['id']);
+                $baseName = (string) ($item->post_title ?? '');
+                $baseSlug = (string) ($item->post_name ?? '');
+                $raw = is_string($item->config) ? (json_decode($item->config, true) ?? []) : ($item->config ?? []);
+                $baseConfig = $this->decodePasswordInConfig(is_array($raw) ? $raw : []);
+                foreach ($this->fetchMetaPairs($item->ID ?? $item->id) as $m) {
+                    if (isset($m['key'])) {
+                        $baseMetaMap[(string) $m['key']] = (string) ($m['value'] ?? '');
+                    }
+                }
+            } catch (\Throwable $e) {
+                return response()->json(['success' => false, 'message' => 'Integração não encontrada.'], 404);
+            }
+        }
+
+        $payloadConfig = is_array($input['config'] ?? null) ? $input['config'] : [];
+        $payloadMetaMap = $this->normalizeMetaMap($input['meta'] ?? null);
+
+        $pick = function (string $key, $fallback = '') use ($input, $payloadConfig, $baseConfig, $payloadMetaMap, $baseMetaMap) {
+            foreach ([
+                $input[$key] ?? null,
+                $payloadConfig[$key] ?? null,
+                $payloadMetaMap[$key] ?? null,
+                $baseConfig[$key] ?? null,
+                $baseMetaMap[$key] ?? null,
+            ] as $candidate) {
+                if (is_string($candidate) && trim($candidate) !== '') {
+                    return trim($candidate);
+                }
+            }
+            return is_string($fallback) ? $fallback : '';
+        };
+
+        $name = trim((string) ($input['name'] ?? $payloadConfig['name'] ?? $baseName));
+        $slug = trim((string) ($input['slug'] ?? $payloadConfig['slug'] ?? $baseSlug));
+        $url = trim((string) ($input['url'] ?? $payloadConfig['url'] ?? $baseConfig['url'] ?? ''));
+        $credUser = trim((string) ($input['user'] ?? $payloadConfig['user'] ?? $baseConfig['user'] ?? ''));
+        $environment = strtolower(trim((string) (
+            $input['environment'] ?? $payloadConfig['environment'] ?? $payloadConfig['produto']
+            ?? $baseConfig['environment'] ?? $baseConfig['produto'] ?? $input['produto'] ?? ''
+        )));
+
+        // Token/candidatos de chave nas várias convenções de campo.
+        $token = '';
+        foreach (['pass', 'access_token', 'api_key', 'apiKey', 'token', 'key', 'id_api'] as $tk) {
+            $v = $pick($tk);
+            if ($v !== '') {
+                $token = $v;
+                break;
+            }
+        }
+        if ($token === '' && isset($payloadMetaMap['webhook_token']) && $slug === '') {
+            // Não usa webhook_token como auth; mantém vazio.
+        }
+
+        $provider = $this->detectProvider($name, $slug, $url);
+
+        try {
+            $result = match ($provider) {
+                'asaas' => $this->probeAsaas($url, $token, $environment),
+                'brevo' => $this->probeBrevo($token, $url),
+                'zapsign' => $this->probeZapsign($url, $token),
+                'zapguru' => $this->probeZapguru(
+                    $url !== '' ? $url : ($baseConfig['url'] ?? ''),
+                    $pick('key', $token),
+                    $pick('account_id'),
+                    $pick('phone_id')
+                ),
+                default => $this->probeGeneric($url, $credUser, $token),
+            };
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'provider' => $provider,
+                'message' => 'Falha ao testar: ' . $e->getMessage(),
+            ], 400);
+        }
+
+        $result['provider'] = $provider;
+        return response()->json($result, !empty($result['success']) ? 200 : 400);
+    }
+
+    /**
+     * Normaliza `meta` (lista de pares ou mapa) para mapa chave => valor.
+     */
+    private function normalizeMetaMap(mixed $meta): array
+    {
+        $map = [];
+        if (!is_array($meta)) {
+            return $map;
+        }
+        foreach ($meta as $k => $m) {
+            if (is_array($m) && array_key_exists('key', $m)) {
+                $map[(string) $m['key']] = (string) ($m['value'] ?? '');
+            } elseif (is_string($k)) {
+                $map[$k] = is_string($m) ? $m : (string) ($m ?? '');
+            }
+        }
+        return $map;
+    }
+
+    /**
+     * Detecta o provedor pelo nome/slug/URL.
+     */
+    private function detectProvider(string $name, string $slug, string $url): string
+    {
+        $hay = strtolower($name . ' ' . $slug . ' ' . $url);
+        if (str_contains($hay, 'asaas')) {
+            return 'asaas';
+        }
+        if (str_contains($hay, 'brevo') || str_contains($hay, 'api.brevo.com')) {
+            return 'brevo';
+        }
+        if (str_contains($hay, 'zapsign')) {
+            return 'zapsign';
+        }
+        if (str_contains($hay, 'zapguru') || str_contains($hay, 'chatguru') || str_contains($hay, 'chat.guru')) {
+            return 'zapguru';
+        }
+        return 'generic';
+    }
+
+    /**
+     * Asaas: GET {base}/finance/balance com header access_token.
+     */
+    private function probeAsaas(string $url, string $apiKey, string $environment): array
+    {
+        if ($apiKey === '' || $apiKey === 'apikey') {
+            return ['success' => false, 'message' => 'Informe a API Key do Asaas para testar.'];
+        }
+        $base = $url !== '' ? rtrim($url, '/') : (
+            $environment === 'production'
+                ? 'https://api.asaas.com/v3'
+                : 'https://sandbox.asaas.com/api/v3'
+        );
+        try {
+            $resp = Http::withHeaders([
+                'access_token' => $apiKey,
+                'User-Agent' => 'CrmAero/1.0',
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ])->timeout(12)->get($base . '/finance/balance');
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => 'Asaas: falha de comunicação (' . $e->getMessage() . ').'];
+        }
+        if ($resp->successful()) {
+            return ['success' => true, 'message' => 'Conexão com Asaas estabelecida com sucesso!'];
+        }
+        $decoded = $resp->json() ?? [];
+        $detail = '';
+        if (is_array($decoded)) {
+            $errors = $decoded['errors'] ?? [];
+            if (is_array($errors) && !empty($errors[0]['description'])) {
+                $detail = (string) $errors[0]['description'];
+            } elseif (!empty($decoded['message'])) {
+                $detail = (string) $decoded['message'];
+            }
+        }
+        if (in_array($resp->status(), [401, 403], true)) {
+            return ['success' => false, 'http_status' => $resp->status(), 'message' => 'Asaas: API Key inválida ou sem permissão.' . ($detail !== '' ? ' (' . $detail . ')' : '')];
+        }
+        return ['success' => false, 'http_status' => $resp->status(), 'message' => 'Asaas: falha ao conectar (HTTP ' . $resp->status() . ').' . ($detail !== '' ? ' ' . $detail : '')];
+    }
+
+    /**
+     * Brevo: GET {base}/account com header api-key.
+     */
+    private function probeBrevo(string $apiKey, string $url): array
+    {
+        if ($apiKey === '') {
+            return ['success' => false, 'message' => 'Informe a API Key do Brevo (campo Senha/Token) para testar.'];
+        }
+        $base = str_contains(strtolower($url), 'brevo')
+            ? rtrim(explode('?', $url)[0], '/')
+            : 'https://api.brevo.com/v3';
+        try {
+            $resp = Http::withHeaders([
+                'api-key' => $apiKey,
+                'Accept' => 'application/json',
+            ])->timeout(12)->get($base . '/account');
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => 'Brevo: falha de comunicação (' . $e->getMessage() . ').'];
+        }
+        if ($resp->successful()) {
+            $data = $resp->json() ?? [];
+            $email = is_array($data) ? ($data['email'] ?? '') : '';
+            return ['success' => true, 'message' => 'Conexão com Brevo estabelecida com sucesso!' . ($email !== '' ? " Conta: {$email}." : '')];
+        }
+        if (in_array($resp->status(), [401, 403], true)) {
+            return ['success' => false, 'http_status' => $resp->status(), 'message' => 'Brevo: API Key inválida ou sem permissão.'];
+        }
+        return ['success' => false, 'http_status' => $resp->status(), 'message' => 'Brevo: falha ao conectar (HTTP ' . $resp->status() . ').'];
+    }
+
+    /**
+     * ZapSign: GET {base}/docs/?page=1&page_size=1 com Bearer token.
+     */
+    private function probeZapsign(string $url, string $token): array
+    {
+        $clean = preg_replace('/^\s*Bearer\s+/i', '', trim($token));
+        if ($clean === '') {
+            return ['success' => false, 'message' => 'Informe o API Token do ZapSign (campo Senha/Token ou id_api) para testar.'];
+        }
+        $base = $url !== '' ? rtrim(explode('?', $url)[0], '/') : 'https://api.zapsign.com.br/api/v1';
+        try {
+            $resp = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $clean,
+                'Accept' => 'application/json',
+            ])->timeout(12)->get($base . '/docs/', ['page' => 1, 'page_size' => 1]);
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => 'ZapSign: falha de comunicação (' . $e->getMessage() . ').'];
+        }
+        if ($resp->successful()) {
+            return ['success' => true, 'message' => 'Conexão com ZapSign estabelecida com sucesso!'];
+        }
+        if ($resp->status() === 402) {
+            return ['success' => true, 'message' => 'Token ZapSign válido, mas a conta está sem plano de API (HTTP 402).'];
+        }
+        if (in_array($resp->status(), [401, 403], true)) {
+            return ['success' => false, 'http_status' => $resp->status(), 'message' => 'ZapSign: token inválido ou sem permissão.'];
+        }
+        return ['success' => false, 'http_status' => $resp->status(), 'message' => 'ZapSign: falha ao conectar (HTTP ' . $resp->status() . ').'];
+    }
+
+    /**
+     * ChatGuru/ZapGuru: POST asForm action=message_status (somente leitura,
+     * sem efeitos colaterais) com um message_id inexistente.
+     * Com credenciais válidas a API responde 400 "message_id inválida" — o que
+     * prova que a autenticação passou. Erros citando key/account_id/phone_id
+     * como inválidos (ou HTTP 401/403) indicam credencial errada.
+     * Documentação: https://wiki.chatguru.com.br/documentacao-api/parametros-obrigatorios
+     */
+    private function probeZapguru(string $url, string $key, string $accountId, string $phoneId): array
+    {
+        if ($key === '' || $accountId === '') {
+            return ['success' => false, 'message' => 'Informe key e account_id do ChatGuru (Senha/Token e metacampos) para testar.'];
+        }
+        $base = $url !== '' ? trim(explode('?', $url)[0]) : 'https://s4.chatguru.app/api/v1';
+        $base = rtrim($base, '/');
+        // A API exige key+account_id+phone_id em todas as requisições.
+        $payload = [
+            'key' => $key,
+            'account_id' => $accountId,
+            'action' => 'message_status',
+            'message_id' => '000000000000000000000000',
+        ];
+        if ($phoneId !== '') {
+            $payload['phone_id'] = $phoneId;
+        }
+        try {
+            $resp = Http::asForm()->acceptJson()->timeout(12)->post($base, $payload);
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => 'ChatGuru: falha de comunicação (' . $e->getMessage() . ').'];
+        }
+        $data = [];
+        try {
+            $data = $resp->json() ?? [];
+        } catch (\Throwable $e) {
+            $data = [];
+        }
+        $code = is_array($data) ? (int) ($data['code'] ?? 0) : 0;
+        $description = is_array($data) ? (string) ($data['description'] ?? '') : '';
+        if ($resp->successful() && in_array($code, [200, 201], true)) {
+            return ['success' => true, 'message' => 'Conexão com ChatGuru estabelecida com sucesso!'];
+        }
+        if ($description === '') {
+            return ['success' => false, 'http_status' => $resp->status(), 'message' => 'ChatGuru: resposta inesperada (HTTP ' . $resp->status() . '). Verifique a URL base.'];
+        }
+        // Falha de autenticação: a API cita a credencial como inválida/ausente.
+        // (Regex com modificador `u`: sem ele, classes acentuadas nunca casam UTF-8.)
+        $mentionsCredential = (bool) preg_match('/\bkey\b|account_id|phone_id|\bconta\b|\bchave\b/ui', $description);
+        $mentionsInvalid = (bool) preg_match('/inv[aá]lid|invalid|incorret|n[aã]o encontrad|inexistente|unauthor|forbidden|negad|denied|sem permiss/ui', $description);
+        if (in_array($resp->status(), [401, 403], true)
+            || preg_match('/acesso negado|access denied/ui', $description)
+            || ($mentionsCredential && $mentionsInvalid)) {
+            return ['success' => false, 'http_status' => $resp->status(), 'message' => 'ChatGuru: key/account_id/phone_id inválidos.' . ($description !== '' ? " ({$description})" : '')];
+        }
+        // Qualquer outro erro (ex.: "message_id inválida") significa que a
+        // autenticação passou — as credenciais estão válidas.
+        return ['success' => true, 'message' => 'Conexão com ChatGuru estabelecida com sucesso! (autenticação aceita)'];
+    }
+
+    /**
+     * Genérico: GET na URL base, com Basic (user+pass) ou Bearer (só pass).
+     */
+    private function probeGeneric(string $url, string $credUser, string $token): array
+    {
+        if ($url === '') {
+            return ['success' => false, 'message' => 'Informe a URL da API para testar.'];
+        }
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return ['success' => false, 'message' => 'URL inválida para teste.'];
+        }
+        try {
+            $req = Http::acceptJson()->timeout(12);
+            if ($credUser !== '' && $token !== '') {
+                $req = $req->withBasicAuth($credUser, $token);
+            } elseif ($token !== '') {
+                $req = $req->withHeaders(['Authorization' => 'Bearer ' . $token]);
+            }
+            $resp = $req->get($url);
+        } catch (\Throwable $e) {
+            return ['success' => false, 'message' => 'Falha de comunicação com a URL (' . $e->getMessage() . ').'];
+        }
+        if ($resp->successful()) {
+            return ['success' => true, 'http_status' => $resp->status(), 'message' => 'Conexão estabelecida com sucesso!'];
+        }
+        if (in_array($resp->status(), [401, 403], true)) {
+            return ['success' => false, 'http_status' => $resp->status(), 'message' => 'URL acessível, mas a autenticação falhou (HTTP ' . $resp->status() . '). Verifique usuário/token.'];
+        }
+        if ($resp->status() === 404) {
+            return ['success' => false, 'http_status' => 404, 'message' => 'Servidor acessível, mas a URL retornou 404. Verifique a URL base.'];
+        }
+        return ['success' => false, 'http_status' => $resp->status(), 'message' => 'A URL respondeu com HTTP ' . $resp->status() . '. Verifique a URL/credenciais.'];
     }
 
     public function update(Request $request, string $id)

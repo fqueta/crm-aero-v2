@@ -35,6 +35,16 @@ interface ModuleSelection {
 
 type CurrencyType = 'BRL' | 'USD';
 
+/**
+ * isModuleEtapa1
+ * pt-BR: Identifica se o módulo pertence à Etapa 1 (teórica).
+ * en-US: Identifies if the module belongs to Stage 1 (theory).
+ */
+const isModuleEtapa1 = (mod: any): boolean => {
+  const etapaRaw = String(mod?.etapa || '').toLowerCase().replace(/\s/g, '');
+  return etapaRaw === 'etapa1' || etapaRaw.includes('etapa1') || etapaRaw.includes('teoria');
+};
+
 export default function CourseModulesSelector({ 
   course, 
   aircrafts, 
@@ -97,9 +107,11 @@ export default function CourseModulesSelector({
 
     const modules = Array.isArray(course?.modulos) ? course.modulos : [];
     return modules.reduce((acc: any, mod: any, idx: number) => {
-      // Tenta extrair valor inicial do módulo se existir (ex: Etapa 1 com valor fixo)
+      // Tenta extrair valor inicial do módulo se existir.
+      // Para Etapa 1, os valores vêm zerados por padrão no primeiro acesso se não houver dados gravados.
+      const isEtapa1 = isModuleEtapa1(mod);
       let initialPrice = 0;
-      if (mod.valor) {
+      if (mod.valor && !isEtapa1) {
         initialPrice = typeof mod.valor === 'number' 
             ? mod.valor 
             : currencyRemoveMaskToNumber(String(mod.valor));
@@ -176,8 +188,10 @@ export default function CourseModulesSelector({
             }
 
             // Fallback: Se não tem seleção inicial para este módulo, inicializa com valor padrão do curso
+            // Para Etapa 1, os valores vêm zerados por padrão no primeiro acesso se não houver dados gravados.
+            const isEtapa1 = isModuleEtapa1(mod);
             let defaultPrice = 0;
-            if (mod.valor) {
+            if (mod.valor && !isEtapa1) {
                 defaultPrice = typeof mod.valor === 'number' 
                     ? mod.valor 
                     : currencyRemoveMaskToNumber(String(mod.valor));

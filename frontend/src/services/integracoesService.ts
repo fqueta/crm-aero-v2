@@ -50,6 +50,24 @@ class IntegracoesService extends BaseApiService {
   async get(id: number | string) {
     return super.get<{ data: Integracao }>(`/integracoes/${id}`);
   }
+  /** Testa a conexão com o provedor (chamada real, sem mock) */
+  async testConnection(payload: {
+    id?: number | string;
+    name?: string;
+    slug?: string;
+    url?: string;
+    user?: string;
+    pass?: string;
+    produto?: string;
+    environment?: string;
+    config?: Record<string, any>;
+    meta?: IntegracaoMetaPair[];
+  }) {
+    return this.post<{ success: boolean; message: string; provider?: string; http_status?: number }>(
+      `/integracoes/test-connection`,
+      payload,
+    );
+  }
   /** Move para lixeira */
   async remove(id: number | string) {
     return this.delete<{ message: string }>(`/integracoes/${id}`);

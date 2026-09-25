@@ -126,6 +126,12 @@ export default function ProposalsCreate() {
    * en-US: Pre-selected course ID from query string (?id_curso=128).
    */
   const idCursoFromUrl = searchParams.get('id_curso') || '';
+  const funnelFromUrl = searchParams.get('funnel') || '';
+  const stageFromUrl = searchParams.get('stage_id') || searchParams.get('stage') || '';
+
+  const effectiveFunnelId = navState?.funnelId || funnelFromUrl;
+  const effectiveStageId = navState?.stageId || stageFromUrl;
+  const effectiveReturnTo = navState?.returnTo || (effectiveFunnelId ? `/admin/sales?funnel=${effectiveFunnelId}` : undefined);
 
   const [activeTab, setActiveTab] = useState<'dados' | 'modulos' | 'pagamento' | 'preview'>(
     () => {
@@ -177,6 +183,7 @@ export default function ProposalsCreate() {
    * en-US: Flags whether the current submission should finish and return to origin page.
    */
   const finishAfterSaveRef = useRef(false);
+  const nextTabOnSuccessRef = useRef<string>('');
   /**
    * lastCreatedIdRef
    * pt-BR: Armazena o último ID criado para permitir abrir a visualização.
@@ -923,7 +930,17 @@ export default function ProposalsCreate() {
 
   const handleNextStep = () => {
     if (nextStep) {
-      handleTabChange(nextStep.id);
+      const clienteId = form.getValues('id_cliente');
+      const cursoId = form.getValues('id_curso');
+      // Se os dados essenciais da proposta estão preenchidos, salva no backend e avança para a próxima etapa na edição
+      if (clienteId && cursoId) {
+        finishAfterSaveRef.current = false;
+        nextTabOnSuccessRef.current = nextStep.id;
+        form.handleSubmit(onSubmit, onInvalid)();
+      } else {
+        // Dispara validação dos campos obrigatórios
+        form.handleSubmit(onSubmit, onInvalid)();
+      }
     }
   };
 
@@ -1124,8 +1141,8 @@ export default function ProposalsCreate() {
       */
       console.log('result', result);
       const qs = new URLSearchParams();
-      if (navState?.funnelId) qs.set('funnel', String(navState.funnelId));
-      if (navState?.stageId) qs.set('stage_id', String(navState.stageId));
+      if (effectiveFunnelId) qs.set('funnel', String(effectiveFunnelId));
+      if (effectiveStageId) qs.set('stage_id', String(effectiveStageId));
 
       // Captura o ID retornado e guarda para "Ver detalhes"
       const idStr = String(result?.id ?? result?.data?.id ?? '');
@@ -1133,13 +1150,14 @@ export default function ProposalsCreate() {
         lastCreatedIdRef.current = idStr;
       }
 
-      // Fluxo “Salvar e Continuar”: abrir página de edição com o id da resposta mantendo a aba atual
+      // Fluxo “Salvar e Continuar” ou “Próximo”: abrir página de edição com o id da resposta
       if (!finishAfterSaveRef.current) {
         if (idStr) {
-          if (activeTab) qs.set('tab', activeTab);
+          const targetTab = nextTabOnSuccessRef.current || activeTab;
+          if (targetTab) qs.set('tab', targetTab);
           const suffix = qs.toString() ? `?${qs.toString()}` : '';
           navigate(`/admin/sales/proposals/edit/${idStr}${suffix}`, {
-            state: { returnTo: navState?.returnTo, funnelId: navState?.funnelId, stageId: navState?.stageId },
+            state: { returnTo: effectiveReturnTo, funnelId: effectiveFunnelId, stageId: effectiveStageId },
           });
           form.reset();
         } else {
@@ -1150,12 +1168,12 @@ export default function ProposalsCreate() {
 
       // Fluxo “Salvar e Finalizar”: voltar para origem/lista
       try { queryClient.invalidateQueries(); } catch {}
-      if (navState?.returnTo && typeof navState.returnTo === 'string') {
-        const url = new URL(navState.returnTo, window.location.origin);
+      if (effectiveReturnTo && typeof effectiveReturnTo === 'string') {
+        const url = new URL(effectiveReturnTo, window.location.origin);
         if (idStr) url.searchParams.set('highlight_matricula', idStr);
         navigate(url.pathname + url.search);
-      } else if (navState?.funnelId) {
-        navigate(`/admin/sales?funnel=${navState.funnelId}`);
+      } else if (effectiveFunnelId) {
+        navigate(`/admin/sales?funnel=${effectiveFunnelId}`);
       } else {
         navigate('/admin/sales');
       }
@@ -1246,8 +1264,8 @@ export default function ProposalsCreate() {
       parcelamento_id: values.parcelamento_id || '',
       obs: values.obs || '',
       id_consultor: values.id_consultor,
-      // Removido: stage_id e funell_id
-      // Removido: campo legado "situacao"; usamos somente situacao_id
+      funnel_id: effectiveFunnelId ? Number(effectiveFunnelId) : undefined,
+      stage_id: effectiveStageId ? Number(effectiveStageId) : undefined,
       // pt-BR: Envia também o identificador da Situação selecionada no formulário
       // en-US: Also sends the identifier of the selected Situation from the form
       situacao_id: values.situacao_id || '',
@@ -1424,6 +1442,7 @@ export default function ProposalsCreate() {
    */
   function handleSaveContinue() {
     finishAfterSaveRef.current = false;
+    nextTabOnSuccessRef.current = '';
     form.handleSubmit(onSubmit, onInvalid)();
   }
 
@@ -1434,6 +1453,7 @@ export default function ProposalsCreate() {
    */
   function handleSaveFinish() {
     finishAfterSaveRef.current = true;
+    nextTabOnSuccessRef.current = '';
     form.handleSubmit(onSubmit, onInvalid)();
   }
 
@@ -1449,12 +1469,12 @@ export default function ProposalsCreate() {
    *   3. Fallback to /admin/sales
    */
   function handleBack() {
-    if (navState?.returnTo && typeof navState.returnTo === 'string') {
-      navigate(navState.returnTo);
+    if (effectiveReturnTo && typeof effectiveReturnTo === 'string') {
+      navigate(effectiveReturnTo);
       return;
     }
-    if (navState?.funnelId) {
-      navigate(`/admin/sales?funnel=${navState.funnelId}`);
+    if (effectiveFunnelId) {
+      navigate(`/admin/sales?funnel=${effectiveFunnelId}`);
       return;
     }
     navigate('/admin/sales');
@@ -1466,7 +1486,7 @@ export default function ProposalsCreate() {
    * en-US: Dynamic label for the Back button based on navigation origin.
    */
   const backLabel = (() => {
-    const returnTo = navState?.returnTo;
+    const returnTo = effectiveReturnTo;
     if (!returnTo) return 'Voltar ao funil';
     if (returnTo.includes('formation-control')) return 'Controle de Formação';
     if (returnTo.includes('school/enroll'))     return 'Matrículas';
@@ -1503,26 +1523,6 @@ export default function ProposalsCreate() {
               <CardTitle className="text-3xl font-bold tracking-tight">Nova Proposta</CardTitle>
               <CardDescription className="text-zinc-500 dark:text-zinc-400 mt-1">Configure os detalhes comerciais, prazos e condições do curso.</CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              className="h-9 px-4 rounded-full border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
-              onClick={() => setShowResponsible((s) => !s)}
-              aria-label={showResponsible ? 'Ocultar Responsável' : 'Selecionar Responsável'}
-            >
-              {showResponsible ? (
-                <>
-                  <Users className="w-4 h-4 mr-2 text-zinc-500" />
-                  Ocultar Responsável
-                </>
-              ) : (
-                <>
-                  <User className="w-4 h-4 mr-2 text-blue-500" />
-                  Selecionar Responsável
-                </>
-              )}
-            </Button>
           </div>
         </CardHeader>
         <CardContent className="px-0">
@@ -1812,48 +1812,45 @@ export default function ProposalsCreate() {
                             </FormItem>
                           )}
                         />
-                      </div>
 
-                      {showResponsible && (
-                        <div className="grid grid-cols-1 gap-4 pt-2">
-                          <FormField
-                            control={form.control}
-                            name="id_responsavel"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Responsável</FormLabel>
-                                <Combobox
-                                  options={responsibleOptionsWithSelected}
-                                  value={field.value}
-                                  onValueChange={field.onChange}
-                                  placeholder="Selecione o responsável"
-                                  searchPlaceholder="Pesquisar responsável pelo nome..."
-                                  emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
-                                  disabled={isLoadingResponsibles}
-                                  loading={isLoadingResponsibles}
-                                  onSearch={setResponsibleSearch}
-                                  searchTerm={responsibleSearch}
-                                  debounceMs={250}
-                                  header={({ setOpen }) => (
-                                    <Button
-                                      variant="ghost"
-                                      className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
-                                      onClick={() => {
-                                        setIsQuickResponsibleOpen(true);
-                                        setOpen(false);
-                                      }}
-                                    >
-                                      <Plus className="h-4 w-4 mr-2" />
-                                      Cadastrar Novo Responsável
-                                    </Button>
-                                  )}
-                                />
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      )}
+                        {/* Responsável Adicional (Opcional) */}
+                        <FormField
+                          control={form.control}
+                          name="id_responsavel"
+                          render={({ field }) => (
+                            <FormItem className="md:col-span-2">
+                              <FormLabel>Responsável Adicional (Opcional)</FormLabel>
+                              <Combobox
+                                options={responsibleOptionsWithSelected}
+                                value={field.value}
+                                onValueChange={field.onChange}
+                                placeholder="Selecione o responsável"
+                                searchPlaceholder="Pesquisar responsável pelo nome..."
+                                emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
+                                disabled={isLoadingResponsibles}
+                                loading={isLoadingResponsibles}
+                                onSearch={setResponsibleSearch}
+                                searchTerm={responsibleSearch}
+                                debounceMs={250}
+                                header={({ setOpen }) => (
+                                  <Button
+                                    variant="ghost"
+                                    className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                                    onClick={() => {
+                                      setIsQuickResponsibleOpen(true);
+                                      setOpen(false);
+                                    }}
+                                  >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Cadastrar Novo Responsável
+                                  </Button>
+                                )}
+                              />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                     </div>
 
                     {/* Seção 3: Observações Gerais */}
@@ -2222,7 +2219,7 @@ export default function ProposalsCreate() {
       {/* Rodapé fixo com ações e navegação do Wizard */}
       <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg">
         <div className="container mx-auto py-2.5 px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5">
-          {/* Lado Esquerdo: Navegação de Etapas (Anterior / Próximo / Etapa X de Y), Ver Detalhes e Total */}
+          {/* Lado Esquerdo: Navegação de Etapas (Anterior / Contador), Ver Detalhes e Total */}
           <div className="flex items-center gap-2 w-full sm:w-auto justify-start">
             {/* Botão Anterior (se estiver na 1ª etapa, volta ao funil) */}
             <Button
@@ -2233,22 +2230,8 @@ export default function ProposalsCreate() {
               className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-              <span>Anterior</span>
+              <span>{prevStep ? 'Anterior' : backLabel}</span>
             </Button>
-
-            {/* Botão Próximo */}
-            {nextStep && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleNextStep}
-                className="h-8 px-2.5 text-xs rounded-md font-medium text-primary border-primary/30 hover:bg-primary/5"
-              >
-                <span>Próximo</span>
-                <ArrowRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
-            )}
 
             <span className="text-xs text-muted-foreground font-medium px-1">
               {safeCurrentStepIndex + 1} de {wizardSteps.length}
@@ -2278,7 +2261,7 @@ export default function ProposalsCreate() {
             </div>
           </div>
 
-          {/* Lado Direito: Ações de Salvar */}
+          {/* Lado Direito: Ações de Salvar e Avançar */}
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <Button
               type="button"
@@ -2290,15 +2273,30 @@ export default function ProposalsCreate() {
             >
               <Save className="h-3.5 w-3.5 mr-1.5" /> Salvar e Continuar
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleSaveFinish}
-              disabled={createEnrollment.isPending}
-              className="h-8 px-3.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
-            >
-              <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Salvar e Finalizar
-            </Button>
+
+            {nextStep ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={handleNextStep}
+                disabled={createEnrollment.isPending}
+                className="h-8 px-3.5 text-xs font-semibold shadow-xs"
+              >
+                <span>Próximo: {nextStep.label}</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSaveFinish}
+                disabled={createEnrollment.isPending}
+                className="h-8 px-3.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+              >
+                <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Salvar e Finalizar
+              </Button>
+            )}
           </div>
         </div>
       </div>

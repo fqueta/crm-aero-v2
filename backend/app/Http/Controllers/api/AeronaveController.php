@@ -30,9 +30,6 @@ class AeronaveController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        if (!$this->permissionService->isHasPermission('view')) {
-            return response()->json(['error' => 'Acesso negado'], 403);
-        }
 
         $perPage = (int) $request->input('per_page', 10);
         // Ordenação padrão por updated_at (timestamps habilitados)
@@ -72,9 +69,6 @@ class AeronaveController extends Controller
     {
         $user = $request->user();
         if (!$user) {
-            return response()->json(['error' => 'Acesso negado'], 403);
-        }
-        if (!$this->permissionService->isHasPermission('view')) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
 

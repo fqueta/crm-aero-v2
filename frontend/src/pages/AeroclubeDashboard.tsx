@@ -25,6 +25,7 @@ import {
   Clock3,
   DollarSign,
   Percent,
+  Plus,
   Target,
   TrendingUp,
   Users,
@@ -543,6 +544,15 @@ export default function AeroclubeDashboard() {
               </div>
 
               <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                <Button asChild className="w-full sm:w-auto justify-between sm:justify-center bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs">
+                  <Link
+                    to="/admin/sales/proposals/create?funnel=2"
+                    state={{ returnTo: '/admin/sales?funnel=2', funnelId: '2' }}
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Nova Proposta
+                  </Link>
+                </Button>
                 <Button asChild variant="secondary" className="w-full sm:w-auto justify-between sm:justify-center">
                   <Link to="/admin/reports/relatorio-geral">
                     Relatorio geral

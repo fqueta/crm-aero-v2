@@ -1886,6 +1886,22 @@ export default function ProposalsEdit() {
     navigate('/admin/sales');
   }
 
+  /**
+   * backLabel
+   * pt-BR: Rótulo dinâmico do botão Voltar baseado na origem da navegação.
+   * en-US: Dynamic label for the Back button based on navigation origin.
+   */
+  const backLabel = (() => {
+    const returnTo = navState?.returnTo;
+    if (!returnTo) return 'Voltar ao funil';
+    if (returnTo.includes('formation-control')) return 'Controle de Formação';
+    if (returnTo.includes('school/enroll'))     return 'Matrículas';
+    if (returnTo.includes('school/'))           return 'Escola';
+    if (returnTo.includes('clients/'))          return 'Clientes';
+    if (returnTo.includes('sales'))             return 'Vendas';
+    return 'Voltar';
+  })();
+
   const onInvalid = (errors: any) => {
     console.error('Validation errors on submit:', errors);
     const messages = Object.entries(errors)
@@ -2004,7 +2020,7 @@ export default function ProposalsEdit() {
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={handleBack} className="hover:bg-zinc-100 dark:hover:bg-zinc-800">
-          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao funil
+          <ArrowLeft className="h-4 w-4 mr-2" /> {backLabel}
         </Button>
         
         <div className="flex items-center gap-2">
@@ -2023,19 +2039,6 @@ export default function ProposalsEdit() {
               <CardTitle className="text-3xl font-bold tracking-tight">Editar Proposta</CardTitle>
               <CardDescription className="text-zinc-500 dark:text-zinc-400 mt-1">Configure os detalhes comerciais, prazos e condições do curso.</CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              className="h-9 px-4 rounded-full border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
-              onClick={() => setShowResponsible((s) => !s)}
-            >
-              {showResponsible ? (
-                <><Users className="w-4 h-4 mr-2 text-zinc-500" /> Ocultar Responsável</>
-              ) : (
-                <><User className="w-4 h-4 mr-2 text-blue-500" /> Selecionar Responsável</>
-              )}
-            </Button>
           </div>
         </CardHeader>
         <CardContent className="px-0">
@@ -2335,13 +2338,12 @@ export default function ProposalsEdit() {
                     )}
                   />
 
-                  {showResponsible && (
-                    <FormField
-                      control={form.control}
-                      name="id_responsavel"
-                      render={({ field }) => (
-                        <FormItem className="md:col-span-2">
-                          <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Responsável Adicional</FormLabel>
+                  <FormField
+                    control={form.control}
+                    name="id_responsavel"
+                    render={({ field }) => (
+                      <FormItem className="md:col-span-2">
+                        <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-2 block">Responsável Adicional (Opcional)</FormLabel>
                           <div className="flex items-start gap-2">
                             <div className="flex-1">
                               <Combobox
@@ -2386,7 +2388,6 @@ export default function ProposalsEdit() {
                         </FormItem>
                       )}
                     />
-                  )}
                 </div>
               </div>
 
@@ -3093,7 +3094,7 @@ export default function ProposalsEdit() {
               className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-              <span>Anterior</span>
+              <span>{prevStep ? 'Anterior' : backLabel}</span>
             </Button>
 
             <span className="text-xs text-muted-foreground font-medium px-1">
@@ -3136,37 +3137,44 @@ export default function ProposalsEdit() {
             >
               <Save className="h-3.5 w-3.5 mr-1.5" /> Salvar e Continuar
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleSaveFinish}
-              disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
-              className="h-8 px-3.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
-            >
-              <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Salvar e Finalizar
-            </Button>
 
-            {/* Botão Próximo / Finalizar destacado em primary */}
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={handleNextStep}
-              disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
-              className="h-8 px-3.5 text-xs font-semibold shadow-xs"
-            >
-              {nextStep ? (
-                <>
-                  <span>Próximo</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
-                  <span>Finalizar</span>
-                </>
-              )}
-            </Button>
+            {nextStep && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSaveFinish}
+                disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                title="Salvar alterações e voltar ao funil sem passar pelas próximas etapas"
+              >
+                <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-emerald-600" /> Salvar e Sair
+              </Button>
+            )}
+
+            {nextStep ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={handleNextStep}
+                disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
+                className="h-8 px-3.5 text-xs font-semibold shadow-xs"
+              >
+                <span>Próximo: {nextStep.label}</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSaveFinish}
+                disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
+                className="h-8 px-3.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+              >
+                <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Salvar e Finalizar
+              </Button>
+            )}
           </div>
         </div>
       </div>

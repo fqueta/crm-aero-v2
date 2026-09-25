@@ -72,20 +72,31 @@ export default function IntegrationsEdit() {
     onError: () => toast.error('Erro ao atualizar integração'),
   });
 
-  const handleTestConnection = () => {
+  const handleTestConnection = async () => {
     setTesting(true);
     setTestSuccess(null);
-    // Simula teste de conexao generico
-    setTimeout(() => {
+    try {
+      const metaPairs = meta
+        .filter((m) => (m.key || '').trim() !== '')
+        .map((m) => ({ key: m.key.trim(), value: m.value ?? '' }));
+      const resp = await integracoesService.testConnection({
+        id,
+        name: name.trim(),
+        url: url.trim(),
+        user: user.trim(),
+        pass,
+        produto: produto.trim(),
+        meta: metaPairs,
+      });
+      const msg = (resp as any)?.message || (resp as any)?.data?.message || 'Conexão estabelecida com sucesso!';
       setTesting(false);
-      if (url.trim() !== '') {
-        setTestSuccess(true);
-        toast.success(`Conexão com ${name} estabelecida com sucesso!`);
-      } else {
-        setTestSuccess(false);
-        toast.error('Informe a URL da API para testar.');
-      }
-    }, 1500);
+      setTestSuccess(true);
+      toast.success(msg);
+    } catch (err: any) {
+      setTesting(false);
+      setTestSuccess(false);
+      toast.error(err?.message || 'Falha na conexão. Verifique URL e credenciais.');
+    }
   };
 
   const getIcon = () => {

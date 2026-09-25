@@ -500,6 +500,8 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::apiResource('permissions', PermissionController::class,['parameters' => [
             'permissions' => 'id'
         ]]);
+        // Teste real de conexão (antes do resource p/ não colidir com {id})
+        Route::post('integracoes/test-connection', [\App\Http\Controllers\api\ApiCredentialController::class, 'testConnection'])->name('integracoes.test-connection');
         Route::apiResource('integracoes', \App\Http\Controllers\api\ApiCredentialController::class, ['parameters' => [
             'integracoes' => 'id'
         ]]);

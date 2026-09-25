@@ -193,6 +193,7 @@ const getEnrollmentStatusBadgeClass = (status?: string): string => {
  */
 export default function CustomersLeads({ place = 'atendimento' }: { place?: 'vendas' | 'atendimento' }) {
   const navigate = useNavigate();
+  const location = useLocation();
   /**
    * useAuth
    * pt-BR: Obtém o usuário atual para definir o consultor padrão no modal.
@@ -1204,11 +1205,16 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
               type="button"
               size="sm"
               className="h-8 text-xs font-medium"
-              onClick={() => setScheduleDialogOpen(true)}
-              disabled={selectedEnrollmentIds.length === 0}
+              onClick={() => {
+                const returnTo = `${location.pathname}${location.search}`;
+                const qs = selectedFunnelId ? `?funnel=${selectedFunnelId}` : '';
+                navigate(`/admin/sales/proposals/create${qs}`, {
+                  state: { returnTo, funnelId: selectedFunnelId },
+                });
+              }}
             >
-              <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
-              Agendar atendimento
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Nova Proposta
             </Button>
           </div>
         )}

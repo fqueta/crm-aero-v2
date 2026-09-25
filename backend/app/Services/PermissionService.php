@@ -103,6 +103,14 @@ class PermissionService
     private function exceptions($routeName = ''): bool
     {
         $arr = [
+            'api.aeronaves.index' => true,
+            'api.aeronaves.show' => true,
+            'api.aircraft.index' => true,
+            'api.aircraft.show' => true,
+            'aeronaves.index' => true,
+            'aeronaves.show' => true,
+            'aircraft.index' => true,
+            'aircraft.show' => true,
             'api.scheduled-communications.store' => true,
             'api.scheduled-communications.index' => true,
             'api.scheduled-communications.show' => true,
@@ -123,7 +131,7 @@ class PermissionService
             $url = '/settings/permissions';
         }elseif($name=='api.users.index' || $name == 'api.users.update' || $name == 'api.users.show' || $name == 'api.users.store' || $name == 'api.users.destroy'){
             $url = '/settings/users';
-        }elseif($name=='api.integracoes.index' || $name == 'api.integracoes.update' || $name == 'api.integracoes.show' || $name == 'api.integracoes.store' || $name == 'api.integracoes.destroy'){
+        }elseif($name=='api.integracoes.index' || $name == 'api.integracoes.update' || $name == 'api.integracoes.show' || $name == 'api.integracoes.store' || $name == 'api.integracoes.destroy' || $name == 'api.integracoes.test-connection' || $name == 'api.integracoes.trash' || $name == 'api.integracoes.restore' || $name == 'api.integracoes.forceDelete'){
             $url = '/admin/settings/integrations';
         }elseif($name=='api.workflows.index' || $name == 'api.workflows.update' || $name == 'api.workflows.show' || $name == 'api.workflows.store' || $name == 'api.workflows.destroy' || $name == 'api.workflows.toggle-active'){
             $url = '/admin/settings/workflows';
