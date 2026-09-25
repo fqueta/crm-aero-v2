@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { coursesService } from '@/services/coursesService';
 import { currencyRemoveMaskToNumber } from '@/lib/masks/currency';
 import { normalizeUrl } from '@/lib/urls';
+import { buildPaymentSchedule } from '@/lib/paymentSchedule';
 import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
@@ -389,13 +390,32 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
     const valorParcelaEfetivoFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
 
     let summaryText = '';
-    const hasEntrada = primeiraParcelaValorNum !== null && primeiraParcelaValorNum > 0;
+    const hasEntrada = primeiraParcelaValorNum !== null;
+
+    // Demais parcelas recalculadas (total fixo do financiamento): espelha o
+    // PaymentScheduleService — a 1ª customizada dilui a diferença nas 2..N.
+    let valorDemaisNum = valorParcelaNum;
+    if (hasEntrada && qtdParcelas > 1 && valorParcelaNum > 0) {
+      const sched = buildPaymentSchedule({
+        totalParcelas: qtdParcelas,
+        valorParcela: valorParcelaNum,
+        primeiraValor: primeiraParcelaValorNum,
+        primeiraData: parcelamento.primeira_parcela_data || null,
+        diaPagamento: parcelamento.dia_pagamento ? Number(parcelamento.dia_pagamento) || null : null,
+        recebimentoMatricula: recebimento,
+        valorMatricula: matriculaValorNum,
+        matriculaVencimentoData: parcelamento.matricula_vencimento_data || null,
+        customDueDates: parcelamento.vencimentos_personalizados || null,
+      });
+      if (sched) valorDemaisNum = sched.valorDemaisParcelas;
+    }
+    const valorDemaisFormatted = formatCurrencyBRL(valorDemaisNum);
 
     if (recebimento === 'primeira_parcela' && primeiraParcelaComMatriculaNum !== null) {
       const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaCheioFormatted}`;
+        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorDemaisFormatted}`;
       } else {
         summaryText = `1x de ${entradaComMatFormatted} (Curso + Matrícula)`;
       }
@@ -403,7 +423,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
       const entradaFormatted = formatCurrencyBRL(primeiraParcelaValorNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaCheioFormatted}`;
+        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorDemaisFormatted}`;
       } else {
         summaryText = `1x de ${entradaFormatted} (À vista / Entrada)`;
       }

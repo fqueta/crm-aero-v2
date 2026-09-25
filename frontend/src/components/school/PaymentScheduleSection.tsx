@@ -127,6 +127,19 @@ export function PaymentScheduleSection({
   const hasRowForSelected = !!selecionada && rowValor !== null;
   const valorMatricula = currencyRemoveMaskToNumber(String(inscricaoMasked || "")) || 0;
 
+  // Validação imediata: a 1ª não pode superar o total fixo (qtd × linha),
+  // pois as demais ficariam negativas ao redistribuir (espelha o backend 422).
+  const primeiraValorNum = primeiraValorMasked ? currencyRemoveMaskToNumber(primeiraValorMasked) : null;
+  const totalFinanciadoLinha =
+    hasRowForSelected && Number(selecionada) > 0 && rowValor !== null
+      ? Math.round(Number(selecionada) * rowValor * 100) / 100
+      : null;
+  const primeiraExcedeTotal =
+    primeiraValorNum !== null &&
+    totalFinanciadoLinha !== null &&
+    Number(selecionada) > 1 &&
+    Math.round(primeiraValorNum * 100) / 100 > totalFinanciadoLinha;
+
   const schedule = React.useMemo(
     () =>
       buildPaymentSchedule({
@@ -297,7 +310,7 @@ export function PaymentScheduleSection({
               <FormLabel>Primeira Parcela (valor)</FormLabel>
               <FormControl>
                 <Input
-                  placeholder="R$ 0,00 (vazio = valor da parcela)"
+                  placeholder="R$ 0,00 (vazio = divide igual; demais se ajustam ao total)"
                   value={field.value || ""}
                   disabled={disabled}
                   onChange={(e) => field.onChange(currencyApplyMask(e.target.value, "pt-BR", "BRL"))}
@@ -335,11 +348,23 @@ export function PaymentScheduleSection({
         </p>
       )}
 
+      {primeiraExcedeTotal ? (
+        <p className="text-xs font-medium text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-2.5 py-2">
+          A 1ª parcela (R$ {formatScheduleCurrencyBRL(primeiraValorNum || 0)}) não pode ser maior que o total do
+          financiamento (R$ {formatScheduleCurrencyBRL(totalFinanciadoLinha || 0)}). Reduza o valor da 1ª parcela.
+        </p>
+      ) : null}
+
       {schedule ? (
         <div className="rounded-lg bg-muted/50 p-3">
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs">
-              {schedule.qtd}x de R$ {formatScheduleCurrencyBRL(schedule.valorParcela)}
+              {schedule.primeiraCustomizada && schedule.qtd > 1 ? (
+                <>1ª R$ {formatScheduleCurrencyBRL(schedule.primeira.valor)} + {schedule.qtd - 1}x de R${" "}
+                  {formatScheduleCurrencyBRL(schedule.valorDemaisParcelas)}</>
+              ) : (
+                <>{schedule.qtd}x de R$ {formatScheduleCurrencyBRL(schedule.valorParcela)}</>
+              )}
             </span>
             {schedule.recebimentoMatricula === "avulsa" && schedule.valorMatricula > 0 && (
               <span className="inline-flex items-center rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-2 py-1 text-xs font-medium">
