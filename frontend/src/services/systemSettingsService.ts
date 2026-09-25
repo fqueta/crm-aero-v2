@@ -27,10 +27,16 @@ export interface AdvancedSystemSettings {
   url_api_aeroclube: string;
   token_api_aeroclube: string;
   credenciais_zapsign?: { url_api: string; id_api: string } | string;
+  logo_url?: string;
+  favicon_url?: string;
   email_logo_url?: string;
   email_nome?: string;
   ai_chat_provider?: string;
   preco_litro?: string;
+  app_primary_color?: string;
+  app_secondary_color?: string;
+  app_hover_color?: string;
+  app_dark_mode_default?: string;
 }
 
 /**

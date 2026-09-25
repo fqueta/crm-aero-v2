@@ -35,7 +35,11 @@ class OptionController extends Controller
             'app_secondary_color',
             'app_secondary_text_color',
             'app_hover_color',
-            'app_dark_mode_default'
+            'app_dark_mode_default',
+            'logo_url',
+            'favicon_url',
+            'email_logo_url',
+            'email_nome'
         ];
 
         $options = Option::whereIn('url', $themeKeys)->get();

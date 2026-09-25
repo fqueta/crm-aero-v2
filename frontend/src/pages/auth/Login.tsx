@@ -38,8 +38,32 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
+  const [logoUrl, setLogoUrl] = useState(() => {
+    try {
+      const saved = localStorage.getItem('appearanceSettings');
+      if (saved) {
+        const settings = JSON.parse(saved);
+        if (settings.logoUrl) return settings.logoUrl;
+      }
+    } catch {}
+    return "/logo.png";
+  });
   const { login, isLoading, user, isAuthenticated } = useAuth();
   const { redirectAfterAuth } = useRedirect();
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        const saved = localStorage.getItem('appearanceSettings');
+        if (saved) {
+          const settings = JSON.parse(saved);
+          setLogoUrl(settings.logoUrl || "/logo.png");
+        }
+      } catch {}
+    };
+    window.addEventListener('appearanceSettingsUpdated', handleUpdate);
+    return () => window.removeEventListener('appearanceSettingsUpdated', handleUpdate);
+  }, []);
 
   // Efeito para redirecionar após login bem-sucedido
   useEffect(() => {
@@ -116,7 +140,12 @@ export default function Login() {
                 </Link>
               </Button>
               <div className="flex-1 text-center">
-                <img src="/logo.png" alt="Aeroclube JF" className="h-10 mx-auto mb-2" />
+                <img
+                  src={logoUrl}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/logo.png"; }}
+                  alt="Aeroclube JF"
+                  className="h-10 mx-auto mb-2 object-contain"
+                />
                 <h1 className="text-xl font-bold text-blue-700">Aeroclube de Juiz de Fora</h1>
               </div>
             </div>

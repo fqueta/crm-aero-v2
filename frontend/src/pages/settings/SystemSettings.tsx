@@ -258,14 +258,16 @@ export default function SystemSettings() {
     }
     
     // Aplicar favicon
+    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
     if (settings.faviconUrl) {
-      let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
       if (!link) {
         link = document.createElement('link');
         link.rel = 'icon';
         document.head.appendChild(link);
       }
       link.href = settings.faviconUrl;
+    } else if (link && link.getAttribute('href') !== '/logo.png') {
+      link.href = '/logo.png';
     }
   };
 
@@ -278,21 +280,22 @@ export default function SystemSettings() {
     window.dispatchEvent(new Event('appearanceSettingsUpdated'));
 
     try {
-      const emailSettings: Record<string, string> = {};
-      if (appearanceSettings.logoUrl) {
-        emailSettings.email_logo_url = appearanceSettings.logoUrl;
-      }
-      if (appearanceSettings.emailNome) {
-        emailSettings.email_nome = appearanceSettings.emailNome;
-      }
-      if (Object.keys(emailSettings).length > 0) {
-        await systemSettingsService.saveAdvancedSettings(emailSettings as AdvancedSystemSettings);
-      }
+      const payload: Partial<AdvancedSystemSettings> = {
+        logo_url: appearanceSettings.logoUrl || '',
+        email_logo_url: appearanceSettings.logoUrl || '',
+        favicon_url: appearanceSettings.faviconUrl || '',
+        email_nome: appearanceSettings.emailNome || '',
+        app_primary_color: appearanceSettings.primaryColor || '',
+        app_secondary_color: appearanceSettings.secondaryColor || '',
+        app_hover_color: appearanceSettings.accentColor || '',
+        app_dark_mode_default: appearanceSettings.darkMode ? 'true' : 'false',
+      };
+      await systemSettingsService.saveAdvancedSettings(payload as AdvancedSystemSettings);
+      toast.success('Configurações de identidade visual e aparência salvas!');
     } catch (error) {
-      console.error('Erro ao salvar configurações de e-mail:', error);
+      console.error('Erro ao salvar configurações de identidade visual/aparência:', error);
+      toast.error('Erro ao salvar configurações no servidor');
     }
-
-    toast.success('Configurações de aparência salvas!');
   };
 
 
@@ -518,24 +521,42 @@ export default function SystemSettings() {
         }));
       }
 
-      // Carrega configurações de e-mail do banco
-      const emailUpdates: Record<string, string> = {};
-      if (data.email_logo_url) {
-        emailUpdates.logoUrl = data.email_logo_url;
+      // Carrega configurações de identidade visual e tema do banco
+      const appearanceUpdates: Partial<typeof appearanceSettings> = {};
+      if (data.logo_url !== undefined || data.email_logo_url !== undefined) {
+        appearanceUpdates.logoUrl = data.logo_url || data.email_logo_url || '';
       }
-      if (data.email_nome) {
-        emailUpdates.emailNome = data.email_nome;
+      if (data.favicon_url !== undefined) {
+        appearanceUpdates.faviconUrl = data.favicon_url || '';
       }
-      if (Object.keys(emailUpdates).length > 0) {
-        setAppearanceSettings(prev => ({
-          ...prev,
-          ...emailUpdates,
-        }));
+      if (data.email_nome !== undefined) {
+        appearanceUpdates.emailNome = data.email_nome || '';
+      }
+      if (data.app_primary_color) {
+        appearanceUpdates.primaryColor = data.app_primary_color;
+      }
+      if (data.app_secondary_color) {
+        appearanceUpdates.secondaryColor = data.app_secondary_color;
+      }
+      if (data.app_hover_color) {
+        appearanceUpdates.accentColor = data.app_hover_color;
+      }
+      if (data.app_dark_mode_default !== undefined) {
+        appearanceUpdates.darkMode = String(data.app_dark_mode_default).toLowerCase() === 'true';
+      }
+
+      if (Object.keys(appearanceUpdates).length > 0) {
+        setAppearanceSettings(prev => {
+          const next = { ...prev, ...appearanceUpdates };
+          applyAppearanceSettings(next);
+          return next;
+        });
         const stored = JSON.parse(localStorage.getItem('appearanceSettings') || '{}');
         localStorage.setItem('appearanceSettings', JSON.stringify({
           ...stored,
-          ...emailUpdates,
+          ...appearanceUpdates,
         }));
+        window.dispatchEvent(new Event('appearanceSettingsUpdated'));
       }
       
     } catch (error) {

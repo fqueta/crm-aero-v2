@@ -114,6 +114,19 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
           // Esta configuração será aplicada pelos componentes que usam notificações
         }
         
+        // Aplica favicon
+        let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+        if (appearanceSettings.faviconUrl) {
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.head.appendChild(link);
+          }
+          link.href = appearanceSettings.faviconUrl;
+        } else if (link && link.getAttribute('href') !== '/logo.png') {
+          link.href = '/logo.png';
+        }
+        
         // console.log('Configurações de aparência aplicadas:', appearanceSettings);
       }
       
@@ -175,6 +188,64 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
           document.documentElement.style.setProperty('--accent', hexToHsl(hover));
           // Algumas partes usam muted para hover, também podemos alinhar
         }
+
+        const logoUrl = getVal('logo_url') || getVal('email_logo_url');
+        const faviconUrl = getVal('favicon_url');
+        const emailNome = getVal('email_nome');
+
+        // Aplica favicon do banco
+        let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+        if (faviconUrl) {
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.head.appendChild(link);
+          }
+          link.href = faviconUrl;
+        }
+
+        // Sincroniza configurações no localStorage
+        try {
+          const saved = localStorage.getItem('appearanceSettings');
+          const current = saved ? JSON.parse(saved) : {};
+          let changed = false;
+
+          if (logoUrl !== undefined && logoUrl !== null && current.logoUrl !== logoUrl) {
+            current.logoUrl = logoUrl;
+            changed = true;
+          }
+          if (faviconUrl !== undefined && faviconUrl !== null && current.faviconUrl !== faviconUrl) {
+            current.faviconUrl = faviconUrl;
+            changed = true;
+          }
+          if (emailNome !== undefined && emailNome !== null && current.emailNome !== emailNome) {
+            current.emailNome = emailNome;
+            changed = true;
+          }
+          if (primary && current.primaryColor !== primary) {
+            current.primaryColor = primary;
+            changed = true;
+          }
+          if (secondary && current.secondaryColor !== secondary) {
+            current.secondaryColor = secondary;
+            changed = true;
+          }
+          if (hover && current.accentColor !== hover) {
+            current.accentColor = hover;
+            changed = true;
+          }
+          if (current.darkMode !== isDark) {
+            current.darkMode = isDark;
+            changed = true;
+          }
+
+          if (changed) {
+            localStorage.setItem('appearanceSettings', JSON.stringify(current));
+            window.dispatchEvent(new Event('appearanceSettingsUpdated'));
+          }
+        } catch (e) {
+          console.error('Erro ao sincronizar logo/favicon no localStorage:', e);
+        }
       }
     } catch (error) {
       console.error('Erro ao buscar configurações de tema da API:', error);
@@ -187,7 +258,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     fetchAndApplyApiThemeSettings(); // overriding with DB
   }, []);
   
-  // Escuta mudanças no localStorage para aplicar configurações em tempo real
+  // Escuta mudanças no localStorage e evento customizado para aplicar configurações em tempo real
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'appearanceSettings' || e.key === 'basicSettings') {
@@ -196,9 +267,11 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     };
     
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('appearanceSettingsUpdated', applyThemeSettings);
     
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('appearanceSettingsUpdated', applyThemeSettings);
     };
   }, []);
   
