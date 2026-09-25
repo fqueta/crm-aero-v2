@@ -526,6 +526,18 @@ export default function ProposalsEdit() {
     }
   );
 
+  const scrollToWizardTop = () => {
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const el = document.getElementById('proposal-wizard-top');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } catch {
+      window.scrollTo(0, 0);
+    }
+  };
+
   const handleTabChange = (val: string) => {
     setActiveTab(val as any);
     setSearchParams((prev) => {
@@ -533,12 +545,14 @@ export default function ProposalsEdit() {
       next.set('tab', val);
       return next;
     }, { replace: true });
+    scrollToWizardTop();
   };
 
   useEffect(() => {
     const t = searchParams.get('tab');
     if (t === 'dados' || t === 'modulos' || t === 'pagamento' || t === 'preview') {
       setActiveTab(t);
+      scrollToWizardTop();
     }
   }, [searchParams]);
 
@@ -2017,37 +2031,40 @@ export default function ProposalsEdit() {
   const footerTotalValue = form.watch('total') || 'R$ 0,00';
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={handleBack} className="hover:bg-zinc-100 dark:hover:bg-zinc-800">
-          <ArrowLeft className="h-4 w-4 mr-2" /> {backLabel}
-        </Button>
-        
-        <div className="flex items-center gap-2">
-          {enrollment && (
-            <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-widest bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
-              ID: {id}
-            </Badge>
-          )}
+    <div className="container mx-auto py-3 space-y-3">
+      {/* Cabeçalho Compacto: Botão Voltar + Título + Badge de ID na mesma linha */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleBack} 
+            className="h-8 px-2.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-semibold shrink-0"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> {backLabel}
+          </Button>
+          <div className="h-4 w-[1px] bg-border hidden sm:block" />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">Editar Proposta</h1>
+              {enrollment && (
+                <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-widest bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                  ID: {id}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground hidden md:block">Configure os detalhes comerciais, prazos e condições do curso.</p>
+          </div>
         </div>
       </div>
 
-      <Card className="border-none shadow-none bg-transparent">
-        <CardHeader className="px-0 pt-0">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-3xl font-bold tracking-tight">Editar Proposta</CardTitle>
-              <CardDescription className="text-zinc-500 dark:text-zinc-400 mt-1">Configure os detalhes comerciais, prazos e condições do curso.</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="px-0">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
-              
-              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                {/* Wizard Header Sticky com Stepper e Barra de Progresso */}
-                <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 border-b shadow-xs">
+      <div className="px-0">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-4">
+            
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+              {/* Wizard Header Sticky com Stepper e Barra de Progresso */}
+              <div id="proposal-wizard-top" className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 border-b shadow-xs rounded-xl overflow-hidden">
                   {/* Barra de Progresso Fina no Topo */}
                   <div className="w-full h-1 bg-muted/80 overflow-hidden">
                     <div 
@@ -2136,7 +2153,7 @@ export default function ProposalsEdit() {
                   </div>
                 </div>
 
-                <div className="px-6 pt-6 pb-2">
+                <div className="px-2 sm:px-4 pt-4 pb-2">
                   {/* Aba 1: Dados do Cliente, Curso e Observações */}
                   <TabsContent value="dados" forceMount className={`space-y-8 ${activeTab !== 'dados' ? 'hidden' : ''}`}>
                     {/* Seção 1: Identificação */}
@@ -2476,6 +2493,72 @@ export default function ProposalsEdit() {
                         )}
                       />
                     )}
+                    {/* Reprodução dos Ajustes Financeiros na Aba 2 */}
+                    <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-1 bg-emerald-600 rounded-full"></div>
+                        <h4 className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground">Ajustes Financeiros e Taxas</h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-zinc-100/60 dark:bg-zinc-950/40 border border-zinc-200/80 dark:border-zinc-800/80">
+                        {/* Desconto Input */}
+                        <FormField control={form.control} name="desconto" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-1.5 block">Valor do Desconto</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  className="pl-8 bg-white dark:bg-zinc-900"
+                                  placeholder="R$ 0,00"
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                                />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        
+                        {/* Inscrição Input */}
+                        <FormField control={form.control} name="inscricao" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-1.5 block">Taxa de Inscrição</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  className="pl-8 bg-white dark:bg-zinc-900"
+                                  placeholder="R$ 0,00"
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                                />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+
+                        {/* Subtotal Input */}
+                        <FormField control={form.control} name="subtotal" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-1.5 block">Ajuste de Subtotal</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <Input
+                                  className="pl-8 bg-white dark:bg-zinc-900"
+                                  placeholder="R$ 0,00"
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(currencyApplyMask(e.target.value, 'pt-BR', 'BRL'))}
+                                />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">R$</span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -3078,8 +3161,7 @@ export default function ProposalsEdit() {
               <div className="h-16" />
             </form>
           </Form>
-        </CardContent>
-      </Card>
+        </div>
       {/* Rodapé fixo com ações e navegação do Wizard */}
       <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg">
         <div className="container mx-auto py-2.5 px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5">
