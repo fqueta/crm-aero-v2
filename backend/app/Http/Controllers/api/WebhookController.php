@@ -162,6 +162,26 @@ class WebhookController extends Controller
     private function processWebhook(string $endp1, ?string $endp2, Request $request): array
     {
         $payload = $request->all();
+        if (empty($payload)) {
+            // pt-BR: Clientes que postam JSON sem `Content-Type: application/json`
+            // (ex.: reenvio manual via Postman) caem aqui com `all()` vazio.
+            // Lê o corpo bruto como fallback para não perder o evento.
+            try {
+                $rawContent = (string) $request->getContent();
+                $decoded = json_decode($rawContent, true);
+                if (is_array($decoded) && !empty($decoded)) {
+                    $payload = $decoded;
+                } elseif ($rawContent !== '') {
+                    Log::warning('Webhook payload vazio após fallback', [
+                        'endpoint1' => $endp1,
+                        'content_length' => strlen($rawContent),
+                        'content_sample' => substr($rawContent, 0, 200),
+                        'content_tail' => substr($rawContent, -100),
+                        'json_error' => json_last_error_msg(),
+                    ]);
+                }
+            } catch (\Throwable $e) {}
+        }
         $headers = $request->headers->all();
         // dd($request->all());
         // Lógica específica baseada nos endpoints
@@ -378,6 +398,17 @@ class WebhookController extends Controller
             'payload_keys' => array_keys($payload)
         ]);
         // Lógica genérica para webhooks não específicos
+        if (empty($payload)) {
+            return [
+                'type' => 'zapsing',
+                'endpoint1' => $endp1,
+                'endpoint2' => $endp2,
+                'processed_at' => now()->toISOString(),
+                'payload_received' => false,
+                'ignored' => true,
+                'reason' => 'payload vazio ou JSON invalido (verifique Content-Type e o corpo)',
+            ];
+        }
         $proccess = (new ZapsingController())->webhook($payload);
         return [
             'type' => 'zapsing',

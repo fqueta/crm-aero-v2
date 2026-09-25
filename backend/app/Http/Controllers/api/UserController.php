@@ -86,7 +86,34 @@ class UserController extends Controller
     }
 
     /**
+     * Verifica se o usuário é interno (não cliente/responsável) e está ativo.
+     * Mesma regra de atividade do PermissionService (status `actived` ou ativo `s`),
+     * sem revogação de token — apenas nega o acesso.
+     */
+    protected function isInternalActiveUser($user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+        $status = isset($user->status) ? strtolower((string) $user->status) : null;
+        $ativo = isset($user->ativo) ? strtolower((string) $user->ativo) : null;
+        if ($status !== 'actived' && $ativo !== 's') {
+            return false;
+        }
+        $permissionId = isset($user->permission_id) ? (int) $user->permission_id : 0;
+        if ($permissionId <= 0 || in_array($permissionId, $this->getClientPermissionIds(), true)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Listar todos os usuários (exclui clientes e responsáveis)
+     *
+     * pt-BR: Quando `consultores` é informado (combobox de vendas: Nova Proposta,
+     * etc.), a listagem é liberada para todo usuário interno ativo — vendedores
+     * dos grupos sem `view` no menu Usuários (ex.: 2 e 4) precisam dela para criar
+     * propostas. A tela admin de Usuários (sem o filtro) continua exigindo `view`.
      */
     public function index(Request $request)
     {
@@ -95,7 +122,12 @@ class UserController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        if (!$this->permissionService->isHasPermission('view')) {
+        $isConsultores = $request->filled('consultores');
+        if ($isConsultores) {
+            if (!$this->isInternalActiveUser($user)) {
+                return response()->json(['error' => 'Acesso negado'], 403);
+            }
+        } elseif (!$this->permissionService->isHasPermission('view')) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
         $perPage = $request->input('per_page', 10);

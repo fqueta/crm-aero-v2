@@ -19,6 +19,8 @@ import {
 import { Pencil, Trash2, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { asaasService } from "@/services/asaasService";
+import { useAuth } from "@/contexts/AuthContext";
+import { currencyApplyMask, currencyRemoveMaskToNumber } from "@/lib/masks/currency";
 import type { AsaasBillingPayment } from "@/types/asaas";
 
 const EDITABLE = ["PENDING", "OVERDUE"];
@@ -47,6 +49,9 @@ function formatBRL(n: number): string {
  */
 export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  // pt-BR: Leitura liberada p/ interno ativo; escrita (editar/excluir) só Master/Admin (1,2).
+  const canManage = !!user && [1, 2].includes(Number(user?.permission_id));
   const [editTarget, setEditTarget] = React.useState<AsaasBillingPayment | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<AsaasBillingPayment | null>(null);
   const [editDueDate, setEditDueDate] = React.useState("");
@@ -70,7 +75,7 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
       asaasService.updateBillingPayment(String(editTarget!.id), {
         matricula_id: matriculaId,
         dueDate: editDueDate || undefined,
-        value: editValue ? Number(editValue) : undefined,
+        value: editValue ? currencyRemoveMaskToNumber(editValue) : undefined,
         description: editDescription || undefined,
       }),
     onSuccess: () => {
@@ -100,7 +105,8 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
   const openEdit = (p: AsaasBillingPayment) => {
     setEditTarget(p);
     setEditDueDate(String(p.dueDate || "").slice(0, 10));
-    setEditValue(String(p.value ?? ""));
+    // pt-BR: Exibe o valor com máscara BRL (ex.: "R$ 14.850,00").
+    setEditValue(currencyApplyMask(String(Math.round(Number(p.value ?? 0) * 100))));
     setEditDescription("");
   };
 
@@ -153,12 +159,12 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
                       </a>
                     </Button>
                   )}
-                  {editable && (
+                  {editable && canManage && (
                     <Button variant="outline" size="icon" onClick={() => openEdit(p)} title="Editar no Asaas">
                       <Pencil className="h-4 w-4" />
                     </Button>
                   )}
-                  {editable && (
+                  {editable && canManage && (
                     <Button
                       variant="outline"
                       size="icon"
@@ -188,7 +194,13 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
               </div>
               <div className="space-y-1">
                 <Label>Valor (R$)</Label>
-                <Input type="number" min="0" step="0.01" value={editValue} onChange={(e) => setEditValue(e.target.value)} />
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={editValue}
+                  onChange={(e) => setEditValue(currencyApplyMask(e.target.value))}
+                  placeholder="R$ 0,00"
+                />
               </div>
               <div className="space-y-1">
                 <Label>Descrição</Label>

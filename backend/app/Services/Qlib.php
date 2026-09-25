@@ -3203,6 +3203,57 @@ class Qlib
         return rtrim($scheme . '://' . $host, '/');
     }
     /**
+     * clientPermissionIds
+     * pt-BR: IDs de permissão de cliente/responsável (nomes + opção
+     * `permission_client_id` + 7/8). Usado para excluir clientes das listagens
+     * internas sem duplicar a regra em cada controller.
+     */
+    static function clientPermissionIds(): array
+    {
+        $ids = [];
+        try {
+            $permIds = DB::table('permissions')
+                ->where(function ($q) {
+                    $q->where('name', 'like', '%cliente%')
+                      ->orWhere('name', 'like', '%responsavel%')
+                      ->orWhere('name', 'like', '%responsável%');
+                })
+                ->pluck('id')
+                ->toArray();
+            $ids = array_merge($ids, $permIds);
+        } catch (\Throwable $e) {}
+        $optClient = self::qoption('permission_client_id');
+        if ($optClient) {
+            $ids[] = (int) $optClient;
+        } else {
+            $ids[] = 5;
+        }
+        $ids[] = 7;
+        $ids[] = 8;
+        return array_values(array_unique(array_filter(array_map('intval', $ids))));
+    }
+    /**
+     * isInternalActiveUser
+     * pt-BR: Usuário interno (fora dos permission_ids de cliente) e ativo
+     * (status `actived` ou ativo `s`). Sem revogação de token — apenas nega.
+     */
+    static function isInternalActiveUser($user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+        $status = isset($user->status) ? strtolower((string) $user->status) : null;
+        $ativo = isset($user->ativo) ? strtolower((string) $user->ativo) : null;
+        if ($status !== 'actived' && $ativo !== 's') {
+            return false;
+        }
+        $permissionId = isset($user->permission_id) ? (int) $user->permission_id : 0;
+        if ($permissionId <= 0 || in_array($permissionId, self::clientPermissionIds(), true)) {
+            return false;
+        }
+        return true;
+    }
+    /**
      * normalizeUrl
      * pt-BR: Normaliza uma URL: remove espaços, colapsa barras duplicadas no path
      * (ex.: `https://host//aluno/x` → `https://host/aluno/x`), preservando o `://`.
