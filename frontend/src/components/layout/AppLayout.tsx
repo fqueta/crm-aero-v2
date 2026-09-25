@@ -28,6 +28,7 @@ import {
 import React from "react";
 import { QuickClientSearch } from "@/components/clients/QuickClientSearch";
 import { RouteChangeLoader } from "./RouteChangeLoader";
+import { AiAssistantWidget } from "@/components/ai/AiAssistantWidget";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -180,6 +181,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               </CommandGroup>
             </CommandList>
           </CommandDialog>
+
+          {/* Assistente de IA — Chat Widget Flutuante (guia do sistema) */}
+          <AiAssistantWidget />
         </div>
       </div>
     </SidebarProvider>

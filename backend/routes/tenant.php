@@ -506,6 +506,10 @@ Route::name('api.')->prefix('api/v1')->middleware([
             'integracoes' => 'id'
         ]]);
         Route::get('integracoes/trash', [\App\Http\Controllers\api\ApiCredentialController::class, 'trash'])->name('integracoes.trash');
+        // Assistente de IA (guia do sistema — padrão Help Desk)
+        Route::post('ai/assistant', [\App\Http\Controllers\api\AiChatController::class, 'chat'])->name('ai.assistant.chat');
+        Route::get('ai/assistant/suggestions', [\App\Http\Controllers\api\AiChatController::class, 'suggestions'])->name('ai.assistant.suggestions');
+        Route::get('ai/status', [\App\Http\Controllers\api\AiChatController::class, 'status'])->name('ai.status');
         // Asaas: status e teste de conexão (padrão Help Desk)
         Route::get('asaas/status', [\App\Http\Controllers\api\AsaasController::class, 'status'])->name('asaas.status');
         Route::post('asaas/test-connection', [\App\Http\Controllers\api\AsaasController::class, 'testConnection'])->name('asaas.test-connection');

@@ -10,9 +10,11 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MoreVertical, Search, RefreshCw, CheckCircle2, Database, CreditCard, Mail, FileSignature, MessageSquare, Blocks, ChevronRight } from 'lucide-react';
+import { MoreVertical, Search, RefreshCw, CheckCircle2, Database, CreditCard, Mail, FileSignature, MessageSquare, Blocks, ChevronRight, Bot } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AsaasSettingsCard } from '@/components/settings/AsaasSettingsCard';
+import { AiSettingsCard, AiSavePayload } from '@/components/settings/AiSettingsCard';
+import { systemSettingsService } from '@/services/systemSettingsService';
 import type { AsaasSavePayload } from '@/types/asaas';
 
 export default function Integrations() {
@@ -219,6 +221,43 @@ export default function Integrations() {
     },
   });
 
+  /**
+   * IA (guia do sistema — padrão Help Desk)
+   * pt-BR: Localiza as credenciais `integracao-openai` / `integracao-gemini`
+   * (auto-bootstrap no backend) e salva as chaves + provedor preferido.
+   */
+  const openaiCredential = useMemo(
+    () => items.find((it) => String(it.slug || '').toLowerCase().includes('openai')),
+    [items]
+  );
+  const geminiCredential = useMemo(
+    () => items.find((it) => String(it.slug || '').toLowerCase().includes('gemini')),
+    [items]
+  );
+  const saveAiMut = useMutation({
+    mutationFn: async (p: AiSavePayload) => {
+      const saveOne = async (slugPart: string, title: string, url: string, key: string) => {
+        if (!key) return;
+        const config: IntegracaoConfig = { url, access_token: key };
+        const existing = items.find((it) => String(it.slug || '').toLowerCase().includes(slugPart));
+        if (existing) {
+          return integracoesService.update(existing.id, { name: title, active: true, config });
+        }
+        return integracoesService.create({ name: title, active: true, config });
+      };
+      await saveOne('openai', 'Integração OpenAI', 'https://api.openai.com/v1', p.openai_key);
+      await saveOne('gemini', 'Integração Gemini', 'https://generativelanguage.googleapis.com', p.gemini_key);
+      await systemSettingsService.saveAdvancedSettings({ ai_chat_provider: p.preferred });
+    },
+    onSuccess: () => {
+      toast.success('Chaves de IA salvas');
+      qc.invalidateQueries({ queryKey: ['integracoes'] });
+    },
+    onError: (e: any) => {
+      toast.error(e?.body?.message || 'Erro ao salvar chaves de IA');
+    },
+  });
+
   // Debug: chamada direta para verificar execução de fetch
   useEffect(() => {
     (async () => {
@@ -240,6 +279,7 @@ export default function Integrations() {
     if (n.includes('brevo') || n.includes('mail') || n.includes('email')) return <Mail className="w-6 h-6 text-emerald-600" />;
     if (n.includes('zapsign')) return <FileSignature className="w-6 h-6 text-blue-600" />;
     if (n.includes('zapguru') || n.includes('chat')) return <MessageSquare className="w-6 h-6 text-violet-600" />;
+    if (n.includes('openai') || n.includes('gemini') || n.includes('inteligência') || n.includes('inteligencia')) return <Bot className="w-6 h-6 text-emerald-600" />;
     return <Blocks className="w-6 h-6 text-slate-600" />;
   };
 
@@ -249,6 +289,7 @@ export default function Integrations() {
     if (n.includes('brevo') || n.includes('mail') || n.includes('email')) return 'bg-emerald-50';
     if (n.includes('zapsign')) return 'bg-blue-50';
     if (n.includes('zapguru') || n.includes('chat')) return 'bg-violet-50';
+    if (n.includes('openai') || n.includes('gemini') || n.includes('inteligência') || n.includes('inteligencia')) return 'bg-emerald-50';
     return 'bg-slate-50';
   };
 
@@ -257,6 +298,8 @@ export default function Integrations() {
     if (n.includes('asaas')) return 'Gateway de pagamento central da plataforma para mensalidades e cobranças.';
     if (n.includes('zapsign')) return 'Assinatura eletrônica e gestão de contratos e documentos.';
     if (n.includes('zapguru')) return 'Plataforma de atendimento e disparo de mensagens via WhatsApp.';
+    if (n.includes('openai')) return 'Provedor de IA (GPT) para o assistente guia do sistema.';
+    if (n.includes('gemini')) return 'Provedor de IA (Google) para o assistente guia do sistema.';
     return `Integração e configurações do serviço ${name}.`;
   };
 
@@ -346,6 +389,14 @@ export default function Integrations() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Card dedicado: Assistente de IA (guia do sistema) */}
+      <AiSettingsCard
+        openaiCredential={openaiCredential}
+        geminiCredential={geminiCredential}
+        onSave={(p) => saveAiMut.mutate(p)}
+        isLoading={saveAiMut.isPending}
+      />
 
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">

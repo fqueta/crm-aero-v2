@@ -29,6 +29,7 @@ export interface AdvancedSystemSettings {
   credenciais_zapsign?: { url_api: string; id_api: string } | string;
   email_logo_url?: string;
   email_nome?: string;
+  ai_chat_provider?: string;
 }
 
 /**

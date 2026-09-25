@@ -122,6 +122,14 @@ class ApiCredentialController extends Controller
                 'account_id' => '',
                 'phone_id' => '',
             ]);
+            $ensure('integracao-openai', 'Integração OpenAI', [
+                'url' => 'https://api.openai.com/v1',
+                'access_token' => '',
+            ]);
+            $ensure('integracao-gemini', 'Integração Gemini', [
+                'url' => 'https://generativelanguage.googleapis.com',
+                'access_token' => '',
+            ]);
             $ensure('integracao-asaas', 'Integração Asaas', [
                 'url' => 'https://sandbox.asaas.com/api/v3',
                 'access_token' => '',
