@@ -2608,12 +2608,25 @@ class MatriculaController extends Controller
                     ];
                 return response()->json($ret, 200);
             }
-            //mudança de etapa da matricula
-            $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('show'), (string)$client_id, request()->ip(), 'Etapa alterada via publicShow');
-            $clientUser = User::find($client_id);
-            if ($clientUser) {
-                //mudança de epata do cliente
-                $this->applyUserStage($clientUser, $this->getUserStageId('show'), (string)$client_id, request()->ip(), 'Etapa do cliente alterada via publicShow');
+            // A visualização só move a etapa do funil quando quem vê NÃO é um
+            // usuário do sistema (ex.: o próprio aluno pelo link público). Se um
+            // colaborador logado abrir o link, a etapa é preservada.
+            // pt-BR: O SPA envia o Bearer token mesmo nas páginas públicas, então
+            // `auth('sanctum')` resolve o usuário do sistema sem precisar de middleware.
+            $systemViewer = null;
+            try {
+                $systemViewer = auth('sanctum')->user();
+            } catch (\Throwable $e) {
+                $systemViewer = null;
+            }
+            if (!$systemViewer) {
+                //mudança de etapa da matricula
+                $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('show'), (string)$client_id, request()->ip(), 'Etapa alterada via publicShow');
+                $clientUser = User::find($client_id);
+                if ($clientUser) {
+                    //mudança de epata do cliente
+                    $this->applyUserStage($clientUser, $this->getUserStageId('show'), (string)$client_id, request()->ip(), 'Etapa do cliente alterada via publicShow');
+                }
             }
 
 
