@@ -1300,6 +1300,23 @@ class MatriculaController extends Controller
             if (!is_numeric($parc['primeira_parcela_valor']) || (float) $parc['primeira_parcela_valor'] < 0) {
                 return ['orc.parcelamento.primeira_parcela_valor' => ['O valor da primeira parcela deve ser um número maior ou igual a zero.']];
             }
+            // Total fixo do financiamento: a 1ª parcela não pode superá-lo
+            // (as demais seriam negativas ao redistribuir a diferença).
+            $qtdSel = (int) $sel;
+            if ($qtdSel > 1 && is_array($linhas)) {
+                foreach ($linhas as $row) {
+                    if (!is_array($row)) {
+                        continue;
+                    }
+                    if ((string) ($row['parcelas'] ?? $row['parcela'] ?? '') === $sel) {
+                        $valorLinha = (new \App\Services\PaymentSchedule\PaymentScheduleService())->parseMoney($row['valor'] ?? null);
+                        if ($valorLinha !== null && round((float) $parc['primeira_parcela_valor'], 2) > round($qtdSel * $valorLinha, 2)) {
+                            return ['orc.parcelamento.primeira_parcela_valor' => ['O valor da primeira parcela não pode ser maior que o total do financiamento.']];
+                        }
+                        break;
+                    }
+                }
+            }
         }
         if (isset($parc['primeira_parcela_data']) && $parc['primeira_parcela_data'] !== null && $parc['primeira_parcela_data'] !== '') {
             if (!strtotime((string) $parc['primeira_parcela_data'])) {

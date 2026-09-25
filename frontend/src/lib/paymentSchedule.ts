@@ -1,13 +1,17 @@
 /**
  * paymentSchedule.ts — Programação de pagamento da proposta
  * pt-BR: Regra pura de cálculo do cronograma de parcelas (espelha o backend
- * `PaymentScheduleService` + `FirstDueDateThenFixedDayStrategy`): 1ª parcela
- * em `primeiraData`; da 2ª em diante, todo `diaPagamento` com trava de fim
- * de mês. Sem data inicial, a 1ª é o próximo `diaPagamento` >= hoje.
+ * `PaymentScheduleService` + `FirstDueDateThenFixedDayStrategy`): total fixo
+ * do financiamento (qtd × valor da linha); 1ª parcela em `primeiraData`
+ * (valor próprio opcional) e da 2ª em diante recalculadas para preservar o
+ * total, todo `diaPagamento` com trava de fim de mês. Sem data inicial, a 1ª
+ * é o próximo `diaPagamento` >= hoje.
  * en-US: Pure payment-schedule rule (mirrors backend `PaymentScheduleService`
- * + `FirstDueDateThenFixedDayStrategy`): 1st due on `primeiraData`; from the
- * 2nd on, every `diaPagamento` clamped to month-end. Without an initial date,
- * the 1st is the next `diaPagamento` >= today.
+ * + `FirstDueDateThenFixedDayStrategy`): fixed financed total (qty × row
+ * value); 1st due on `primeiraData` (optional own value) with installments
+ * 2..N recalculated to preserve the total; from the 2nd on, every
+ * `diaPagamento` clamped to month-end. Without an initial date, the 1st is
+ * the next `diaPagamento` >= today.
  */
 import { currencyRemoveMaskToString } from "./masks/currency";
 
@@ -50,6 +54,12 @@ export interface ScheduledInstallment {
 export interface PaymentScheduleResult {
   qtd: number;
   valorParcela: number;
+  /** Valor recalculado das parcelas 2..N quando há 1ª customizada (= valorParcela sem customização) */
+  valorDemaisParcelas: number;
+  /** Total fixo do financiamento (qtd × valor da linha); qtd 1 = valor da parcela única */
+  totalFinanciamento: number;
+  /** true quando o campo 1ª parcela tem valor próprio diferente do padrão */
+  primeiraCustomizada: boolean;
   primeira: { valor: number; data: string };
   diaPagamento: number;
   recebimentoMatricula: 'diluida' | 'avulsa' | 'primeira_parcela';
@@ -108,10 +118,31 @@ export function buildPaymentSchedule(input: PaymentScheduleInput): PaymentSchedu
   const day = Math.max(1, Math.min(31, Math.floor(Number(input.diaPagamento) || 0) || (parsedFirst ? parsedFirst.getDate() : new Date().getDate())));
   const first = parsedFirst ?? nextFixedDay(day);
 
-  let primeiraValor = input.primeiraValor !== null && input.primeiraValor !== undefined && isFinite(Number(input.primeiraValor))
-    ? Number(input.primeiraValor)
-    : valor;
+  // Total fixo do financiamento: qtd × valor da linha. Com 1ª customizada,
+  // as demais são recalculadas para preservar o total (acerto na última).
+  // Espelha PaymentScheduleBuilder (backend): mesma matemática em centavos.
+  const finTotal = round2(qtd * valor);
+
+  const hasCustomFirst = input.primeiraValor !== null && input.primeiraValor !== undefined && isFinite(Number(input.primeiraValor));
+  let primeiraValor = hasCustomFirst ? Number(input.primeiraValor) : valor;
   if (!(primeiraValor >= 0)) return null;
+  if (hasCustomFirst && qtd > 1 && round2(primeiraValor) > finTotal) return null;
+  primeiraValor = round2(primeiraValor);
+
+  let restValues: number[] = [];
+  if (qtd > 1) {
+    if (hasCustomFirst) {
+      const restCents = Math.round((finTotal - primeiraValor) * 100);
+      const base = Math.floor(restCents / (qtd - 1));
+      const remainder = restCents % (qtd - 1);
+      for (let i = 0; i < qtd - 1; i++) {
+        restValues.push((base + (i === qtd - 2 ? remainder : 0)) / 100);
+      }
+    } else {
+      restValues = Array(qtd - 1).fill(round2(valor));
+    }
+  }
+  const valorDemais = qtd > 1 ? restValues[0] : primeiraValor;
 
   const programacao: ScheduledInstallment[] = [];
 
@@ -155,7 +186,7 @@ export function buildPaymentSchedule(input: PaymentScheduleInput): PaymentSchedu
       tipo: 'parcela',
       descricao: `${i + 1}ª Parcela`,
       vencimento: vencN,
-      valor: round2(valor),
+      valor: round2(restValues[i - 1]),
     });
   }
 
@@ -168,6 +199,9 @@ export function buildPaymentSchedule(input: PaymentScheduleInput): PaymentSchedu
   return {
     qtd,
     valorParcela: round2(valor),
+    valorDemaisParcelas: round2(valorDemais),
+    totalFinanciamento: qtd > 1 ? finTotal : primeiraValor,
+    primeiraCustomizada: hasCustomFirst && round2(primeiraValor) !== round2(valor),
     primeira: { valor: round2(primeiraValor), data: venc1 },
     diaPagamento: day,
     recebimentoMatricula,

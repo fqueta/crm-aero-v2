@@ -258,8 +258,8 @@ export default function ProposalsView() {
       )}
 
       {/* Rodapé fixo com ações */}
-      <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 print:hidden">
-        <div className="container mx-auto py-3 flex flex-wrap items-center gap-2 justify-between">
+      <div className="fixed bottom-0 left-0 right-0 md:left-64 md:group-data-[state=collapsed]/sidebar-wrapper:left-16 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 print:hidden transition-[left] duration-200">
+        <div className="mx-auto w-full max-w-none px-4 py-3 flex flex-wrap items-center gap-2 justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" onClick={handleBack}>
               <ArrowLeft className="h-4 w-4 mr-2" /> {backLabel}

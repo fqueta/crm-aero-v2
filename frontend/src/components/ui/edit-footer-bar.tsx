@@ -120,12 +120,12 @@ export function EditFooterBar({
   extraContent,
 }: EditFooterBarProps) {
   const containerClasses = fixed
-    ? 'fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'
+    ? 'fixed bottom-0 left-0 right-0 md:left-64 md:group-data-[state=collapsed]/sidebar-wrapper:left-16 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-[left] duration-200'
     : '';
 
   return (
     <div className={`${containerClasses} ${className}`.trim()}>
-      <div className="container mx-auto py-3 flex flex-wrap items-center gap-2 justify-start">
+      <div className="mx-auto w-full max-w-none px-4 py-3 flex flex-wrap items-center gap-2 justify-start">
         <Button type="button" variant="ghost" onClick={onBack}>
           <ArrowLeft className="h-4 w-4 mr-2" /> {backLabel}
         </Button>

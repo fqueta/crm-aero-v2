@@ -225,8 +225,8 @@ export default function UserView() {
         {id && <ClientEventLogsCard clientId={id} />}
       </div>
 
-      <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto p-4 flex justify-between items-center">
+      <div className="fixed bottom-0 left-0 right-0 md:left-64 md:group-data-[state=collapsed]/sidebar-wrapper:left-16 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-[left] duration-200">
+        <div className="mx-auto w-full max-w-none p-4 flex justify-between items-center">
             <Button variant="ghost" onClick={handleBack}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Voltar

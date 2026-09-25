@@ -7,11 +7,13 @@ use InvalidArgumentException;
 /**
  * PaymentScheduleBuilder (Builder Pattern)
  * pt-BR: Monta a programação de pagamento passo a passo e valida no build().
- *        A 1ª parcela pode ter valor/data próprios (entrada); as demais usam
- *        valor + regra da estratégia de vencimento.
+ *        O total do financiamento é fixo (qtd × valor da linha); a 1ª parcela
+ *        pode ter valor/data próprios (entrada) e as demais são recalculadas
+ *        para preservar o total (acerto de centavos na última).
  * en-US: Builds the payment schedule step by step, validating on build().
- *        The 1st installment may carry its own value/date (down payment);
- *        the rest use value + the due-date strategy rule.
+ *        The financed total is fixed (qty × row value); the 1st installment
+ *        may carry its own value/date (down payment) and the rest are
+ *        recalculated to preserve the total (cents adjusted on the last).
  */
 class PaymentScheduleBuilder
 {
@@ -108,10 +110,38 @@ class PaymentScheduleBuilder
             throw new InvalidArgumentException('Valor da parcela inválido.');
         }
 
-        $firstValue = $this->firstValue !== null ? (float) $this->firstValue : $value;
+        // Total fixo do financiamento: qtd × valor da linha selecionada.
+        // Quando a 1ª parcela tem valor próprio (entrada), as demais são
+        // recalculadas para que a soma continue igual ao total (diferença
+        // diluída nas parcelas 2..N, com acerto de centavos na última).
+        $finTotal = round($qtd * $value, 2);
+
+        $hasCustomFirst = $this->firstValue !== null;
+        $firstValue = $hasCustomFirst ? (float) $this->firstValue : $value;
         if ($firstValue < 0) {
             throw new InvalidArgumentException('Valor da primeira parcela inválido.');
         }
+        if ($hasCustomFirst && $qtd > 1 && round($firstValue, 2) > $finTotal) {
+            throw new InvalidArgumentException('Valor da primeira parcela maior que o total do financiamento.');
+        }
+        $firstValue = round($firstValue, 2);
+
+        // Valores das parcelas 2..N em centavos (base + resto na última).
+        $restValues = [];
+        if ($qtd > 1) {
+            if ($hasCustomFirst) {
+                $restCents = (int) round(($finTotal - $firstValue) * 100);
+                $base = intdiv($restCents, $qtd - 1);
+                $remainder = $restCents % ($qtd - 1);
+                for ($i = 0; $i < $qtd - 1; $i++) {
+                    $cents = $base + ($i === $qtd - 2 ? $remainder : 0);
+                    $restValues[] = (float) ($cents / 100);
+                }
+            } else {
+                $restValues = array_fill(0, $qtd - 1, round($value, 2));
+            }
+        }
+        $valorDemais = $qtd > 1 ? (float) $restValues[0] : $firstValue;
 
         $firstDate = $this->firstDate ? date('Y-m-d', strtotime((string) $this->firstDate)) : null;
         if ($this->firstDate && !$firstDate) {
@@ -159,7 +189,7 @@ class PaymentScheduleBuilder
                 $dueDate = $date;
             }
 
-            $v = $i === 0 ? round($firstValue, 2) : round($value, 2);
+            $v = $i === 0 ? $firstValue : $restValues[$i - 1];
             // Se for primeira_parcela, soma a taxa de matrícula na 1ª parcela
             if ($i === 0 && $recebimentoMatricula === 'primeira_parcela' && $valorMatricula > 0) {
                 $v = round($v + $valorMatricula, 2);
@@ -190,6 +220,8 @@ class PaymentScheduleBuilder
         return [
             'qtd' => $qtd,
             'valor_parcela' => round($value, 2),
+            'valor_demais_parcelas' => round($valorDemais, 2),
+            'total_financiamento' => $qtd > 1 ? $finTotal : round($firstValue, 2),
             'recebimento_matricula' => $recebimentoMatricula,
             'valor_matricula' => $valorMatricula,
             'matricula_vencimento' => $matriculaVencimento,

@@ -3183,10 +3183,10 @@ export default function ProposalsEdit() {
           </Form>
         </div>
       {/* Rodapé fixo com ações e navegação do Wizard */}
-      <div className="fixed bottom-0 left-0 md:left-[var(--sidebar-width)] right-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg">
-        <div className="container mx-auto py-2.5 px-4 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+      <div className="fixed bottom-0 left-0 right-0 md:left-64 md:group-data-[state=collapsed]/sidebar-wrapper:left-16 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-lg transition-[left] duration-200">
+        <div className="mx-auto w-full max-w-none py-2.5 px-4 flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
           {/* Lado Esquerdo: Navegação de Etapas (Anterior / Etapa X de Y), Visualizar e Total */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-start">
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start min-w-0">
             {/* Botão Anterior (se estiver na 1ª etapa, volta ao funil) */}
             <Button
               type="button"
@@ -3242,7 +3242,7 @@ export default function ProposalsEdit() {
           </div>
 
           {/* Lado Direito: Ações de Salvar e Próxima Etapa */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
             <Button
               type="button"
               variant="outline"
@@ -3277,8 +3277,8 @@ export default function ProposalsEdit() {
                 disabled={Boolean(isLoadingEnrollment || (updateEnrollment as any)?.isPending)}
                 className="h-8 px-3.5 text-xs font-semibold shadow-xs"
               >
-                <span>Próximo: {nextStep.label}</span>
-                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                <span className="truncate max-w-[220px]">Próximo: {nextStep.label}</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-1.5 shrink-0" />
               </Button>
             ) : (
               <Button

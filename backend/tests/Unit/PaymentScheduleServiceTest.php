@@ -30,7 +30,7 @@ it('trava dia 31 para o último dia do mês', function () {
     expect($dates)->toBe(['2026-01-31', '2026-02-28', '2026-03-31']);
 });
 
-it('usa valor próprio na primeira parcela (entrada)', function () {
+it('usa valor próprio na 1ª parcela e recalcula as demais preservando o total', function () {
     $result = (new PaymentScheduleBuilder())
         ->setInstallments(3)
         ->setValue(1000.00)
@@ -40,8 +40,96 @@ it('usa valor próprio na primeira parcela (entrada)', function () {
         ->build();
 
     expect($result['programacao'][0]['valor'])->toBe(500.00)
+        ->and($result['programacao'][1]['valor'])->toBe(1250.00)
+        ->and($result['programacao'][2]['valor'])->toBe(1250.00)
+        ->and($result['total'])->toBe(3000.00)
+        ->and($result['total_financiamento'])->toBe(3000.00)
+        ->and($result['valor_demais_parcelas'])->toBe(1250.00);
+});
+
+it('distribui centavos do arredondamento na última parcela', function () {
+    $result = (new PaymentScheduleBuilder())
+        ->setInstallments(3)
+        ->setValue(1000.00)
+        ->setFirstValue(999.99)
+        ->setFirstDate('2026-10-10')
+        ->setDay(10)
+        ->build();
+
+    expect($result['programacao'][0]['valor'])->toBe(999.99)
         ->and($result['programacao'][1]['valor'])->toBe(1000.00)
-        ->and($result['total'])->toBe(2500.00);
+        ->and($result['programacao'][2]['valor'])->toBe(1000.01)
+        ->and($result['total'])->toBe(3000.00);
+});
+
+it('rejeita primeira parcela maior que o total do financiamento', function () {
+    (new PaymentScheduleBuilder())
+        ->setInstallments(3)
+        ->setValue(1000.00)
+        ->setFirstValue(3000.01)
+        ->setFirstDate('2026-10-10')
+        ->setDay(10)
+        ->build();
+})->throws(InvalidArgumentException::class);
+
+it('retorna vazio no service quando a primeira parcela supera o total', function () {
+    $service = new PaymentScheduleService();
+
+    $result = $service->build([
+        'parcela_selecionada' => '3',
+        'linhas' => [['parcelas' => '3', 'valor' => '1000.00', 'desconto' => '0']],
+        'primeira_parcela_valor' => '3000.01',
+        'primeira_parcela_data' => '2026-10-10',
+        'dia_pagamento' => 10,
+    ]);
+
+    expect($result)->toBe([]);
+});
+
+it('redistribui via snapshot: 7x com entrada menor preserva o total', function () {
+    $service = new PaymentScheduleService();
+
+    $result = $service->build([
+        'parcela_selecionada' => '7',
+        'linhas' => [['parcelas' => '7', 'valor' => '1622.86', 'desconto' => '0']],
+        'primeira_parcela_valor' => '1000.00',
+        'primeira_parcela_data' => '2026-10-05',
+        'dia_pagamento' => 10,
+    ]);
+
+    expect($result['programacao'])->toHaveCount(7)
+        ->and($result['programacao'][0]['valor'])->toBe(1000.00)
+        ->and($result['programacao'][1]['valor'])->toBe(1726.67)
+        ->and($result['total'])->toBe(11360.02);
+});
+
+it('parcela única com valor próprio usa o valor informado como total', function () {
+    $result = (new PaymentScheduleBuilder())
+        ->setInstallments(1)
+        ->setValue(1000.00)
+        ->setFirstValue(800.00)
+        ->setFirstDate('2026-10-10')
+        ->setDay(10)
+        ->build();
+
+    expect($result['programacao'])->toHaveCount(1)
+        ->and($result['programacao'][0]['valor'])->toBe(800.00)
+        ->and($result['total'])->toBe(800.00);
+});
+
+it('primeira parcela zerada dilui o total nas demais', function () {
+    $result = (new PaymentScheduleBuilder())
+        ->setInstallments(4)
+        ->setValue(1000.00)
+        ->setFirstValue(0.00)
+        ->setFirstDate('2026-10-10')
+        ->setDay(10)
+        ->build();
+
+    expect($result['programacao'][0]['valor'])->toBe(0.00)
+        ->and($result['programacao'][1]['valor'])->toBe(1333.33)
+        ->and($result['programacao'][3]['valor'])->toBe(1333.34)
+        ->and($result['total'])->toBe(4000.00);
 });
 
 it('calcula a primeira parcela como próximo dia fixo quando sem data', function () {
