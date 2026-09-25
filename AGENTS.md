@@ -369,3 +369,26 @@ Tabela: Matrícula, etapas (exceto combustível), taxas, **desconto** (linha ver
 - **Endpoints:** `GET relatorios/contratos-vencidos` (lista + `total_vencidos` + `data_consulta`), `GET .../export` (CSV `;` com BOM), `PATCH .../{id}/validade` (gate `edit`), `POST .../{id}/whatsapp` (gate `view`, via `ZapguruController::enviar_mensagem` + `EventLog`)
 - **Permissão:** rotas mapeadas em `PermissionService::get_url_by_route` → `/reports/contratos_vencidos` (sem isso caem no 403 "Acesso negado")
 - **Teste:** `tests/Unit/ContratoValidadeServiceTest.php` (6 testes, sem DB)
+
+## Identidade Visual (Logo e Favicon) — Persistência no Banco
+
+### Problema Anterior
+- Apenas `email_logo_url` e `email_nome` eram persistidos parcialmente.
+- O campo `faviconUrl` não era enviado ao salvar nem recuperado da API ao carregar.
+- A coluna `value` da tabela `options` era `text` (limite 64KB), truncando ou falhando ao salvar imagens base64 maiores.
+- `ThemeContext` e `AppSidebar` dependiam exclusivamente de `localStorage` sem sincronização completa com o banco.
+
+### Correções Implementadas
+1. **Migração do Banco de Dados (Tenant):**
+   - `backend/database/migrations/tenant/2026_09_25_000001_alter_options_table_change_value_to_longtext.php`: altera `options.value` para `longText` suportando data URIs de alta resolução.
+2. **Backend API (`OptionController`):**
+   - `publicTheme()`: adicionadas as chaves `logo_url`, `favicon_url`, `email_logo_url` e `email_nome` à lista de opções públicas de tema.
+3. **Frontend (`SystemSettings.tsx` & `systemSettingsService.ts`):**
+   - Interface `AdvancedSystemSettings` atualizada com `logo_url` e `favicon_url`.
+   - `handleSaveAppearanceSettings`: envia `logo_url`, `email_logo_url`, `favicon_url`, `email_nome` e cores do tema para `POST /options/all`.
+   - `loadAdvancedSettings`: carrega `logo_url` (fallback `email_logo_url`), `favicon_url` e `email_nome` do banco, atualizando o estado, o `localStorage`, a tag `<link rel="icon">` e disparando `appearanceSettingsUpdated`.
+4. **Aplicação Global (`ThemeContext.tsx`, `AppSidebar.tsx` e `Login.tsx`):**
+   - `ThemeContext`: no mount (`fetchAndApplyApiThemeSettings`), obtém `logo_url` e `favicon_url` de `GET /options/theme`, aplica o favicon dinamicamente no `<head>` do documento, sincroniza o `localStorage` e notifica listeners via `appearanceSettingsUpdated`.
+   - `AppSidebar`: atualiza a logo automaticamente quando o evento `appearanceSettingsUpdated` é disparado.
+   - `Login`: consome dinamicamente a logo salva pelo sistema com fallback para `/logo.png`.
+
