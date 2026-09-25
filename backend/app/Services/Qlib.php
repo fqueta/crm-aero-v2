@@ -3120,4 +3120,122 @@ class Qlib
 
         return $post ? $post->ID : null;
     }
+    /**
+     * assetHostOverride
+     * pt-BR: Host capturado na origem do dispatch (request HTTP) e restaurado no
+     * worker da fila. Evita que URLs geradas na fila usem o APP_URL (tenant errado).
+     * Sempre resetado via finally no job. Null = sem override.
+     */
+    public static ?string $assetHostOverride = null;
+    /**
+     * captureRequestHost
+     * pt-BR: Captura o host da request atual (contexto HTTP). Retorna null em
+     * console/fila, onde deve ser usado o valor capturado no dispatch.
+     */
+    static function captureRequestHost(): ?string
+    {
+        try {
+            if (!app()->runningInConsole() && function_exists('request') && ($req = request())) {
+                return $req->getHost() ?: null;
+            }
+        } catch (\Throwable $e) {}
+        return null;
+    }
+    /**
+     * tenantBaseUrl
+     * pt-BR: Retorna o scheme://host do tenant ativo. Fontes, em prioridade:
+     * 1) override capturado no dispatch (fila),
+     * 2) host da request (HTTP),
+     * 3) opção `asset_host` do tenant (fonte canônica configurável na tabela `options`),
+     * 4) primeiro domínio do tenant na tabela `domains` (CLI),
+     * 5) APP_URL (último recurso).
+     * pt-BR: A etapa 3 consulta `Option` direto (sem o cache estático do `qoption`),
+     * para não vazar o host entre tenants no mesmo processo do worker.
+     * en-US: Returns the active tenant scheme://host, request-aware with CLI fallback
+     * to the tenant's own domain instead of APP_URL.
+     */
+    static function tenantBaseUrl(): string
+    {
+        $host = self::$assetHostOverride ?: null;
+        $scheme = null;
+        try {
+            if (!app()->runningInConsole() && function_exists('request')) {
+                $req = request();
+                if ($req) {
+                    $host = $req->getHost() ?: null;
+                    $scheme = $req->getScheme() ?: null;
+                }
+            }
+        } catch (\Throwable $e) {}
+        if (!$host && function_exists('tenant')) {
+            try {
+                $t = tenant();
+                // 3) Fonte canônica: opção `asset_host` do tenant (aceita host ou URL).
+                if ($t) {
+                    $opt = Option::where('url', '=', 'asset_host')
+                        ->where('excluido', '=', 'n')
+                        ->where('deletado', '=', 'n')
+                        ->where('ativo', '=', 's')
+                        ->select('value')
+                        ->first();
+                    $optVal = trim((string)($opt->value ?? ''));
+                    if ($optVal !== '') {
+                        $host = str_contains($optVal, '://')
+                            ? (parse_url($optVal, PHP_URL_HOST) ?: $optVal)
+                            : $optVal;
+                    }
+                }
+                // 4) Fallback: primeiro domínio do tenant.
+                if (!$host && $t && method_exists($t, 'domains')) {
+                    $d = $t->domains()->orderBy('id')->first();
+                    if ($d && !empty($d->domain)) {
+                        $host = $d->domain;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+        if (!$host) {
+            $host = parse_url((string)(env('APP_URL', config('app.url'))), PHP_URL_HOST) ?: 'localhost';
+        }
+        if (!$scheme) {
+            $scheme = parse_url((string)(env('APP_URL', config('app.url'))), PHP_URL_SCHEME) ?: 'https';
+        }
+        return rtrim($scheme . '://' . $host, '/');
+    }
+    /**
+     * normalizeUrl
+     * pt-BR: Normaliza uma URL: remove espaços, colapsa barras duplicadas no path
+     * (ex.: `https://host//aluno/x` → `https://host/aluno/x`), preservando o `://`.
+     * en-US: Collapses duplicate slashes in the URL path while keeping `://` intact.
+     */
+    static function normalizeUrl(?string $url): string
+    {
+        $value = trim((string)$url);
+        if ($value === '') {
+            return '';
+        }
+        // Colapsa 2+ barras que NÃO sejam precedidas por `:` (preserva `https://`).
+        return (string)preg_replace('#(?<!:)/{2,}#', '/', $value);
+    }
+    /**
+     * joinUrl
+     * pt-BR: Junta base + path com exatamente uma barra (evita `br//...` quando a
+     * base termina com `/` e o path começa com `/`). Aplica normalizeUrl no final.
+     * en-US: Joins base + path with exactly one slash.
+     */
+    static function joinUrl(?string $base, ?string $path): string
+    {
+        return self::normalizeUrl(rtrim(trim((string)$base), '/') . '/' . ltrim(trim((string)$path), '/'));
+    }
+    /**
+     * tenantAssetUrl
+     * pt-BR: Monta a URL pública de um asset do tenant (`/tenancy/assets/...`)
+     * usando o domínio do tenant ativo. Substitui `tenant_asset()` nos fluxos que
+     * rodam na fila, onde `route()` geraria o host do APP_URL (tenant errado).
+     * en-US: Builds a tenant asset URL using the active tenant domain, safe for queue.
+     */
+    static function tenantAssetUrl(string $relative): string
+    {
+        return self::normalizeUrl(self::tenantBaseUrl() . '/tenancy/assets/' . ltrim($relative, '/'));
+    }
 }

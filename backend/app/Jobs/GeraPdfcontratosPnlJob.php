@@ -20,19 +20,40 @@ class GeraPdfcontratosPnlJob implements ShouldQueue
     protected $id_matricula;
 
     /**
+     * Host da request que originou o dispatch (contexto HTTP). Restaurado no worker
+     * para que as URLs dos PDFs usem o domínio do tenant ativo e não o APP_URL.
+     */
+    protected $originHost;
+
+    /**
      * Create a new job instance.
      *
      * @param int|string $id_matricula
      */
-    public function __construct($id_matricula)
+    public function __construct($id_matricula, ?string $originHost = null)
     {
         $this->id_matricula = $id_matricula;
+        $this->originHost = $originHost ?? \App\Services\Qlib::captureRequestHost();
     }
 
     /**
      * Execute the job.
      */
     public function handle(): void
+    {
+        $prevHost = \App\Services\Qlib::$assetHostOverride;
+        \App\Services\Qlib::$assetHostOverride = $this->originHost ?: $prevHost;
+        try {
+            $this->handleJob();
+        } finally {
+            \App\Services\Qlib::$assetHostOverride = $prevHost;
+        }
+    }
+
+    /**
+     * Geração efetiva dos PDFs de contratos/períodos.
+     */
+    protected function handleJob(): void
     {
         try {
             // Log do Início

@@ -46,6 +46,7 @@ import { ResponsibleManagerCard } from './ResponsibleManagerCard';
 
 // Utilitários
 import { getDocStatusLabel, getDocBadgeClass, isZapsignActive } from '@/lib/zapsign';
+import { normalizeUrl } from '@/lib/urls';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Tipos
@@ -65,6 +66,7 @@ interface ProposalContractsTabProps {
 interface PdfContractItem {
   nome_arquivo: string;
   url: string;
+  url_pdf?: string;
   nome_contrato: string;
 }
 
@@ -157,8 +159,14 @@ export default function ProposalContractsTab({
   const handleSaveResp = async () => {
     setIsSaving(true);
     try {
+      // pt-BR: Normaliza URLs antes de persistir (remove barras duplicadas).
+      const cleanResp = editableContractsResp.map((c) => ({
+        ...c,
+        url: c?.url ? normalizeUrl(c.url) : c?.url,
+        url_pdf: c?.url_pdf ? normalizeUrl(c.url_pdf) : c?.url_pdf,
+      }));
       await enrollmentsService.updateEnrollment(enrollmentId, {
-        meta: { ...(meta || {}), contrato_responsavel_pdf: JSON.stringify(editableContractsResp) },
+        meta: { ...(meta || {}), contrato_responsavel_pdf: JSON.stringify(cleanResp) },
       } as any);
       toast({ title: 'Sucesso', description: 'Links do responsável atualizados com sucesso.' });
       setIsEditingResp(false);
@@ -176,8 +184,14 @@ export default function ProposalContractsTab({
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // pt-BR: Normaliza URLs antes de persistir (remove barras duplicadas).
+      const cleanContracts = editableContracts.map((c) => ({
+        ...c,
+        url: c?.url ? normalizeUrl(c.url) : c?.url,
+        url_pdf: c?.url_pdf ? normalizeUrl(c.url_pdf) : c?.url_pdf,
+      }));
       await enrollmentsService.updateEnrollment(enrollmentId, {
-        meta: { ...(meta || {}), proposta_pdf: propostaPdfUrl, contrato_pdf: JSON.stringify(editableContracts) },
+        meta: { ...(meta || {}), proposta_pdf: normalizeUrl(propostaPdfUrl), contrato_pdf: JSON.stringify(cleanContracts) },
       } as any);
       toast({ title: 'Sucesso', description: 'Links atualizados com sucesso.' });
       setIsEditing(false);

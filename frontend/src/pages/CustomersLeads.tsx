@@ -23,6 +23,7 @@ import { clientsService } from '@/services/clientsService';
 import { CreateClientAttendanceInput } from '@/types/attendance';
 import { useToast } from '@/hooks/use-toast';
 import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
+import { normalizeUrl } from '@/lib/urls';
 import * as attendanceLogsService from '@/services/attendanceLogsService';
 import { ScheduledCommunicationDialog } from '@/components/sales/ScheduledCommunicationDialog';
 
@@ -2164,7 +2165,8 @@ function EnrollmentKanbanCard({
                     signUrl = `${window.location.origin}/aluno/assinatura/${clientId}_${id}/1`;
                   }
                 }
-                const pdfUrl = (enrollment as any)?.meta?.proposta_pdf ? String((enrollment as any).meta.proposta_pdf) : '';
+                signUrl = normalizeUrl(signUrl);
+                const pdfUrl = normalizeUrl((enrollment as any)?.meta?.proposta_pdf ? String((enrollment as any).meta.proposta_pdf) : '');
                 
                 const handleSendAttendance = (e: React.MouseEvent, type: 'assinatura' | 'pdf') => {
                   e.stopPropagation();

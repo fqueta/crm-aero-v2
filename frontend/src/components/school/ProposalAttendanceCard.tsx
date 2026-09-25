@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { financialService } from '@/services/financialService';
 import { currencyApplyMask, currencyRemoveMaskToString } from '@/lib/masks/currency';
 import { cn, formatDate } from '@/lib/utils';
+import { normalizeUrl } from '@/lib/urls';
 import { CreateClientAttendanceInput } from '@/types/attendance';
 import { PaymentMethod } from '@/types/financial';
 import { useQueryClient } from '@tanstack/react-query';
@@ -391,10 +392,10 @@ export default function ProposalAttendanceCard({
     
     const nome = clientName || 'Cliente';
     if (openAttendance === 'pdf') {
-      const url = pdfUrl || (meta?.proposta_pdf ? String(meta.proposta_pdf) : '');
+      const url = normalizeUrl(pdfUrl || (meta?.proposta_pdf ? String(meta.proposta_pdf) : ''));
       setObservation(`Olá, *${nome}*! Segue o link do PDF com os detalhes da sua proposta comercial: ${url}`);
     } else if (openAttendance === 'assinatura') {
-      const url = linkAssinatura || '';
+      const url = normalizeUrl(linkAssinatura || '');
       setObservation(`Olá, *${nome}*! Segue o link para visualizar e assinar a sua proposta comercial: ${url}`);
     }
   }, [searchParams, pdfUrl, linkAssinatura, clientName, meta, setSearchParams]);

@@ -7,6 +7,7 @@ import { useClientById } from '@/hooks/clients';
 import { useQuery } from '@tanstack/react-query';
 import { coursesService } from '@/services/coursesService';
 import { currencyRemoveMaskToNumber } from '@/lib/masks/currency';
+import { normalizeUrl } from '@/lib/urls';
 import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
@@ -326,7 +327,8 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
         signUrl = `${window.location.origin}/aluno/assinatura/${clientId}_${id}/1`;
       }
     }
-    return signUrl;
+    // pt-BR: Normaliza barras duplicadas vindas do backend (ex.: `br//aluno/...`).
+    return normalizeUrl(signUrl);
   }, [enrollment]);
 
   const parcelamento = useMemo(() => {
