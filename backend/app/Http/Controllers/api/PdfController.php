@@ -329,7 +329,7 @@ class PdfController extends Controller
         $post->save();
 
         // URL pública resolvida
-        $publicUrl = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
+        $publicUrl = Qlib::tenantAssetUrl($relative);
 
         return response()->json([
             'data' => [
@@ -988,7 +988,7 @@ class PdfController extends Controller
         $post->post_author = $user && !empty($user->id) ? $user->id : 0;
         $post->save();
 
-        $publicUrl = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
+        $publicUrl = Qlib::tenantAssetUrl($relative);
         $publicUrl = rtrim((string)$publicUrl, ", \t\n\r\0\x0B");
         $saveLink = Qlib::update_matriculameta($matricula['id'], 'proposta_pdf', $publicUrl);
 
@@ -1327,7 +1327,7 @@ class PdfController extends Controller
                 $filename = $slug . '.pdf';
                 $relative = 'uploads/' . $baseFolder . '/' . $id_matricula . '/' . $filename;
 
-                $url = function_exists('tenant_asset') ? tenant_asset($relative) : asset($relative);
+                $url = Qlib::tenantAssetUrl($relative);
                 $campo_meta = $config['titulo'];
                 $meta = Qlib::get_matriculameta($id_matricula, $campo_meta);
                 $nomoarquivo = ucfirst(str_replace(['_', '-', ' '], [' ', ' ', ' '], $nome_aquivo_savo));

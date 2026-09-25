@@ -1838,8 +1838,8 @@ class MatriculaController extends Controller
         $data['parcelamentos'] = $matricula->parcelamentos ? $matricula->parcelamentos->toArray() : [];
         //incluir o campo com link publico da proposta
         $link = '/aluno/matricula/'.$matricula['id_cliente'].'_'.Qlib::zerofill($matricula['id'],5).'/1';
-        $data['link_orcamento'] = Qlib::qoption('front_url') . $link;
-        $data['link_assinatura'] = Qlib::qoption('front_url') . str_replace('matricula','assinatura',$link);
+        $data['link_orcamento'] = Qlib::joinUrl(Qlib::qoption('front_url'), $link);
+        $data['link_assinatura'] = Qlib::joinUrl(Qlib::qoption('front_url'), str_replace('matricula','assinatura',$link));
         $data['administration_text'] = $this->buildAdministrationText($data);
         $data['administration_text_available'] = !empty($data['administration_text']);
         return $data;
@@ -4507,7 +4507,7 @@ class MatriculaController extends Controller
             }
 
             if ($isTenant) {
-                $baseUrl = rtrim(env('APP_URL', (isset($_SERVER['HTTPS']) ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? 'localhost')), '/');
+                $baseUrl = Qlib::tenantBaseUrl();
                 $link = $baseUrl . '/tenancy/assets/' . $caminhoSalvar;
             } else {
                 $link = Storage::disk($disk)->url($caminhoSalvar);

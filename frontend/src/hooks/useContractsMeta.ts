@@ -8,6 +8,7 @@
  */
 
 import { useMemo } from 'react';
+import { normalizeUrl } from '@/lib/urls';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Tipos
@@ -84,7 +85,7 @@ function extractPdfs(raw: unknown, fallbackName: string): PdfItem[] {
 
   // Caso simples: URL direta
   if (str && (str.startsWith('http') || str.startsWith('/storage'))) {
-    return [{ name: fallbackName, url: str, original: { type: 'proposal' } }];
+    return [{ name: fallbackName, url: normalizeUrl(str), original: { type: 'proposal' } }];
   }
 
   const items = toArray(raw);
@@ -92,7 +93,7 @@ function extractPdfs(raw: unknown, fallbackName: string): PdfItem[] {
     .filter((item: any) => item?.url || item?.url_pdf)
     .map((item: any) => ({
       name: item.nome_contrato || item.nome_arquivo || fallbackName,
-      url: item.url || item.url_pdf,
+      url: normalizeUrl(item.url || item.url_pdf),
       original: item,
     }));
 }
@@ -141,7 +142,7 @@ export function useContractsMeta(meta: any): ContractsMetaResult {
       .filter((item: any) => item?.url || item?.url_pdf)
       .map((item: any) => ({
         name: item.nome_contrato || item.nome_arquivo || 'Contrato',
-        url: item.url || item.url_pdf,
+        url: normalizeUrl(item.url || item.url_pdf),
         original: item,
       }));
 

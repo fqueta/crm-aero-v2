@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Copy, Check, ExternalLink, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
+import { normalizeUrl } from '@/lib/urls';
 
 interface SignatureLinkCardProps {
   /**
@@ -22,11 +23,13 @@ interface SignatureLinkCardProps {
 export default function SignatureLinkCard({ link }: SignatureLinkCardProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  // pt-BR: Normaliza barras duplicadas (ex.: `br//aluno/...`) vindas do backend.
+  const safeLink = normalizeUrl(link);
 
   async function handleCopy() {
-    if (!link) return;
+    if (!safeLink) return;
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(safeLink);
       setCopied(true);
       toast({
         title: 'Copiado!',
@@ -43,11 +46,11 @@ export default function SignatureLinkCard({ link }: SignatureLinkCardProps) {
   }
 
   function handleOpen() {
-    if (!link) return;
-    window.open(link, '_blank');
+    if (!safeLink) return;
+    window.open(safeLink, '_blank');
   }
 
-  if (!link) return null;
+  if (!safeLink) return null;
 
   return (
     <Card className="border-none shadow-sm rounded-2xl bg-blue-50/30 overflow-hidden border border-blue-100/50">
@@ -59,7 +62,7 @@ export default function SignatureLinkCard({ link }: SignatureLinkCardProps) {
       <CardContent className="pt-5">
         <div className="flex items-center space-x-2">
           <Input 
-            value={link} 
+            value={safeLink} 
             readOnly 
             className="font-mono text-[11px] bg-white border-blue-100 h-10 focus-visible:ring-blue-500" 
             onClick={(e) => e.currentTarget.select()}

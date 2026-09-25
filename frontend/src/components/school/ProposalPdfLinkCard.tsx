@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Copy, Check, FileText, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
+import { normalizeUrl } from '@/lib/urls';
 
 interface ProposalPdfLinkCardProps {
   /**
@@ -22,11 +23,13 @@ interface ProposalPdfLinkCardProps {
 export default function ProposalPdfLinkCard({ pdfUrl }: ProposalPdfLinkCardProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  // pt-BR: Normaliza barras duplicadas (ex.: `br//tenancy/...`) vindas do backend.
+  const safeUrl = normalizeUrl(pdfUrl);
 
   async function handleCopy() {
-    if (!pdfUrl) return;
+    if (!safeUrl) return;
     try {
-      await navigator.clipboard.writeText(pdfUrl);
+      await navigator.clipboard.writeText(safeUrl);
       setCopied(true);
       toast({
         title: 'Copiado!',
@@ -43,11 +46,11 @@ export default function ProposalPdfLinkCard({ pdfUrl }: ProposalPdfLinkCardProps
   }
 
   function handleOpen() {
-    if (!pdfUrl) return;
-    window.open(pdfUrl, '_blank');
+    if (!safeUrl) return;
+    window.open(safeUrl, '_blank');
   }
 
-  if (!pdfUrl) return null;
+  if (!safeUrl) return null;
 
   return (
     <Card className="border-none shadow-sm rounded-2xl bg-rose-50/30 overflow-hidden border border-rose-100/50">
@@ -59,7 +62,7 @@ export default function ProposalPdfLinkCard({ pdfUrl }: ProposalPdfLinkCardProps
       <CardContent className="pt-5">
         <div className="flex items-center space-x-2">
           <Input 
-            value={pdfUrl} 
+            value={safeUrl} 
             readOnly 
             className="font-mono text-[11px] bg-white border-rose-100 h-10 focus-visible:ring-rose-500" 
             onClick={(e) => e.currentTarget.select()}
