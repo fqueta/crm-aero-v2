@@ -131,6 +131,10 @@ class ZapsingController extends Controller
             $json = file_get_contents('php://input');
             $d = Qlib::lib_json_array($json);
         }
+        // pt-BR: Garante array (lib_json_array retorna false p/ corpo vazio/inválido).
+        if (!is_array($d)) {
+            $d = [];
+        }
         Log::info('Webhook zapsing', ['payload' => $d]);
         $ret['exec'] = false;
         $token = isset($d['external_id']) ? $d['external_id'] : false;
@@ -180,24 +184,79 @@ class ZapsingController extends Controller
         }
 
         $status = $d['status'] ?? '';
-        if ($status === 'signed') {
+        $docSigned = ($status === 'signed');
+        if ($docSigned) {
             $emails = Qlib::qoption('zapsing_notify_emails') ?: ['quetafernando1@gmail.com','ger.maisaqui3@gmail.com'];
             if (is_string($emails)) $emails = \App\Services\Qlib::lib_json_array($emails);
             $ret['notify_brevo'] = BrevoService::notifySignatureCompleted($emails, $d);
-            // Cobrança Asaas a partir do financiamento aprovado (só envelope do aluno;
-            // o job é idempotente e a conta financeira serve à conciliação do webhook).
-            if ($id_matricula && !$is_resp) {
-                try {
-                    GenerateAsaasBillingJob::dispatch((int) $id_matricula);
-                    $ret['asaas_billing_queued'] = true;
-                } catch (\Throwable $e) {
-                    Log::warning('Asaas: falha ao enfileirar cobrança.', ['matricula_id' => $id_matricula, 'error' => $e->getMessage()]);
-                    $ret['asaas_billing_queued'] = false;
-                }
+        }
+        // Cobrança Asaas a partir do financiamento aprovado (só envelope do aluno):
+        // dispara quando o documento está assinado OU quando o aluno assinou
+        // (não espera os demais signatários). O job é idempotente (meta asaas_billing)
+        // e a conta financeira serve à conciliação do webhook.
+        $studentSigned = $this->isStudentSigned($d, $id_matricula);
+        if ($id_matricula && !$is_resp && ($docSigned || $studentSigned)) {
+            try {
+                GenerateAsaasBillingJob::dispatch((int) $id_matricula);
+                $ret['asaas_billing_queued'] = true;
+                $ret['asaas_billing_trigger'] = $docSigned ? 'doc_signed' : 'student_signed';
+            } catch (\Throwable $e) {
+                Log::warning('Asaas: falha ao enfileirar cobrança.', ['matricula_id' => $id_matricula, 'error' => $e->getMessage()]);
+                $ret['asaas_billing_queued'] = false;
             }
         }
 
         return $ret;
+    }
+
+    /**
+     * Verifica se o aluno (cliente da matrícula) já assinou neste evento.
+     * pt-BR: Usa `signer_who_signed` (quem disparou o evento) com match por e-mail
+     * ou CPF contra o cliente; fallback: signatário de ordem 1 assinado (o aluno
+     * é sempre o primeiro signatário na construção do envelope).
+     */
+    protected function isStudentSigned(array $d, $id_matricula): bool
+    {
+        if (empty($id_matricula)) {
+            return false;
+        }
+        $signer = $d['signer_who_signed'] ?? null;
+        if (!is_array($signer) || ($signer['status'] ?? '') !== 'signed') {
+            $signer = null;
+            foreach ((array) ($d['signers'] ?? []) as $s) {
+                if (is_array($s) && ($s['status'] ?? '') === 'signed' && (int) ($s['sign_order'] ?? 0) === 1) {
+                    $signer = $s;
+                    break;
+                }
+            }
+            if (!is_array($signer)) {
+                return false;
+            }
+        }
+        try {
+            $matricula = \App\Models\Matricula::find($id_matricula);
+            $cliente = $matricula ? User::find($matricula->id_cliente) : null;
+            if (!$cliente) {
+                return false;
+            }
+            $norm = fn($v) => strtolower(trim((string) $v));
+            $digits = fn($v) => preg_replace('/\D/', '', (string) $v);
+            $signerEmail = $norm($signer['email'] ?? '');
+            if ($signerEmail !== '' && $signerEmail === $norm($cliente->email ?? '')) {
+                return true;
+            }
+            $signerCpf = $digits($signer['cpf'] ?? '');
+            $clientCpf = $digits($cliente->cpf ?? '');
+            if ($signerCpf !== '' && $signerCpf === $clientCpf) {
+                return true;
+            }
+            // Fallback: ordem 1 = aluno na construção do envelope.
+            if (($signer['status'] ?? '') === 'signed' && (int) ($signer['sign_order'] ?? 0) === 1) {
+                return true;
+            }
+        } catch (\Throwable $e) {
+        }
+        return false;
     }
     /**
      * aciona as filas para gerar os contratos PDF e para enviar para o zapsing

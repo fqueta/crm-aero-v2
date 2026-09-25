@@ -191,6 +191,9 @@ class PermissionService
         if($name=='api.options.index' || $name == 'api.options.update' || $name == 'api.options.show' || $name == 'api.options.store' || $name == 'api.options.destroy' || $name == 'api.options.all'){
             $url = '/settings/system';
         }
+        if($name=='api.options.fuel-price'){
+            $url = '/settings/aircrafts';
+        }
         if($name=='api.cursos.index' || $name == 'api.cursos.update' || $name == 'api.cursos.show' || $name == 'api.cursos.store' || $name == 'api.cursos.destroy' || $name == 'api.cursos.all'){
             $url = '/school/courses';
         }

@@ -3,16 +3,19 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { aircraftSettingsService } from '@/services/aircraftSettingsService';
 import { PaginatedResponse } from '@/types/index';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import useDebounce from '@/hooks/useDebounce';
-import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Eye, Pencil, Trash2 } from 'lucide-react';
+import { systemSettingsService } from '@/services/systemSettingsService';
+import { currencyApplyMask, currencyRemoveMaskToNumber } from '@/lib/masks/currency';
+import { Search, ChevronLeft, ChevronRight, MoreHorizontal, Eye, Pencil, Trash2, Fuel, Save } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 const AircraftsSettings = () => {
@@ -38,6 +41,32 @@ const AircraftsSettings = () => {
   const [page, setPage] = useState<number>(init.page);
   const [searchTerm, setSearchTerm] = useState<string>(init.searchTerm);
   const [deletingRecord, setDeletingRecord] = useState<any>(null);
+  const [fuelPrice, setFuelPrice] = useState<string>('');
+  const [savingFuel, setSavingFuel] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    systemSettingsService.getFuelPrice()
+      .then((raw) => {
+        if (!active) return;
+        setFuelPrice(currencyRemoveMaskToNumber(raw) > 0 ? currencyApplyMask(raw, 'pt-BR', 'BRL') : '');
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const handleSaveFuelPrice = async () => {
+    const num = currencyRemoveMaskToNumber(fuelPrice || '');
+    setSavingFuel(true);
+    try {
+      await systemSettingsService.updateFuelPrice(num > 0 ? num.toFixed(2) : '');
+      toast({ title: 'Preço do combustível salvo', description: num > 0 ? `Valor global: R$ ${num.toFixed(2).replace('.', ',')}/litro` : 'Preço global removido. Vale o preço de cada aeronave.' });
+    } catch (err: any) {
+      toast({ title: 'Falha ao salvar', description: err?.message || 'Não foi possível salvar o preço.', variant: 'destructive' });
+    } finally {
+      setSavingFuel(false);
+    }
+  };
 
   const debouncedSearch = useDebounce(searchTerm, 400);
 
@@ -121,6 +150,37 @@ const AircraftsSettings = () => {
         </div>
         <Button onClick={handleCreate}>Novo cadastro</Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Fuel className="h-5 w-5" />
+            <span>Preço global do combustível</span>
+          </CardTitle>
+          <CardDescription>
+            Vale para todas as aeronaves no cálculo de combustível das propostas.
+            Deixe vazio para usar o preço cadastrado em cada aeronave.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="space-y-2 sm:max-w-xs w-full">
+              <Label htmlFor="preco_litro_global">Preço do litro (R$)</Label>
+              <Input
+                id="preco_litro_global"
+                type="text"
+                inputMode="decimal"
+                value={fuelPrice}
+                onChange={(e) => setFuelPrice(e.target.value ? currencyApplyMask(e.target.value, 'pt-BR', 'BRL') : '')}
+                placeholder="R$ 0,00"
+              />
+            </div>
+            <Button onClick={handleSaveFuelPrice} disabled={savingFuel}>
+              <Save className="mr-2 h-4 w-4" /> {savingFuel ? 'Salvando...' : 'Salvar preço'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="p-4">
         <div className="flex items-center justify-between mb-4">

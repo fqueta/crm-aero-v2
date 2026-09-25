@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
 use App\Models\EventLog;
+use App\Models\FinancialAccount;
 use App\Models\Matricula;
 use App\Services\Asaas\AsaasService;
 use App\Services\Qlib;
@@ -78,11 +79,13 @@ class AsaasController extends Controller
 
     /**
      * Lista as cobranças da matrícula (meta asaas_billing + status vivo).
+     * pt-BR: Leitura liberada para todo usuário interno ativo (ex.: consultores
+     * precisam acompanhar as faturas na proposta). Escrita continua admin (1,2).
      */
     public function billing(Request $request, string $matriculaId)
     {
-        if ($denied = $this->assertAdmin($request)) {
-            return $denied;
+        if (!Qlib::isInternalActiveUser($request->user())) {
+            return response()->json(['error' => 'Permissão insuficiente.'], 403);
         }
 
         $matricula = Matricula::find($matriculaId);
@@ -174,6 +177,7 @@ class AsaasController extends Controller
                 'dueDate' => $updated['dueDate'] ?? ($payload['dueDate'] ?? null),
                 'value' => isset($updated['value']) ? (float) $updated['value'] : null,
             ]);
+            $this->syncMirrorFromMeta($matriculaId);
             $this->logBillingEvent($matriculaId, 'asaas_billing_updated', "Cobrança {$paymentId} atualizada no Asaas.", $request);
 
             return response()->json(['success' => true, 'data' => $updated]);
@@ -212,6 +216,7 @@ class AsaasController extends Controller
 
             $deleted = $asaas->deletePayment($paymentId);
             $this->removeBillingMetaPayment($matriculaId, $paymentId);
+            $this->syncMirrorFromMeta($matriculaId);
             $this->logBillingEvent($matriculaId, 'asaas_billing_deleted', "Cobrança {$paymentId} excluída no Asaas.", $request);
 
             return response()->json(['success' => true, 'data' => $deleted]);
@@ -241,6 +246,7 @@ class AsaasController extends Controller
             $asaas = new AsaasService();
             $result = $asaas->cancelInstallment($installmentId);
             $this->removeBillingMetaInstallment($matriculaId, $installmentId);
+            $this->syncMirrorFromMeta($matriculaId);
             $this->logBillingEvent($matriculaId, 'asaas_installment_cancelled', "Parcelamento {$installmentId} cancelado no Asaas.", $request);
 
             return response()->json(['success' => true, 'data' => $result]);
@@ -267,6 +273,62 @@ class AsaasController extends Controller
     private function writeBillingMeta(int $matriculaId, array $billing): void
     {
         Qlib::update_matriculameta($matriculaId, 'asaas_billing', json_encode($billing, JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * Sincroniza a conta espelho (receivable source=asaas_billing, uma por
+     * matrícula) com a meta após edição/exclusão no Asaas: recalcula total,
+     * vencimento e ids; sem faturas restantes, marca como cancelada.
+     * Nunca cria a conta aqui (criação é do GenerateAsaasBillingJob).
+     */
+    private function syncMirrorFromMeta(int $matriculaId): void
+    {
+        try {
+            $matricula = Matricula::find($matriculaId);
+            if (!$matricula) {
+                return;
+            }
+            $account = FinancialAccount::where('type', 'receivable')
+                ->where('client_id', $matricula->id_cliente)
+                ->whereJsonContains('config->source', 'asaas_billing')
+                ->whereJsonContains('config->matricula_id', (int) $matriculaId)
+                ->first();
+            if (!$account) {
+                return;
+            }
+            $payments = $this->readBillingMeta($matriculaId)['payments'] ?? [];
+            if (empty($payments)) {
+                $account->status = 'cancelled';
+                $account->save();
+                return;
+            }
+            $total = 0.0;
+            $earliest = null;
+            $ids = [];
+            foreach ($payments as $pay) {
+                $row = is_array($pay) ? $pay : [];
+                $total += (float) ($row['value'] ?? 0);
+                if (!empty($row['id'])) {
+                    $ids[] = (string) $row['id'];
+                }
+                $due = substr((string) ($row['dueDate'] ?? ''), 0, 10);
+                if ($due !== '' && ($earliest === null || $due < $earliest)) {
+                    $earliest = $due;
+                }
+            }
+            $account->amount = round($total, 2);
+            if ($earliest !== null) {
+                $account->due_date = $earliest;
+            }
+            $config = is_array($account->config) ? $account->config : [];
+            $config['asaas_payment_ids'] = array_values($ids);
+            $account->config = $config;
+            if (in_array($account->status, ['cancelled'], true)) {
+                $account->status = 'pending';
+            }
+            $account->save();
+        } catch (\Throwable $e) {
+        }
     }
 
     private function patchBillingMeta(int $matriculaId, string $paymentId, array $patch): void

@@ -166,6 +166,7 @@ Route::name('api.')->prefix('api/v1')->middleware([
         // Rotas para options
         Route::get('options/all', [OptionController::class, 'index'])->name('options.all.get');
         Route::post('options/all', [OptionController::class, 'fast_update_all'])->name('options.all');
+        Route::post('options/fuel-price', [OptionController::class, 'update_fuel_price'])->name('options.fuel-price');
         Route::get('options/trash', [OptionController::class, 'trash'])->name('options.trash');
         Route::put('options/{id}/restore', [OptionController::class, 'restore'])->name('options.restore');
         Route::delete('options/{id}/force', [OptionController::class, 'forceDelete'])->name('options.forceDelete');
