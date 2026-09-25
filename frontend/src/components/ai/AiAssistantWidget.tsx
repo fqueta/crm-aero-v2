@@ -165,7 +165,7 @@ export function AiAssistantWidget() {
         className={cn(
           'fixed z-50 transition-all duration-300 ease-in-out',
           // Desktop
-          'sm:bottom-6 sm:right-6 sm:w-[400px] sm:max-h-[560px]',
+          'sm:bottom-24 sm:right-6 sm:w-[400px] sm:max-h-[560px]',
           // Mobile
           'bottom-0 right-0 w-full sm:rounded-2xl',
           isOpen
@@ -365,10 +365,9 @@ export function AiAssistantWidget() {
           'bg-gradient-to-r from-emerald-600 to-teal-600 text-white',
           'hover:shadow-xl hover:scale-105 active:scale-95',
           'flex items-center justify-center',
-          // Desktop
-          'sm:bottom-6 sm:right-6 sm:h-14 sm:w-14',
-          // Mobile
-          'bottom-20 right-4 h-12 w-12 sm:bottom-6',
+          // Desktop & Mobile
+          'bottom-24 right-4 sm:bottom-24 sm:right-6',
+          'h-12 w-12 sm:h-14 sm:w-14',
           isOpen && 'opacity-0 pointer-events-none scale-75'
         )}
         title="Assistente de IA"
