@@ -74,12 +74,17 @@ export function useAiAssistant() {
       const errorMessage =
         error?.message || 'Não foi possível conectar ao assistente. Tente novamente.';
 
-      // Se for falta de configuração, orienta para Integrações
+      let content = `❌ ${errorMessage}`;
+
+      if (/nenhum provedor.*configurad|não está configurad/i.test(errorMessage)) {
+        content = '⚠️ O assistente de IA ainda não está configurado. Cadastre a chave em **Configurações > Integrações**.\n\n[Ir para Integrações](/admin/settings/integrations)';
+      } else if (/rejeitada|inválida|invalid/i.test(errorMessage)) {
+        content = `⚠️ ${errorMessage}\n\n[Ir para Integrações](/admin/settings/integrations)`;
+      }
+
       const assistantMsg: AssistantMessage = {
         role: 'assistant',
-        content: /provedor|configurad|chave/i.test(errorMessage)
-          ? '⚠️ O assistente de IA ainda não está configurado. Cadastre a chave em **Configurações > Integrações**.\n\n[Ir para Integrações](/admin/settings/integrations)'
-          : `❌ ${errorMessage}`,
+        content,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, assistantMsg]);

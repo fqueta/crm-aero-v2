@@ -289,3 +289,55 @@ export function resolvePublicProposalSections(
 
   return getDefaultPublicProposalSections(stage, courseType);
 }
+
+/**
+ * resolveUnifiedPublicProposalQuestions
+ * pt-BR: Resolve o conjunto unificado de perguntas visíveis combinando etapa 1 (assinatura) e etapa 2 (aprovação) sem duplicatas.
+ * en-US: Resolves the unified set of visible questions combining stage 1 (signature) and stage 2 (approval) without duplicates.
+ */
+export function resolveUnifiedPublicProposalQuestions(
+  config: any,
+  courseType: unknown
+): PublicProposalQuestionKey[] {
+  const sig = resolvePublicProposalQuestions(config, 'signature', courseType);
+  const app = resolvePublicProposalQuestions(config, 'approval', courseType);
+  const combined = Array.from(new Set([...sig, ...app]));
+  // Mantém a ordem original definida em PUBLIC_PROPOSAL_QUESTIONS
+  return PUBLIC_PROPOSAL_QUESTION_KEYS.filter((key) => combined.includes(key));
+}
+
+/**
+ * resolveUnifiedPublicProposalRequiredQuestions
+ * pt-BR: Resolve o conjunto unificado de perguntas obrigatórias combinando etapa 1 e etapa 2 sem duplicatas.
+ * en-US: Resolves the unified set of required questions combining stage 1 and stage 2 without duplicates.
+ */
+export function resolveUnifiedPublicProposalRequiredQuestions(
+  config: any,
+  courseType: unknown
+): PublicProposalQuestionKey[] {
+  const sigReq = resolvePublicProposalRequiredQuestions(config, 'signature', courseType);
+  const appReq = resolvePublicProposalRequiredQuestions(config, 'approval', courseType);
+  const visible = resolveUnifiedPublicProposalQuestions(config, courseType);
+  const combined = Array.from(new Set([...sigReq, ...appReq]));
+  return combined.filter((key) => visible.includes(key));
+}
+
+/**
+ * resolveUnifiedPublicProposalSections
+ * pt-BR: Resolve a visibilidade unificada das seções (ativa se qualquer uma das etapas ou perguntas associadas estiver ativa).
+ * en-US: Resolves unified section visibility (active if either stage or their associated questions are active).
+ */
+export function resolveUnifiedPublicProposalSections(
+  config: any,
+  courseType: unknown
+): PublicProposalSectionConfig {
+  const sigSec = resolvePublicProposalSections(config, 'signature', courseType);
+  const appSec = resolvePublicProposalSections(config, 'approval', courseType);
+  const unifiedQuestions = resolveUnifiedPublicProposalQuestions(config, courseType);
+  const sectionsFromQuestions = groupConfiguredQuestionsBySection(unifiedQuestions);
+
+  return {
+    status: sigSec.status || appSec.status || sectionsFromQuestions.status,
+    info: sigSec.info || appSec.info || sectionsFromQuestions.info,
+  };
+}

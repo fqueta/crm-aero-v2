@@ -105,7 +105,7 @@ class PaymentScheduleService
      * Tabela HTML da programação para inserção no contrato ({tabela_parcelas}).
      * pt-BR: Estilo inline compatível com geradores de PDF e visualização web.
      */
-    public function toHtmlTable(array $programacao, float $total = 0): string
+    public function toHtmlTable(array $programacao, float $total = 0, array $options = []): string
     {
         if (empty($programacao)) {
             return '';
@@ -146,6 +146,28 @@ class PaymentScheduleService
         $html .= '<td colspan="2" style="padding:8px 12px;border:1px solid #cbd5e1;text-align:right;">Total:</td>';
         $html .= '<td style="padding:8px 12px;border:1px solid #cbd5e1;text-align:right;font-weight:700;">R$ ' . $this->formatBRL($finalTotal) . '</td>';
         $html .= '</tr>';
+
+        // Nota explicativa de desconto de pontualidade no rodapé da tabela
+        $descontoPontualidade = (float) ($options['desconto_pontualidade'] ?? 0);
+        $valorParcelaLiquida = (float) ($options['parcela_com_desconto'] ?? 0);
+        $textoNota = (string) ($options['nota_desconto'] ?? '');
+
+        if ($descontoPontualidade > 0 || !empty($textoNota)) {
+            $msg = !empty($textoNota)
+                ? $textoNota
+                : sprintf(
+                    '* Desconto de pontualidade: R$ %s por parcela para pagamentos efetuados até a data de vencimento (valor com desconto: R$ %s). O não pagamento até o vencimento implicará na perda do desconto, incidindo juros e multa contratuais.',
+                    $this->formatBRL($descontoPontualidade),
+                    $this->formatBRL($valorParcelaLiquida)
+                );
+
+            $html .= '<tr style="background-color:#ffffff;border-top:1px solid #e2e8f0;">';
+            $html .= '<td colspan="3" style="padding:8px 12px;font-size:11px;color:#1e293b;line-height:1.4;text-align:left;">';
+            $html .= '<strong>Observação:</strong> ' . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+            $html .= '</td>';
+            $html .= '</tr>';
+        }
+
         $html .= '</tfoot>';
         $html .= '</table>';
 
@@ -155,9 +177,9 @@ class PaymentScheduleService
     /**
      * Gera tabela HTML para contratos (alias/legado de toHtmlTable).
      */
-    public function toHtmlList(array $programacao): string
+    public function toHtmlList(array $programacao, float $total = 0, array $options = []): string
     {
-        return $this->toHtmlTable($programacao);
+        return $this->toHtmlTable($programacao, $total, $options);
     }
 
     public function formatBRL(float $value): string

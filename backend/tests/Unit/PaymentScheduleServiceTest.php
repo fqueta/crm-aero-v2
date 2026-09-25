@@ -200,5 +200,24 @@ it('permite sobrescrever datas de vencimento de parcelas específicas (venciment
         ->and($result['primeira_parcela']['data'])->toBe('2026-10-01');
 });
 
+it('renderiza nota explicativa de desconto de pontualidade no rodapé da tabela HTML', function () {
+    $service = new PaymentScheduleService();
+
+    $programacao = [
+        ['n' => 1, 'vencimento' => '2026-10-10', 'valor' => 2410.83, 'descricao' => '1ª Parcela'],
+        ['n' => 2, 'vencimento' => '2026-11-10', 'valor' => 2410.83, 'descricao' => '2ª Parcela'],
+    ];
+
+    $html = $service->toHtmlTable($programacao, 4821.66, [
+        'desconto_pontualidade' => 400.00,
+        'parcela_com_desconto' => 2010.83,
+    ]);
+
+    expect($html)->toContain('Observação:')
+        ->and($html)->toContain('Desconto de pontualidade: R$ 400,00 por parcela')
+        ->and($html)->toContain('valor com desconto: R$ 2.010,83')
+        ->and($html)->toContain('O não pagamento até o vencimento implicará na perda do desconto');
+});
+
 
 

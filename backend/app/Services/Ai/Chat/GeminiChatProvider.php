@@ -25,11 +25,14 @@ class GeminiChatProvider extends BaseAiChatProvider
             throw new Exception("Provider {$this->getProviderSlug()} is not configured.");
         }
 
-        $models = [
+        $models = array_values(array_unique(array_filter([
             $this->model,
-            'gemini-2.0-flash',
-            'gemini-1.5-flash',
-        ];
+            'gemini-3.7-flash',
+            'gemini-3.8-flash',
+            'gemini-3.5-flash',
+            'gemini-3.1-flash-lite',
+            'gemini-flash-latest',
+        ])));
 
         $contents = [];
         foreach ($history as $msg) {
@@ -75,6 +78,9 @@ class GeminiChatProvider extends BaseAiChatProvider
                     ];
                 }
                 $lastError = $response->body();
+                if ($response->status() === 503) {
+                    usleep(1200000); // 1.2s de pausa se houver pico de demanda
+                }
             } catch (\Throwable $e) {
                 $lastError = $e->getMessage();
             }
@@ -90,6 +96,6 @@ class GeminiChatProvider extends BaseAiChatProvider
 
     public function getDefaultModel(): string
     {
-        return 'gemini-2.0-flash';
+        return 'gemini-3.7-flash';
     }
 }

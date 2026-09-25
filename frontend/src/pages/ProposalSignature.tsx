@@ -55,9 +55,9 @@ import {
   getStudentFacingQuestionLabel,
   PUBLIC_PROPOSAL_QUESTIONS,
   PublicProposalQuestionKey,
-  resolvePublicProposalQuestions,
-  resolvePublicProposalRequiredQuestions,
-  resolvePublicProposalSections,
+  resolveUnifiedPublicProposalQuestions,
+  resolveUnifiedPublicProposalRequiredQuestions,
+  resolveUnifiedPublicProposalSections,
 } from '@/lib/publicProposalQuestions';
 
 const formSchema = z.object({
@@ -245,7 +245,7 @@ export default function ProposalSignature() {
           if (successRedirect) {
             window.location.href = successRedirect;
           } else {
-            window.location.href = `/aluno/matricula/${clientId}_${matriculaId}/2`;
+            window.location.href = `/aluno/matricula/${clientId}_${matriculaId}/2/aprovado`;
           }
           return;
         }
@@ -395,21 +395,28 @@ export default function ProposalSignature() {
       ? (typeof primeiraParcelaValorRaw === 'number' ? primeiraParcelaValorRaw : (currencyRemoveMaskToNumber(String(primeiraParcelaValorRaw)) || 0))
       : null;
 
-    // Se recebimento for junto com a 1ª parcela, computa o valor da 1ª parcela com matrícula
+    // Se recebimento for junto com a 1ª parcela, computa o valor da 1ª parcela com matrícula (cheio e com desconto)
     const primeiraParcelaComMatriculaNum = recebimentoMatricula === 'primeira_parcela' && matriculaValorNum > 0
+      ? (primeiraParcelaValorNum !== null ? primeiraParcelaValorNum + matriculaValorNum : valorParcelaNum + matriculaValorNum)
+      : null;
+
+    const primeiraParcelaEfetivaComMatriculaNum = recebimentoMatricula === 'primeira_parcela' && matriculaValorNum > 0
       ? (primeiraParcelaValorNum !== null ? primeiraParcelaValorNum + matriculaValorNum : valorEfetivoParcela + matriculaValorNum)
       : null;
 
-    const valorParcelaFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
+    // Formatações cheias (nominais)
+    const valorParcelaCheioFormatted = formatCurrencyBRL(valorParcelaNum);
+    const valorParcelaEfetivoFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
 
     let summaryText = '';
     const hasEntrada = primeiraParcelaValorNum !== null && primeiraParcelaValorNum > 0;
 
+    // Exibir sempre o valor nominal (cheio) no resumo do plano
     if (recebimentoMatricula === 'primeira_parcela' && primeiraParcelaComMatriculaNum !== null) {
       const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaFormatted}`;
+        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaCheioFormatted}`;
       } else {
         summaryText = `1x de ${entradaComMatFormatted} (Curso + Matrícula)`;
       }
@@ -417,16 +424,16 @@ export default function ProposalSignature() {
       const entradaFormatted = formatCurrencyBRL(primeiraParcelaValorNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaFormatted}`;
+        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaCheioFormatted}`;
       } else {
         summaryText = `1x de ${entradaFormatted} (À vista / Entrada)`;
       }
     } else if (qtdParcelas === 1) {
-      summaryText = `1x de ${valorParcelaFormatted} (À vista)`;
+      summaryText = `1x de ${valorParcelaCheioFormatted} (À vista)`;
     } else if (qtdParcelas > 1) {
-      summaryText = `${qtdParcelas}x de ${valorParcelaFormatted}`;
+      summaryText = `${qtdParcelas}x de ${valorParcelaCheioFormatted}`;
     } else {
-      summaryText = valorParcelaFormatted;
+      summaryText = valorParcelaCheioFormatted;
     }
 
     let paymentMethod = 'Boleto / Carnê Bancário';
@@ -441,7 +448,11 @@ export default function ProposalSignature() {
       summaryText,
       paymentMethod,
       qtdParcelas,
-      valorParcelaFormatted,
+      valorParcelaNum,
+      valorParcelaFormatted: valorParcelaCheioFormatted,
+      valorParcelaCheioFormatted,
+      valorEfetivoParcela,
+      valorParcelaEfetivoFormatted,
       descPontualidadeNum,
       descPontualidadeFormatted: descPontualidadeNum > 0 ? formatCurrencyBRL(descPontualidadeNum) : null,
       hasEntrada,
@@ -454,6 +465,8 @@ export default function ProposalSignature() {
       matriculaVencimentoData,
       primeiraParcelaComMatriculaNum,
       primeiraParcelaComMatriculaFormatted: primeiraParcelaComMatriculaNum !== null ? formatCurrencyBRL(primeiraParcelaComMatriculaNum) : null,
+      primeiraParcelaEfetivaComMatriculaNum,
+      primeiraParcelaEfetivaComMatriculaFormatted: primeiraParcelaEfetivaComMatriculaNum !== null ? formatCurrencyBRL(primeiraParcelaEfetivaComMatriculaNum) : null,
     };
   }, [proposal]);
 
@@ -487,7 +500,7 @@ export default function ProposalSignature() {
 
     try {
       setLoading(true);
-      const requiredErrors = validateRequiredPublicQuestions(signatureRequiredQuestions, data);
+      const requiredErrors = validateRequiredPublicQuestions(unifiedRequiredQuestions, data);
       if (requiredErrors.length > 0) {
         requiredErrors.forEach((error) => {
           form.setError(error.key, { type: 'manual', message: error.message });
@@ -497,8 +510,8 @@ export default function ProposalSignature() {
         toast.error('Preencha as confirmações obrigatórias.');
         return;
       }
-      signatureRequiredQuestions.forEach((key) => form.clearErrors(key));
-      const publicQuestionPayload = signatureVisibleQuestions.reduce<Partial<SignProposalData>>((acc, key) => {
+      unifiedRequiredQuestions.forEach((key) => form.clearErrors(key));
+      const publicQuestionPayload = unifiedVisibleQuestions.reduce<Partial<SignProposalData>>((acc, key) => {
         const value = data[key];
         if (typeof value !== 'undefined') {
           (acc as any)[key] = value;
@@ -518,12 +531,18 @@ export default function ProposalSignature() {
         ...publicQuestionPayload,
       } as SignProposalData;
 
-      const response = await proposalService.signProposal(clientId!, matriculaId!, cleanData);
-      
-      if ((response as any).redirect) {
-        window.location.href = (response as any).redirect;
+      // 1) Salva os dados do aluno e conclui a etapa 1 (step1_done)
+      await proposalService.signProposal(clientId!, matriculaId!, cleanData);
+
+      // 2) Conclui a aprovação definitiva diretamente (step2_done, congelamento financeiro, ZapSign e contratos)
+      const approveResponse: any = await proposalService.approveProposal(clientId!, matriculaId!, publicQuestionPayload);
+
+      toast.success(approveResponse?.message || 'Proposta aprovada com sucesso!');
+
+      if (approveResponse?.redirect) {
+        window.location.href = approveResponse.redirect;
       } else {
-        toast.success('Assinatura realizada com sucesso!');
+        window.location.href = `/aluno/matricula/${clientId}_${matriculaId}/2/aprovado`;
       }
     } catch (error: any) {
       console.error(error);
@@ -561,32 +580,36 @@ export default function ProposalSignature() {
         }
       }
 
-      toast.error('Erro ao salvar os dados');
+      const errorMessage =
+        error?.body?.message ||
+        error?.message ||
+        'Erro ao salvar os dados e aprovar a proposta.';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   }
 
-  const signatureVisibleQuestions = useMemo<PublicProposalQuestionKey[]>(
-    () => resolvePublicProposalQuestions((proposal as any)?.curso?.config, 'signature', (proposal as any)?.curso_tipo),
+  const unifiedVisibleQuestions = useMemo<PublicProposalQuestionKey[]>(
+    () => resolveUnifiedPublicProposalQuestions((proposal as any)?.curso?.config, (proposal as any)?.curso_tipo),
     [proposal]
   );
-  const signatureRequiredQuestions = useMemo<PublicProposalQuestionKey[]>(
-    () => resolvePublicProposalRequiredQuestions((proposal as any)?.curso?.config, 'signature', (proposal as any)?.curso_tipo),
+  const unifiedRequiredQuestions = useMemo<PublicProposalQuestionKey[]>(
+    () => resolveUnifiedPublicProposalRequiredQuestions((proposal as any)?.curso?.config, (proposal as any)?.curso_tipo),
     [proposal]
   );
-  const signatureVisibleSections = useMemo(
-    () => resolvePublicProposalSections((proposal as any)?.curso?.config, 'signature', (proposal as any)?.curso_tipo),
+  const unifiedVisibleSections = useMemo(
+    () => resolveUnifiedPublicProposalSections((proposal as any)?.curso?.config, (proposal as any)?.curso_tipo),
     [proposal]
   );
   const visibleQuestionDefinitions = useMemo(
-    () => PUBLIC_PROPOSAL_QUESTIONS.filter((question) => signatureVisibleQuestions.includes(question.key)),
-    [signatureVisibleQuestions]
+    () => PUBLIC_PROPOSAL_QUESTIONS.filter((question) => unifiedVisibleQuestions.includes(question.key)),
+    [unifiedVisibleQuestions]
   );
   const statusQuestions = visibleQuestionDefinitions.filter((question) => question.section === 'status');
   const infoQuestions = visibleQuestionDefinitions.filter((question) => question.section === 'info');
-  const showStatusSection = signatureVisibleSections.status && statusQuestions.length > 0;
-  const showInfoSection = signatureVisibleSections.info && infoQuestions.length > 0;
+  const showStatusSection = unifiedVisibleSections.status && statusQuestions.length > 0;
+  const showInfoSection = unifiedVisibleSections.info && infoQuestions.length > 0;
   const showAdministrativeQuestions = showStatusSection || showInfoSection;
   const isProposalExpired = Boolean(proposal?.is_expired);
   const proposalExpirationMessage = proposal?.expiration_message || 'A validade desta proposta expirou. Solicite uma nova proposta para continuar.';
@@ -842,13 +865,16 @@ export default function ProposalSignature() {
                               </div>
 
                               {parcelamentoSummary.descPontualidadeFormatted ? (
-                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center gap-2">
-                                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                                  <div>
-                                    <span className="text-emerald-700 block">Desconto Pontualidade:</span>
-                                    <span className="font-bold text-emerald-900">
-                                      {parcelamentoSummary.descPontualidadeFormatted} / parcela até o vencimento
+                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-start gap-2.5">
+                                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-emerald-700 block font-medium">Desconto Pontualidade:</span>
+                                    <span className="font-bold text-emerald-900 block">
+                                      {parcelamentoSummary.descPontualidadeFormatted} de desconto por parcela
                                     </span>
+                                    <p className="text-[11px] text-emerald-800 leading-tight">
+                                      Pagando em dia até o vencimento, o valor da parcela de {parcelamentoSummary.valorParcelaCheioFormatted} passa para <strong>{parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>.
+                                    </p>
                                   </div>
                                 </div>
                               ) : (
@@ -1373,9 +1399,19 @@ export default function ProposalSignature() {
                           <strong>Aluno:</strong> {form.watch('name') || proposal.cliente?.name} • <strong>Curso:</strong> {proposal.curso_nome}
                         </p>
                         {parcelamentoSummary && (
-                          <p className="text-xs text-blue-800">
-                            <strong>Condição:</strong> {parcelamentoSummary.summaryText} ({parcelamentoSummary.paymentMethod})
-                          </p>
+                          <>
+                            <p className="text-xs text-blue-800">
+                              <strong>Condição:</strong> {parcelamentoSummary.summaryText} ({parcelamentoSummary.paymentMethod})
+                            </p>
+                            {parcelamentoSummary.descPontualidadeFormatted && (
+                              <p className="text-xs text-emerald-800 flex items-center gap-1.5 font-medium mt-1">
+                                <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>
+                                  Desconto de pontualidade: {parcelamentoSummary.descPontualidadeFormatted} por parcela para pagamentos realizados até a data de vencimento (parcela de {parcelamentoSummary.valorParcelaCheioFormatted} passa para {parcelamentoSummary.valorParcelaEfetivoFormatted}).
+                                </span>
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
 
@@ -1400,7 +1436,7 @@ export default function ProposalSignature() {
                                         <FormItem data-field={question.key}>
                                           <FormLabel>
                                             {getStudentFacingQuestionLabel(question.label, question.section)}
-                                            {signatureRequiredQuestions.includes(question.key) ? ' *' : ''}
+                                            {unifiedRequiredQuestions.includes(question.key) ? ' *' : ''}
                                           </FormLabel>
                                           <Select onValueChange={field.onChange} value={field.value || ""}>
                                             <FormControl>
@@ -1430,7 +1466,7 @@ export default function ProposalSignature() {
                                           <div className="space-y-1 leading-none">
                                             <FormLabel className="text-xs font-medium cursor-pointer">
                                               {getStudentFacingQuestionLabel(question.label, question.section)}
-                                              {signatureRequiredQuestions.includes(question.key) ? ' *' : ''}
+                                              {unifiedRequiredQuestions.includes(question.key) ? ' *' : ''}
                                             </FormLabel>
                                             <FormMessage />
                                           </div>
@@ -1468,7 +1504,7 @@ export default function ProposalSignature() {
                                         <div className="space-y-1 leading-none">
                                           <FormLabel className="text-xs sm:text-sm font-medium leading-relaxed cursor-pointer">
                                             {getStudentFacingQuestionLabel(question.label, question.section)}
-                                            {signatureRequiredQuestions.includes(question.key) ? ' *' : ''}
+                                            {unifiedRequiredQuestions.includes(question.key) ? ' *' : ''}
                                           </FormLabel>
                                           <FormMessage />
                                         </div>

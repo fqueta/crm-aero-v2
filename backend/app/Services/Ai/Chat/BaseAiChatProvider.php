@@ -45,8 +45,8 @@ abstract class BaseAiChatProvider implements AiChatProviderInterface
             }
         } catch (\Throwable $e) {
         }
-        // 3. Credenciais api_credentials (ex.: integracao-openai). Segredos
-        // podem estar criptografados (Crypt) — tenta descriptografar.
+        // 3. Credenciais api_credentials (ex.: integracao-openai, integracao-gemini).
+        // Segredos ficam salvos em config->access_token / api_key / pass (criptografados via Crypt).
         try {
             $query = ApiCredential::withoutGlobalScope('notDeleted')
                 ->where('deletado', '!=', 's');
@@ -58,16 +58,20 @@ abstract class BaseAiChatProvider implements AiChatProviderInterface
             });
             $creds = $query->orderBy('ID', 'desc')->get();
             foreach ($creds as $cred) {
-                if (!empty($cred->token)) {
-                    return trim((string) $cred->token);
-                }
                 $cfg = is_array($cred->config) ? $cred->config : json_decode($cred->config ?? '[]', true);
                 if (is_array($cfg)) {
-                    foreach (['access_token', 'api_key', 'pass', 'key', 'secret_key', 'user'] as $field) {
+                    foreach (['access_token', 'api_key', 'pass', 'key', 'secret_key'] as $field) {
                         if (!empty($cfg[$field])) {
-                            return trim($this->decrypt((string) $cfg[$field]));
+                            $decrypted = trim($this->decrypt((string) $cfg[$field]));
+                            if (!empty($decrypted)) {
+                                return $decrypted;
+                            }
                         }
                     }
+                }
+                // Fallback legado se não estiver no config e não for UUID gerado pelo sistema
+                if (!empty($cred->token) && strlen($cred->token) > 20 && !str_contains($cred->token, '-')) {
+                    return trim((string) $cred->token);
                 }
             }
         } catch (\Throwable $e) {

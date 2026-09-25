@@ -72,6 +72,9 @@ class AiChatService
         if (str_contains($raw, 'api_key_invalid') || str_contains($raw, 'api key not valid') || str_contains($raw, 'invalid api key') || str_contains($raw, 'incorrect api key') || str_contains($raw, 'invalid_api_key')) {
             return 'A chave de API foi rejeitada pelo provedor de IA. Confira a chave em Configurações > Integrações.';
         }
+        if (str_contains($raw, '503') || str_contains($raw, 'high demand') || str_contains($raw, 'unavailable') || str_contains($raw, 'temporarily unavailable')) {
+            return 'Os servidores de IA estão com alta demanda temporária. Aguarde alguns instantes e tente novamente.';
+        }
         if (str_contains($raw, '429') || str_contains($raw, 'quota') || str_contains($raw, 'rate limit') || str_contains($raw, 'resource_exhausted')) {
             return 'O provedor de IA atingiu o limite de uso. Aguarde alguns minutos e tente novamente.';
         }

@@ -39,7 +39,7 @@ interface ProposalViewContentProps {
  * pt-BR: Card de métrica para uso interno na visualização de proposta.
  * en-US: Metric card for internal use in proposal view.
  */
-function StatCard({ label, value, description, icon: Icon, colorClass = "text-primary", bgClass = "bg-primary/10", className = "" }: any) {
+function StatCard({ label, value, description, extra, icon: Icon, colorClass = "text-primary", bgClass = "bg-primary/10", className = "" }: any) {
   return (
     <Card className={`border-none shadow-sm bg-zinc-50/50 dark:bg-zinc-900/50 backdrop-blur-sm overflow-hidden transition-all hover:shadow-md hover:bg-white dark:hover:bg-zinc-900 border border-border/40 ${className}`}>
       <CardContent className="p-4 sm:p-5 flex items-start sm:items-center gap-3.5">
@@ -52,8 +52,9 @@ function StatCard({ label, value, description, icon: Icon, colorClass = "text-pr
             {value}
           </div>
           {description && (
-            <span className="text-xs text-muted-foreground font-medium leading-tight mt-0.5">{description}</span>
+            <div className="text-xs text-muted-foreground font-medium leading-tight mt-0.5">{description}</div>
           )}
+          {extra}
         </div>
       </CardContent>
     </Card>
@@ -376,10 +377,11 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
       : null;
 
     const primeiraParcelaComMatriculaNum = recebimento === 'primeira_parcela' && matriculaValorNum > 0
-      ? (primeiraParcelaValorNum !== null ? primeiraParcelaValorNum + matriculaValorNum : valorEfetivoParcela + matriculaValorNum)
+      ? (primeiraParcelaValorNum !== null ? primeiraParcelaValorNum + matriculaValorNum : valorParcelaNum + matriculaValorNum)
       : null;
 
-    const valorParcelaFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
+    const valorParcelaCheioFormatted = formatCurrencyBRL(valorParcelaNum);
+    const valorParcelaEfetivoFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
 
     let summaryText = '';
     const hasEntrada = primeiraParcelaValorNum !== null && primeiraParcelaValorNum > 0;
@@ -388,7 +390,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
       const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaFormatted}`;
+        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaCheioFormatted}`;
       } else {
         summaryText = `1x de ${entradaComMatFormatted} (Curso + Matrícula)`;
       }
@@ -396,16 +398,16 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
       const entradaFormatted = formatCurrencyBRL(primeiraParcelaValorNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaFormatted}`;
+        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaCheioFormatted}`;
       } else {
         summaryText = `1x de ${entradaFormatted} (À vista / Entrada)`;
       }
     } else if (qtdParcelas === 1) {
-      summaryText = `1x de ${valorParcelaFormatted} (À vista)`;
+      summaryText = `1x de ${valorParcelaCheioFormatted} (À vista)`;
     } else if (qtdParcelas > 1) {
-      summaryText = `${qtdParcelas}x de ${valorParcelaFormatted}`;
+      summaryText = `${qtdParcelas}x de ${valorParcelaCheioFormatted}`;
     } else {
-      summaryText = valorParcelaFormatted;
+      summaryText = valorParcelaCheioFormatted;
     }
 
     // Forma de pagamento / Condição
@@ -424,7 +426,13 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
       summaryText,
       paymentMethod,
       qtdParcelas,
-      valorParcelaFormatted,
+      valorParcelaNum,
+      valorParcelaFormatted: valorParcelaCheioFormatted,
+      valorParcelaCheioFormatted,
+      valorEfetivoParcela,
+      valorParcelaEfetivoFormatted,
+      descPontualidadeNum,
+      descPontualidadeFormatted: descPontualidadeNum > 0 ? formatCurrencyBRL(descPontualidadeNum) : null,
       recebimento,
       matriculaValorNum,
       matriculaValorFormatted: matriculaValorNum > 0 ? formatCurrencyBRL(matriculaValorNum) : null,
@@ -573,6 +581,14 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                   label="Condição de Pagamento" 
                   value={parcelamentoSummary.summaryText} 
                   description={parcelamentoSummary.paymentMethod}
+                  extra={
+                    parcelamentoSummary.descPontualidadeNum > 0 && parcelamentoSummary.descPontualidadeFormatted ? (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/70 px-2 py-0.5 rounded-md border border-emerald-300/40">
+                        <span>✨ <strong>Desc. Pontualidade:</strong> {parcelamentoSummary.descPontualidadeFormatted} / parcela até o vencimento</span>
+                        <span className="text-muted-foreground/80">(líquido: <strong>{parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>)</span>
+                      </div>
+                    ) : null
+                  }
                   icon={CreditCard} 
                   colorClass="text-emerald-600" 
                   bgClass="bg-emerald-50 dark:bg-emerald-950/40" 

@@ -352,12 +352,17 @@ export default function ProposalApproval() {
       ? (typeof primeiraParcelaValorRaw === 'number' ? primeiraParcelaValorRaw : (currencyRemoveMaskToNumber(String(primeiraParcelaValorRaw)) || 0))
       : null;
 
-    // Se recebimento for junto com a 1ª parcela, computa o valor da 1ª parcela com matrícula
+    // Se recebimento for junto com a 1ª parcela, computa o valor da 1ª parcela com matrícula (cheio e com desconto)
     const primeiraParcelaComMatriculaNum = recebimentoMatricula === 'primeira_parcela' && matriculaValorNum > 0
+      ? (primeiraParcelaValorNum !== null ? primeiraParcelaValorNum + matriculaValorNum : valorParcelaNum + matriculaValorNum)
+      : null;
+
+    const primeiraParcelaEfetivaComMatriculaNum = recebimentoMatricula === 'primeira_parcela' && matriculaValorNum > 0
       ? (primeiraParcelaValorNum !== null ? primeiraParcelaValorNum + matriculaValorNum : valorEfetivoParcela + matriculaValorNum)
       : null;
 
-    const valorParcelaFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
+    const valorParcelaCheioFormatted = formatCurrencyBRL(valorParcelaNum);
+    const valorParcelaEfetivoFormatted = formatCurrencyBRL(valorEfetivoParcela > 0 ? valorEfetivoParcela : valorParcelaNum);
 
     let summaryText = '';
     const hasEntrada = primeiraParcelaValorNum !== null && primeiraParcelaValorNum > 0;
@@ -366,7 +371,7 @@ export default function ProposalApproval() {
       const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaFormatted}`;
+        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaCheioFormatted}`;
       } else {
         summaryText = `1x de ${entradaComMatFormatted} (Curso + Matrícula)`;
       }
@@ -374,16 +379,16 @@ export default function ProposalApproval() {
       const entradaFormatted = formatCurrencyBRL(primeiraParcelaValorNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaFormatted}`;
+        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaCheioFormatted}`;
       } else {
         summaryText = `1x de ${entradaFormatted} (À vista / Entrada)`;
       }
     } else if (qtdParcelas === 1) {
-      summaryText = `1x de ${valorParcelaFormatted} (À vista)`;
+      summaryText = `1x de ${valorParcelaCheioFormatted} (À vista)`;
     } else if (qtdParcelas > 1) {
-      summaryText = `${qtdParcelas}x de ${valorParcelaFormatted}`;
+      summaryText = `${qtdParcelas}x de ${valorParcelaCheioFormatted}`;
     } else {
-      summaryText = valorParcelaFormatted;
+      summaryText = valorParcelaCheioFormatted;
     }
 
     let paymentMethod = 'Boleto / Carnê Bancário';
@@ -398,7 +403,11 @@ export default function ProposalApproval() {
       summaryText,
       paymentMethod,
       qtdParcelas,
-      valorParcelaFormatted,
+      valorParcelaNum,
+      valorParcelaFormatted: valorParcelaCheioFormatted,
+      valorParcelaCheioFormatted,
+      valorEfetivoParcela,
+      valorParcelaEfetivoFormatted,
       descPontualidadeNum,
       descPontualidadeFormatted: descPontualidadeNum > 0 ? formatCurrencyBRL(descPontualidadeNum) : null,
       hasEntrada,
@@ -410,6 +419,9 @@ export default function ProposalApproval() {
       matriculaValorFormatted: matriculaValorNum > 0 ? formatCurrencyBRL(matriculaValorNum) : null,
       matriculaVencimentoData,
       primeiraParcelaComMatriculaNum,
+      primeiraParcelaComMatriculaFormatted: primeiraParcelaComMatriculaNum !== null ? formatCurrencyBRL(primeiraParcelaComMatriculaNum) : null,
+      primeiraParcelaEfetivaComMatriculaNum,
+      primeiraParcelaEfetivaComMatriculaFormatted: primeiraParcelaEfetivaComMatriculaNum !== null ? formatCurrencyBRL(primeiraParcelaEfetivaComMatriculaNum) : null,
     };
   }, [proposal]);
 
@@ -684,13 +696,16 @@ export default function ProposalApproval() {
                               </div>
 
                               {parcelamentoSummary.descPontualidadeFormatted ? (
-                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center gap-2">
-                                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                                  <div>
-                                    <span className="text-emerald-700 block">Desconto Pontualidade:</span>
-                                    <span className="font-bold text-emerald-900">
-                                      {parcelamentoSummary.descPontualidadeFormatted} / parcela até o vencimento
+                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-start gap-2.5">
+                                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                  <div className="space-y-0.5">
+                                    <span className="text-emerald-700 block font-medium">Desconto Pontualidade:</span>
+                                    <span className="font-bold text-emerald-900 block">
+                                      {parcelamentoSummary.descPontualidadeFormatted} de desconto por parcela
                                     </span>
+                                    <p className="text-[11px] text-emerald-800 leading-tight">
+                                      Pagando em dia até o vencimento, o valor da parcela de {parcelamentoSummary.valorParcelaCheioFormatted} passa para <strong>{parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>.
+                                    </p>
                                   </div>
                                 </div>
                               ) : (

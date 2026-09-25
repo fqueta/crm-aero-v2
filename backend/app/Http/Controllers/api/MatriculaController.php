@@ -1438,8 +1438,6 @@ class MatriculaController extends Controller
                 }
 
                 if (!empty($schedule['programacao'])) {
-                    $dm['tabela_parcelas'] = $service->toHtmlTable($schedule['programacao'], (float) ($schedule['total'] ?? 0));
-                    $dm['cronograma_parcelas'] = $dm['tabela_parcelas'];
                     $dm['dia_vencimento_parcelas'] = $schedule['dia_pagamento'] ?? '';
                     $dm['dia_pagamento'] = $dm['dia_vencimento_parcelas'];
                     $dm['data_primeira_parcela'] = $service->formatDateBR($schedule['primeira_parcela']['data'] ?? '');
@@ -1465,6 +1463,14 @@ class MatriculaController extends Controller
                             $textoDesc
                         );
                     }
+
+                    // Tabela com nota de desconto de pontualidade automática
+                    $dm['tabela_parcelas'] = $service->toHtmlTable($schedule['programacao'], (float) ($schedule['total'] ?? 0), [
+                        'desconto_pontualidade' => $disc['desconto'],
+                        'parcela_com_desconto' => $disc['liquido'],
+                        'nota_desconto' => $dm['texto_desconto'] ?? '',
+                    ]);
+                    $dm['cronograma_parcelas'] = $dm['tabela_parcelas'];
                 }
 
                 // Injeta valor_total se ausente
