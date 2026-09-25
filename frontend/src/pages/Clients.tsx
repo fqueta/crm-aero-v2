@@ -686,7 +686,7 @@ export default function Clients() {
   }, [effectiveClients, searchTerm, statusFilter]);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto py-2 space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Clientes</h1>

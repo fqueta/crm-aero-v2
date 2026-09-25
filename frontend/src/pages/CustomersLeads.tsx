@@ -1176,83 +1176,93 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
 
   // console.log('clientsByStage', clientsByStage);
   return (
-    <div className="container mx-auto max-w-[1600px] space-y-8 pb-32 pt-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          {place === 'vendas' ? 'Funis de Vendas' : 'Leads de Atendimento'}
-        </h1>
-        <p className="text-muted-foreground text-lg">
-          {`Gerencie seus ${place === 'vendas' ? 'processos de vendas' : 'leads de atendimento'} de forma visual e intuitiva.`}
-        </p>
+    <div className="container mx-auto max-w-[1600px] space-y-3 pb-24 pt-0">
+      {/* Top Header: Título enxuto + Ações rápidas */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            {place === 'vendas' ? 'Funis de Vendas' : 'Leads de Atendimento'}
+          </h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
+            {`Gerencie seus ${place === 'vendas' ? 'processos de vendas' : 'leads de atendimento'} de forma visual e intuitiva.`}
+          </p>
+        </div>
+
+        {place === 'vendas' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-medium"
+              onClick={() => navigate('/admin/sales/scheduled-communications')}
+            >
+              <FileText className="mr-1.5 h-3.5 w-3.5" />
+              Painel de agendamentos
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 text-xs font-medium"
+              onClick={() => setScheduleDialogOpen(true)}
+              disabled={selectedEnrollmentIds.length === 0}
+            >
+              <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
+              Agendar atendimento
+            </Button>
+          </div>
+        )}
       </div>
       
       <Card className="border-none shadow-none bg-transparent">
         <CardContent className="p-0">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-8 bg-card p-4 rounded-xl border shadow-sm">
-            {/* Controls: selecionar funil de atendimento */}
-            <div className="w-full max-w-sm">
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block uppercase tracking-wider">
-                {place === 'vendas' ? 'Selecione o Funil' : 'Selecione o Funil'}
-              </label>
-              <Select value={selectedFunnelId ?? undefined} onValueChange={setSelectedFunnelId}>
-                <SelectTrigger className="h-10">
-                  <SelectValue placeholder="Selecione um funil..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredFunnels.map(f => (
-                    <SelectItem key={f.id} value={String(f.id)} className="cursor-pointer">{f.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {place === 'vendas' && (
-              <div className="w-full max-w-[240px]">
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block uppercase tracking-wider">
-                  Status da proposta
-                </label>
-                <Select value={salesStatusFilter} onValueChange={(value) => setSalesStatusFilter(value as 'all' | 'a' | 'g' | 'p')}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Filtrar status..." />
+          {/* Barra de Filtros Compacta */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3 bg-card px-3 py-2 sm:px-4 sm:py-2 rounded-xl border shadow-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Controls: selecionar funil de atendimento */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                  Funil:
+                </span>
+                <Select value={selectedFunnelId ?? undefined} onValueChange={setSelectedFunnelId}>
+                  <SelectTrigger className="h-8 text-xs w-[180px] sm:w-[220px]">
+                    <SelectValue placeholder="Selecione um funil..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="a">Atendimento</SelectItem>
-                    <SelectItem value="g">Ganhos</SelectItem>
-                    <SelectItem value="p">Perdas</SelectItem>
+                    {filteredFunnels.map(f => (
+                      <SelectItem key={f.id} value={String(f.id)} className="cursor-pointer text-xs">{f.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-            )}
+
+              {place === 'vendas' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Status:
+                  </span>
+                  <Select value={salesStatusFilter} onValueChange={(value) => setSalesStatusFilter(value as 'all' | 'a' | 'g' | 'p')}>
+                    <SelectTrigger className="h-8 text-xs w-[140px]">
+                      <SelectValue placeholder="Filtrar status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">Todos</SelectItem>
+                      <SelectItem value="a" className="text-xs">Atendimento</SelectItem>
+                      <SelectItem value="g" className="text-xs">Ganhos</SelectItem>
+                      <SelectItem value="p" className="text-xs">Perdas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
 
             {/* Toggle de densidade */}
-            <div className="flex items-center gap-3 bg-muted/50 p-2 rounded-lg border">
-              <Switch id="kanban-density" checked={dense} onCheckedChange={setDense} />
-              <Label htmlFor="kanban-density" className="text-sm cursor-pointer select-none font-medium">
+            <div className="flex items-center gap-2 bg-muted/40 px-2.5 py-1 rounded-lg border text-xs">
+              <Switch id="kanban-density" checked={dense} onCheckedChange={setDense} className="scale-75 origin-left" />
+              <Label htmlFor="kanban-density" className="text-xs cursor-pointer select-none font-medium text-muted-foreground">
                 {dense ? 'Modo Compacto' : 'Modo Confortável'}
               </Label>
             </div>
-
-            {place === 'vendas' && (
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate('/admin/sales/scheduled-communications')}
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Painel de agendamentos
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => setScheduleDialogOpen(true)}
-                  disabled={selectedEnrollmentIds.length === 0}
-                >
-                  <CalendarClock className="mr-2 h-4 w-4" />
-                  Agendar atendimento/envio
-                </Button>
-              </div>
-            )}
           </div>
 
 

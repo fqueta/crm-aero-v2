@@ -189,11 +189,11 @@ export default function ScheduledCommunicationsPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-[1600px] space-y-6 pb-20 pt-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Painel de agendamentos</h1>
-        <p className="text-muted-foreground">
-          Acompanhe os envios e atendimentos agendados, com status, erros e acoes operacionais.
+    <div className="container mx-auto max-w-[1600px] space-y-4 pb-20 pt-1">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Painel de agendamentos</h1>
+        <p className="text-muted-foreground text-sm">
+          Acompanhe os envios e atendimentos agendados, com status, erros e ações operacionais.
         </p>
       </div>
 

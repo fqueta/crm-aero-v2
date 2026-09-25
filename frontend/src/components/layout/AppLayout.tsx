@@ -143,7 +143,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 overflow-auto p-4 lg:p-6">
+          <main className="flex-1 overflow-auto px-4 py-2 sm:px-6 sm:py-3">
             {children}
           </main>
 

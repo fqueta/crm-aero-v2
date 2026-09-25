@@ -130,12 +130,14 @@ const getItemSection = (item: any): string =>
  * module filter pills, section grouping and auto-scroll to the active item.
  */
 export function AppSidebar() {
-  const { state, toggleSidebar, setOpenMobile, isMobile } = useSidebar();
+  const { state, toggleSidebar, setOpenMobile, isMobile, isHoverActive, setIsHoverActive } = useSidebar();
   const { menu: apiMenu, logout, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const currentPath = location.pathname;
   const collapsed = state === "collapsed";
+  // Quando recolhido pelo usuário mas com hover ativo, renderiza visualmente expandido (em overlay sobre o conteúdo)
+  const visuallyCollapsed = collapsed && !isHoverActive;
 
   /**
    * resolveUrl
@@ -153,6 +155,7 @@ export function AppSidebar() {
 
   const handleNavigate = () => {
     if (isMobile) setOpenMobile(false);
+    if (isHoverActive) setIsHoverActive?.(false);
   };
 
   /**
@@ -426,7 +429,7 @@ export function AppSidebar() {
   }, [currentPath, bestMatch, collapsed]);
 
   // Agrupamento por seção (somente desktop expandido sem busca ativa)
-  const useSections = !collapsed && !normalizedQuery;
+  const useSections = !visuallyCollapsed && !normalizedQuery;
 
   const groupedSections = React.useMemo(() => {
     if (!useSections) return null;
@@ -487,7 +490,7 @@ export function AppSidebar() {
   const renderMenuItem = (item: any) => (
     <SidebarMenuItem key={item.title}>
       {item.items ? (
-        collapsed ? (
+        visuallyCollapsed ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <SidebarMenuButton
@@ -575,7 +578,7 @@ export function AppSidebar() {
           </div>
         )
       ) : (
-        <Tooltip disableHoverableContent={!collapsed}>
+        <Tooltip disableHoverableContent={!visuallyCollapsed}>
           <TooltipTrigger asChild>
             <SidebarMenuButton
               asChild
@@ -587,11 +590,11 @@ export function AppSidebar() {
             >
               <NavLink to={resolveUrl(item.url)} onClick={handleNavigate}>
                 <item.icon className={cn("h-4 w-4 shrink-0 transition-transform group-hover:scale-105", isActive(item.url) ? "text-white" : "text-slate-400")} />
-                {!collapsed && <span>{item.title}</span>}
+                {!visuallyCollapsed && <span>{item.title}</span>}
               </NavLink>
             </SidebarMenuButton>
           </TooltipTrigger>
-          {collapsed && (
+          {visuallyCollapsed && (
             <TooltipContent side="right" className="font-semibold border border-slate-200/80 dark:border-zinc-800 shadow-md rounded-md px-3 py-1.5 text-xs">
               {item.title}
             </TooltipContent>
@@ -602,12 +605,12 @@ export function AppSidebar() {
   );
 
   return (
-    <Sidebar className={cn("border-r border-slate-200/80 dark:border-zinc-800 transition-all duration-300", collapsed ? "w-16" : "w-64")} collapsible="icon">
+    <Sidebar className={cn("border-r border-slate-200/80 dark:border-zinc-800 transition-all duration-300", visuallyCollapsed ? "w-16" : "!w-64 shadow-2xl z-50")} collapsible="icon">
       <SidebarRail />
 
       {/* Header com branding */}
-      <SidebarHeader className={cn("pb-2 print:hidden", collapsed ? "p-2" : "p-4")}>
-        <div className={cn("flex items-center gap-2", collapsed ? "justify-center" : "justify-between")}>
+      <SidebarHeader className={cn("pb-2 print:hidden", visuallyCollapsed ? "p-2" : "p-4")}>
+        <div className={cn("flex items-center gap-2", visuallyCollapsed ? "justify-center" : "justify-between")}>
           <Link to="/admin/aero-dashboard" onClick={handleNavigate} className="flex items-center gap-2.5 overflow-hidden transition-all duration-200">
             <div className="rounded-md bg-primary/10 flex items-center justify-center shrink-0 border border-primary/10 hover:scale-105 transition-transform overflow-hidden p-0.5">
               <img
@@ -617,14 +620,14 @@ export function AppSidebar() {
                 className="h-7 w-auto max-w-[150px] object-contain"
               />
             </div>
-            {!collapsed && (
+            {!visuallyCollapsed && (
               <div className="flex flex-col min-w-0">
                 <span className="text-xs font-bold tracking-tight text-slate-900 dark:text-zinc-100 truncate uppercase leading-none">CRM</span>
                 <span className="text-[9px] font-semibold text-primary tracking-wider uppercase mt-0.5 opacity-90">Painel de Gestão</span>
               </div>
             )}
           </Link>
-          {!collapsed && (
+          {!visuallyCollapsed && (
             <Button variant="ghost" size="icon" onClick={() => toggleSidebar()} className="h-7 w-7 rounded-md text-slate-400 hover:bg-slate-100 lg:hidden" aria-label="Recolher menu">
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -659,7 +662,7 @@ export function AppSidebar() {
         </div>
       )}
 
-      {!collapsed && (
+      {!visuallyCollapsed && (
         <div className="px-3 pb-2 print:hidden shrink-0 space-y-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none z-10" />
@@ -753,7 +756,7 @@ export function AppSidebar() {
           ) : (
             <SidebarGroup className="p-0">
               <SidebarGroupLabel className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 h-auto">
-                {!collapsed ? "Navegação Principal" : "•"}
+                {!visuallyCollapsed ? "Navegação Principal" : "•"}
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu className="gap-1">
@@ -772,17 +775,17 @@ export function AppSidebar() {
         </TooltipProvider>
       </SidebarContent>
 
-      <SidebarFooter className={cn("mt-auto border-t border-slate-100 dark:border-zinc-800/80 transition-all", collapsed ? "p-1.5" : "p-2.5")}>
-        <div className={cn("bg-slate-50/80 dark:bg-zinc-800/40 rounded-md border border-slate-200/60 dark:border-zinc-800 transition-all", collapsed ? "p-1 flex justify-center" : "p-1.5")}>
-          <SidebarMenu className={collapsed ? "items-center justify-center w-full" : ""}>
-            <SidebarMenuItem className={collapsed ? "w-full flex justify-center" : ""}>
+      <SidebarFooter className={cn("mt-auto border-t border-slate-100 dark:border-zinc-800/80 transition-all", visuallyCollapsed ? "p-1.5" : "p-2.5")}>
+        <div className={cn("bg-slate-50/80 dark:bg-zinc-800/40 rounded-md border border-slate-200/60 dark:border-zinc-800 transition-all", visuallyCollapsed ? "p-1 flex justify-center" : "p-1.5")}>
+          <SidebarMenu className={visuallyCollapsed ? "items-center justify-center w-full" : ""}>
+            <SidebarMenuItem className={visuallyCollapsed ? "w-full flex justify-center" : ""}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className={cn("rounded-md bg-white dark:bg-zinc-900 shadow-xs border border-slate-200/80 dark:border-zinc-700/80 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-all group", collapsed ? "h-9 w-9 p-0 justify-center mx-auto" : "h-10 p-1.5")}>
+                  <SidebarMenuButton className={cn("rounded-md bg-white dark:bg-zinc-900 shadow-xs border border-slate-200/80 dark:border-zinc-700/80 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-all group", visuallyCollapsed ? "h-9 w-9 p-0 justify-center mx-auto" : "h-10 p-1.5")}>
                     <div className="w-7 h-7 rounded-md bg-primary text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
                       {userDisplayName?.[0]?.toUpperCase() || <User className="h-4 w-4" />}
                     </div>
-                    {!collapsed && (
+                    {!visuallyCollapsed && (
                       <div className="flex flex-col ml-2 min-w-0">
                         <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 truncate leading-none mb-0.5 text-left">{userDisplayName.split(' ')[0]}</span>
                         <div className="flex items-center gap-1 opacity-80">
@@ -791,7 +794,7 @@ export function AppSidebar() {
                         </div>
                       </div>
                     )}
-                    {!collapsed && <ChevronUp className="ml-auto h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 transition-colors mr-1" />}
+                    {!visuallyCollapsed && <ChevronUp className="ml-auto h-3.5 w-3.5 text-slate-400 group-hover:text-slate-600 transition-colors mr-1" />}
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="center" className="w-64 p-3 rounded-md shadow-md border border-slate-200/80 dark:border-zinc-800 animate-in slide-in-from-bottom-2 duration-200">
@@ -833,7 +836,7 @@ export function AppSidebar() {
               </DropdownMenu>
             </SidebarMenuItem>
           </SidebarMenu>
-          {!collapsed && (
+          {!visuallyCollapsed && (
             <div className="mt-2 px-2 flex justify-between items-center text-[9px] font-black uppercase tracking-[0.2em] text-gray-300 dark:text-zinc-600">
               <button
                 onClick={() => (areAllGroupsCollapsed ? expandAllGroups() : collapseAllGroups())}

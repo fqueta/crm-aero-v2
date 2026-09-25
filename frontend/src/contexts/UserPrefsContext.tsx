@@ -17,7 +17,7 @@ interface UserPrefsProviderProps {
 }
 
 const DEFAULT_PREFS: UserPrefs = {
-  sidebarOpen: true,
+  sidebarOpen: false,
 };
 
 /**
@@ -44,20 +44,7 @@ export function UserPrefsProvider({ children }: UserPrefsProviderProps) {
         const parsedPrefs = JSON.parse(stored);
         setPrefs({ ...DEFAULT_PREFS, ...parsedPrefs });
       } else {
-        // Try to read from existing sidebar cookie as fallback
-        const sidebarCookie = document.cookie
-          .split('; ')
-          .find(row => row.startsWith('sidebar:state='));
-        
-        if (sidebarCookie) {
-          const cookieValue = sidebarCookie.split('=')[1];
-          const sidebarOpen = cookieValue === 'true';
-          setPrefs({ ...DEFAULT_PREFS, sidebarOpen });
-          // Save to localStorage for future use
-          localStorage.setItem(storageKey, JSON.stringify({ ...DEFAULT_PREFS, sidebarOpen }));
-        } else {
-          setPrefs(DEFAULT_PREFS);
-        }
+        setPrefs(DEFAULT_PREFS);
       }
     } catch (error) {
       console.warn('Failed to load user preferences:', error);
