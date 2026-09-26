@@ -30,22 +30,22 @@ export function PublicHeader() {
   const permission_id: any = user?.permission_id;
 
   return (
-    <header className="bg-white/90 backdrop-blur-md border-b border-blue-200 sticky top-0 z-50">
+    <header className="bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md border-b border-blue-200 dark:border-zinc-800 sticky top-0 z-50">
       <div className="container mx-auto px-3 sm:px-4 py-2.5 sm:py-3.5 flex items-center justify-between gap-2">
         <Link to="/" className="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <img src="/logo.png" alt="Aeroclube JF" className="h-8 sm:h-11 w-auto shrink-0" />
           <div className="min-w-0">
-            <h1 className="text-sm sm:text-xl font-bold text-blue-900 truncate tracking-tight">
+            <h1 className="text-sm sm:text-xl font-bold text-blue-900 dark:text-blue-100 truncate tracking-tight">
               Aeroclube de Juiz de Fora
             </h1>
-            <p className="text-[10px] sm:text-xs text-blue-600 font-medium">Escola de aviação</p>
+            <p className="text-[10px] sm:text-xs text-blue-600 dark:text-blue-400 font-medium">Escola de aviação</p>
           </div>
         </Link>
         <div className="flex items-center space-x-2 shrink-0">
           {isAuthenticated && user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="border-blue-300 text-blue-700 hover:bg-blue-50 max-w-[130px] sm:max-w-[200px] h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3">
+                <Button variant="outline" size="sm" className="border-blue-300 dark:border-zinc-700 bg-white/50 dark:bg-zinc-900 text-blue-700 dark:text-zinc-200 hover:bg-blue-50 dark:hover:bg-zinc-800 max-w-[130px] sm:max-w-[200px] h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3">
                   <User className="w-3.5 h-3.5 mr-1 sm:mr-2 shrink-0" />
                   <span className="truncate">{user.name}</span>
                   <ChevronDown className="w-3 h-3 ml-1 sm:ml-2 shrink-0 opacity-60" />
@@ -84,7 +84,7 @@ export function PublicHeader() {
             <>
               {/* Desktop View */}
               <div className="hidden md:flex items-center space-x-4">
-                <Button variant="outline" asChild className="border-blue-300 text-blue-700 hover:bg-blue-50">
+                <Button variant="outline" asChild className="border-blue-300 dark:border-zinc-700 bg-white/50 dark:bg-zinc-900 text-blue-700 dark:text-zinc-200 hover:bg-blue-50 dark:hover:bg-zinc-800">
                   <Link to="/login">Entrar</Link>
                 </Button>
                 <Button asChild className="bg-blue-700 hover:bg-blue-800">
@@ -96,7 +96,7 @@ export function PublicHeader() {
               <div className="md:hidden">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-blue-800 hover:bg-blue-50">
+                    <Button variant="ghost" size="icon" className="text-blue-800 dark:text-zinc-200 hover:bg-blue-50 dark:hover:bg-zinc-800">
                       <Menu className="h-6 w-6" />
                     </Button>
                   </DropdownMenuTrigger>

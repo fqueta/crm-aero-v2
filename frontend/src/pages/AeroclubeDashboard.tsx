@@ -483,14 +483,14 @@ export default function AeroclubeDashboard() {
             <div className="space-y-2">
               <h1 className="text-2xl font-bold md:text-3xl">Dashboard do Aeroclube</h1>
               <p className="max-w-3xl text-sm opacity-90 md:text-base">
-                Visao executiva de captacao, conversao comercial e financeiro das propostas ganhas.
+                Visão executiva de captação, conversão comercial e financeiro das propostas ganhas.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Badge className="bg-white/15 text-white hover:bg-white/20">
-                  Janela analitica: 6 meses ate {currentMonthLabel}
+                  Janela analítica: 6 meses até {currentMonthLabel}
                 </Badge>
                 <Badge className="bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/25">
-                  Mes em foco: {currentMonthLabel}
+                  Mês em foco: {currentMonthLabel}
                 </Badge>
               </div>
             </div>
@@ -498,7 +498,7 @@ export default function AeroclubeDashboard() {
             <div className="flex w-full max-w-xl flex-col gap-3 lg:w-auto">
               <div className="rounded-lg border border-white/10 bg-white/5 p-3">
                 <Label htmlFor="dashboard-month" className="text-xs font-medium uppercase tracking-wide text-white/80">
-                  Mes de referencia
+                  Mês de referência
                 </Label>
                 <div className="mt-2 flex flex-col gap-2">
                   <div className="flex gap-2">
@@ -539,7 +539,7 @@ export default function AeroclubeDashboard() {
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-white/70">
-                  Use as setas ou escolha um mes da lista. O dashboard atualiza automaticamente.
+                  Use as setas ou escolha um mês da lista. O dashboard atualiza automaticamente.
                 </p>
               </div>
 
@@ -555,13 +555,13 @@ export default function AeroclubeDashboard() {
                 </Button>
                 <Button asChild variant="secondary" className="w-full sm:w-auto justify-between sm:justify-center">
                   <Link to="/admin/reports/relatorio-geral">
-                    Relatorio geral
+                    Relatório geral
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
                 <Button asChild variant="secondary" className="w-full sm:w-auto justify-between sm:justify-center">
                   <Link to="/admin/reports/relatorio-vendas">
-                    Relatorio de ganhos
+                    Relatório de ganhos
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
@@ -586,11 +586,11 @@ export default function AeroclubeDashboard() {
           const lastDay = new Date(Number(year), Number(month), 0).getDate();
           const end = `${year}-${month}-${lastDay}`;
           navigate(`/admin/clients?date_start=${start}&date_end=${end}`);
-        }} className="cursor-pointer hover:bg-slate-50 transition-colors">
+        }} className="cursor-pointer hover:bg-muted/40 dark:hover:bg-zinc-800/40 transition-colors">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Users className="h-4 w-4 text-primary" />
-              Leads do mes
+              Leads do mês
             </CardTitle>
             <CardDescription>Captados em {currentMonthLabel}</CardDescription>
           </CardHeader>
@@ -599,7 +599,7 @@ export default function AeroclubeDashboard() {
           </CardContent>
         </Card>
 
-        <Card onClick={() => navigate('/admin/school/enrollments')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+        <Card onClick={() => navigate('/admin/school/enrollments')} className="cursor-pointer hover:bg-muted/40 dark:hover:bg-zinc-800/40 transition-colors">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Target className="h-4 w-4 text-primary" />
@@ -615,20 +615,20 @@ export default function AeroclubeDashboard() {
                 </TooltipContent>
               </MetricTooltip>
             </CardTitle>
-            <CardDescription>Leads unicos com ganho no mes</CardDescription>
+            <CardDescription>Leads únicos com ganho no mês</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">{formatNumber(selectedMonthSummary.uniqueConvertedLeadsCount)}</div>
           </CardContent>
         </Card>
 
-        <Card onClick={() => navigate('/admin/reports/relatorio-vendas')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+        <Card onClick={() => navigate('/admin/reports/relatorio-vendas')} className="cursor-pointer hover:bg-muted/40 dark:hover:bg-zinc-800/40 transition-colors">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Percent className="h-4 w-4 text-primary" />
-              Taxa de conversao
+              Taxa de conversão
             </CardTitle>
-            <CardDescription>Leads unicos convertidos / leads captados</CardDescription>
+            <CardDescription>Leads únicos convertidos / leads captados</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">{formatPercentage(selectedMonthSummary.conversionRate)}</div>
@@ -637,11 +637,11 @@ export default function AeroclubeDashboard() {
 
         {showFinancial && (
           <>
-            <Card onClick={() => navigate('/admin/reports/relatorio-vendas')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+            <Card onClick={() => navigate('/admin/reports/relatorio-vendas')} className="cursor-pointer hover:bg-muted/40 dark:hover:bg-zinc-800/40 transition-colors">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <TrendingUp className="h-4 w-4 text-emerald-600" />
-                  Negociado no mes
+                  <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Negociado no mês
                 </CardTitle>
                 <CardDescription>Total das propostas ganhas</CardDescription>
               </CardHeader>
@@ -650,11 +650,11 @@ export default function AeroclubeDashboard() {
               </CardContent>
             </Card>
 
-            <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+            <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className="cursor-pointer hover:bg-muted/40 dark:hover:bg-zinc-800/40 transition-colors">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  Recebido no mes
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Recebido no mês
                 </CardTitle>
                 <CardDescription>Recebimentos vinculados aos ganhos</CardDescription>
               </CardHeader>
@@ -663,13 +663,13 @@ export default function AeroclubeDashboard() {
               </CardContent>
             </Card>
 
-            <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+            <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className="cursor-pointer hover:bg-muted/40 dark:hover:bg-zinc-800/40 transition-colors">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <DollarSign className="h-4 w-4 text-amber-600" />
+                  <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   Saldo em aberto
                 </CardTitle>
-                <CardDescription>Restante a receber dos ganhos do mes</CardDescription>
+                <CardDescription>Restante a receber dos ganhos do mês</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-semibold">{formatCurrency(currentMonthFinancialSummary.remainingAmount)}</div>
@@ -681,24 +681,24 @@ export default function AeroclubeDashboard() {
 
       {showFinancial && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className={`cursor-pointer transition-colors hover:border-amber-400 hover:bg-amber-100/60 ${Number(financialSummary?.overdueReceivables ?? 0) > 0 ? 'border-amber-300 bg-amber-50/60' : 'hover:bg-slate-50'}`}>
+          <Card onClick={() => navigate('/admin/finance/accounts-receivable')} className={`cursor-pointer transition-colors hover:border-amber-400 dark:hover:border-amber-500/50 hover:bg-amber-50/60 dark:hover:bg-amber-950/30 ${Number(financialSummary?.overdueReceivables ?? 0) > 0 ? 'border-amber-300 dark:border-amber-500/40 bg-amber-50/60 dark:bg-amber-950/20' : 'hover:bg-muted/40 dark:hover:bg-zinc-800/40'}`}>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                Recebiveis vencidos
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                Recebíveis vencidos
               </CardTitle>
-              <CardDescription>Saldo vencido dentro do mes de referencia</CardDescription>
+              <CardDescription>Saldo vencido dentro do mês de referência</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.overdueReceivables ?? 0))}</div>
             </CardContent>
           </Card>
 
-          <Card onClick={() => navigate('/admin/finance/accounts-payable')} className={`cursor-pointer transition-colors hover:border-rose-400 hover:bg-rose-100/60 ${Number(financialSummary?.overduePayables ?? 0) > 0 ? 'border-rose-300 bg-rose-50/60' : 'hover:bg-slate-50'}`}>
+          <Card onClick={() => navigate('/admin/finance/accounts-payable')} className={`cursor-pointer transition-colors hover:border-rose-400 dark:hover:border-rose-500/50 hover:bg-rose-50/60 dark:hover:bg-rose-950/30 ${Number(financialSummary?.overduePayables ?? 0) > 0 ? 'border-rose-300 dark:border-rose-500/40 bg-rose-50/60 dark:bg-rose-950/20' : 'hover:bg-muted/40 dark:hover:bg-zinc-800/40'}`}>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
-                <Clock3 className="h-4 w-4 text-rose-600" />
-                Pagaveis vencidos
+                <Clock3 className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                Pagáveis vencidos
               </CardTitle>
               <CardDescription>Compromissos vencidos no mesmo recorte</CardDescription>
             </CardHeader>
@@ -707,13 +707,13 @@ export default function AeroclubeDashboard() {
             </CardContent>
           </Card>
 
-          <Card onClick={() => navigate('/admin/finance/cash-flow')} className="cursor-pointer hover:bg-slate-50 transition-colors">
+          <Card onClick={() => navigate('/admin/finance/cash-flow')} className="cursor-pointer hover:bg-muted/40 dark:hover:bg-zinc-800/40 transition-colors">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
-                <DollarSign className="h-4 w-4 text-emerald-600" />
-                Caixa liquido
+                <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                Caixa líquido
               </CardTitle>
-              <CardDescription>Entradas pagas menos saidas pagas no mes</CardDescription>
+              <CardDescription>Entradas pagas menos saídas pagas no mês</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">{formatCurrency(Number(financialSummary?.cashBalance ?? 0))}</div>
@@ -726,7 +726,7 @@ export default function AeroclubeDashboard() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Conversao mensal
+              Conversão mensal
               <MetricTooltip>
                 <TooltipTrigger asChild>
                   <button type="button" className="text-muted-foreground" aria-label="Entender a conversão mensal">
@@ -738,16 +738,16 @@ export default function AeroclubeDashboard() {
                 </TooltipContent>
               </MetricTooltip>
             </CardTitle>
-            <CardDescription>Leads captados, leads convertidos e propostas ganhas ao longo do periodo.</CardDescription>
+            <CardDescription>Leads captados, leads convertidos e propostas ganhas ao longo do período.</CardDescription>
           </CardHeader>
           <CardContent className="h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={conversionSeries}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" />
-                <YAxis yAxisId="left" allowDecimals={false} />
-                <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${value}%`} />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <YAxis yAxisId="left" allowDecimals={false} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${value}%`} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--foreground))', borderRadius: '0.5rem' }} />
                 <Legend />
                 <Bar yAxisId="left" dataKey="leads" name="Leads" fill="#94a3b8" radius={[4, 4, 0, 0]} />
                 <Bar yAxisId="left" dataKey="uniqueConvertedLeads" name="Leads convertidos" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -762,15 +762,15 @@ export default function AeroclubeDashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Financeiro dos ganhos</CardTitle>
-              <CardDescription>Negociado, recebido e saldo das propostas ganhas no mesmo periodo.</CardDescription>
+              <CardDescription>Negociado, recebido e saldo das propostas ganhas no mesmo período.</CardDescription>
             </CardHeader>
             <CardContent className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={monthlyFinancial}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
-                  <YAxis tickFormatter={(value) => `R$ ${Math.round(Number(value) / 1000)}k`} />
-                  <Tooltip formatter={(value: number) => formatCurrency(Number(value))} />
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis tickFormatter={(value) => `R$ ${Math.round(Number(value) / 1000)}k`} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--foreground))', borderRadius: '0.5rem' }} formatter={(value: number) => formatCurrency(Number(value))} />
                   <Legend />
                   <Bar dataKey="negotiatedAmount" name="Negociado" fill="#0f766e" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="paidAmount" name="Recebido" fill="#22c55e" radius={[4, 4, 0, 0]} />
@@ -786,16 +786,16 @@ export default function AeroclubeDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Desempenho por consultor</CardTitle>
-            <CardDescription>Top consultores do periodo por conversao de leads e propostas ganhas.</CardDescription>
+            <CardDescription>Top consultores do período por conversão de leads e propostas ganhas.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topConsultants} layout="vertical" margin={{ left: 20, right: 12 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" allowDecimals={false} />
-                  <YAxis type="category" dataKey="consultantName" width={140} />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                  <XAxis type="number" allowDecimals={false} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis type="category" dataKey="consultantName" width={140} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--foreground))', borderRadius: '0.5rem' }} />
                   <Legend />
                   <Bar dataKey="uniqueConvertedLeadsCount" name="Leads convertidos" fill="#2563eb" radius={[0, 4, 4, 0]} />
                   <Bar dataKey="proposalsWonCount" name="Propostas ganhas" fill="#14b8a6" radius={[0, 4, 4, 0]} />
@@ -818,7 +818,7 @@ export default function AeroclubeDashboard() {
                   {topConsultants.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground">
-                        Nenhum consultor encontrado no periodo.
+                        Nenhum consultor encontrado no período.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -840,14 +840,14 @@ export default function AeroclubeDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Status financeiro do mes</CardTitle>
-            <CardDescription>Situacao das propostas ganhas em {currentMonthLabel}.</CardDescription>
+            <CardTitle>Status financeiro do mês</CardTitle>
+            <CardDescription>Situação das propostas ganhas em {currentMonthLabel}.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3">
               {financialStatusBreakdown.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  Nenhum ganho financeiro registrado no mes atual.
+                  Nenhum ganho financeiro registrado no mês atual.
                 </div>
               ) : (
                 financialStatusBreakdown.map((item) => (
@@ -876,13 +876,13 @@ export default function AeroclubeDashboard() {
               )}
             </div>
 
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-900 dark:text-amber-200">
               <div className="mb-1 flex items-center gap-2 font-medium">
                 <AlertTriangle className="h-4 w-4" />
-                Atencao financeira
+                Atenção financeira
               </div>
               <p>
-                Existem {formatNumber(currentMonthFinancialSummary.pendingAccounts + currentMonthFinancialSummary.partialAccounts)} propostas do mes atual com saldo pendente.
+                Existem {formatNumber(currentMonthFinancialSummary.pendingAccounts + currentMonthFinancialSummary.partialAccounts)} propostas do mês atual com saldo pendente.
               </p>
             </div>
           </CardContent>
@@ -894,10 +894,10 @@ export default function AeroclubeDashboard() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle>Propostas ganhas recentes</CardTitle>
-              <CardDescription>Ultimos ganhos registrados no CRM.</CardDescription>
+              <CardDescription>Últimos ganhos registrados no CRM.</CardDescription>
             </div>
             <Button asChild variant="outline" size="sm">
-              <Link to="/admin/reports/relatorio-geral">Ver relatorio</Link>
+              <Link to="/admin/reports/relatorio-geral">Ver relatório</Link>
             </Button>
           </CardHeader>
           <CardContent>
@@ -936,7 +936,7 @@ export default function AeroclubeDashboard() {
                               className="w-fit text-left text-xs text-muted-foreground hover:text-primary hover:underline"
                               onClick={() => openProposalView(item.matriculaId)}
                             >
-                              Matricula #{item.matriculaId}
+                              Matrícula #{item.matriculaId}
                             </button>
                           </div>
                         </TableCell>
@@ -967,7 +967,7 @@ export default function AeroclubeDashboard() {
             <div className="space-y-3">
               {pendingWonProposals.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  Nenhuma proposta ganha com saldo pendente no periodo atual.
+                  Nenhuma proposta ganha com saldo pendente no período atual.
                 </div>
               ) : (
                 pendingWonProposals.map((item: WonProposalReportItem) => (

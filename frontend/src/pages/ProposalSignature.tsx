@@ -616,7 +616,7 @@ export default function ProposalSignature() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -624,10 +624,10 @@ export default function ProposalSignature() {
 
   if (!proposal) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-lg shadow-sm text-center max-w-md">
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex flex-col items-center justify-center p-4">
+        <div className="bg-white dark:bg-card border border-border/60 p-8 rounded-lg shadow-sm text-center max-w-md">
           <X className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h1 className="text-xl font-semibold mb-2">Proposta não encontrada</h1>
+          <h1 className="text-xl font-semibold mb-2 text-foreground">Proposta não encontrada</h1>
           <p className="text-muted-foreground">O link que você acessou pode estar expirado ou incorreto.</p>
         </div>
       </div>
@@ -635,17 +635,17 @@ export default function ProposalSignature() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/60 flex flex-col">
+    <div className="min-h-screen bg-slate-50/60 dark:bg-background flex flex-col">
       <PublicHeader />
       
       <main className="flex-grow py-3 sm:py-8 px-2.5 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6">
 
           {/* Stepper Header (Wizard) */}
-          <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm border border-slate-200/80">
+          <div className="bg-white dark:bg-card rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-sm border border-slate-200/80 dark:border-border/60">
             <div className="flex items-center justify-between relative px-2 sm:px-4">
               {/* Progress Line */}
-              <div className="absolute top-1/2 left-10 right-10 -translate-y-1/2 h-1 bg-slate-100 -z-0">
+              <div className="absolute top-1/2 left-10 right-10 -translate-y-1/2 h-1 bg-slate-100 dark:bg-muted -z-0">
                 <div 
                   className="h-full bg-primary transition-all duration-300"
                   style={{
@@ -666,12 +666,12 @@ export default function ProposalSignature() {
                       ? 'bg-primary text-white ring-4 ring-primary/20 shadow-sm' 
                       : currentStep > 1 
                         ? 'bg-emerald-600 text-white' 
-                        : 'bg-slate-100 text-slate-400'
+                        : 'bg-slate-100 dark:bg-muted text-slate-400 dark:text-muted-foreground'
                   }`}
                 >
                   {currentStep > 1 ? <Check className="w-5 h-5" /> : '1'}
                 </div>
-                <span className={`text-[11px] sm:text-xs font-medium ${currentStep === 1 ? 'text-primary font-bold' : 'text-slate-500'}`}>
+                <span className={`text-[11px] sm:text-xs font-medium ${currentStep === 1 ? 'text-primary font-bold' : 'text-slate-500 dark:text-muted-foreground'}`}>
                   Proposta
                 </span>
               </button>
@@ -691,12 +691,12 @@ export default function ProposalSignature() {
                       ? 'bg-primary text-white ring-4 ring-primary/20 shadow-sm' 
                       : currentStep > 2 
                         ? 'bg-emerald-600 text-white' 
-                        : 'bg-slate-100 text-slate-400'
+                        : 'bg-slate-100 dark:bg-muted text-slate-400 dark:text-muted-foreground'
                   }`}
                 >
                   {currentStep > 2 ? <Check className="w-5 h-5" /> : '2'}
                 </div>
-                <span className={`text-[11px] sm:text-xs font-medium ${currentStep === 2 ? 'text-primary font-bold' : 'text-slate-500'}`}>
+                <span className={`text-[11px] sm:text-xs font-medium ${currentStep === 2 ? 'text-primary font-bold' : 'text-slate-500 dark:text-muted-foreground'}`}>
                   Seus Dados
                 </span>
               </button>
@@ -713,12 +713,12 @@ export default function ProposalSignature() {
                   className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
                     currentStep === 3 
                       ? 'bg-primary text-white ring-4 ring-primary/20 shadow-sm' 
-                      : 'bg-slate-100 text-slate-400'
+                      : 'bg-slate-100 dark:bg-muted text-slate-400 dark:text-muted-foreground'
                   }`}
                 >
                   3
                 </div>
-                <span className={`text-[11px] sm:text-xs font-medium ${currentStep === 3 ? 'text-primary font-bold' : 'text-slate-500'}`}>
+                <span className={`text-[11px] sm:text-xs font-medium ${currentStep === 3 ? 'text-primary font-bold' : 'text-slate-500 dark:text-muted-foreground'}`}>
                   Aceitação
                 </span>
               </button>
@@ -727,7 +727,7 @@ export default function ProposalSignature() {
 
           {/* Expired Proposal Alert */}
           {isProposalExpired && (
-            <Alert variant="destructive" className="border-red-200 bg-red-50">
+            <Alert variant="destructive" className="border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 text-red-900 dark:text-red-200">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Proposta vencida</AlertTitle>
               <AlertDescription>
@@ -745,14 +745,14 @@ export default function ProposalSignature() {
               {/* ========================================================================= */}
               {currentStep === 1 && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
-                  <Card className="border-slate-200/80 shadow-sm overflow-hidden">
-                    <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50/30 border-b p-4 sm:p-6">
+                  <Card className="border-slate-200/80 dark:border-border/60 shadow-sm overflow-hidden bg-card">
+                    <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-zinc-900 dark:to-blue-950/20 border-b border-border/60 p-4 sm:p-6">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                         <div>
-                          <CardTitle className="text-lg sm:text-xl font-bold text-slate-900">Resumo da Sua Matrícula</CardTitle>
-                          <CardDescription className="text-xs sm:text-sm mt-0.5">Confira os valores e a forma de pagamento combinada</CardDescription>
+                          <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-foreground">Resumo da Sua Matrícula</CardTitle>
+                          <CardDescription className="text-xs sm:text-sm mt-0.5 text-muted-foreground">Confira os valores e a forma de pagamento combinada</CardDescription>
                         </div>
-                        <Badge variant="outline" className="bg-white text-blue-700 border-blue-200 font-semibold px-2.5 py-0.5 sm:py-1 self-start sm:self-center text-[11px] sm:text-xs">
+                        <Badge variant="outline" className="bg-white dark:bg-zinc-800 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 font-semibold px-2.5 py-0.5 sm:py-1 self-start sm:self-center text-[11px] sm:text-xs">
                           Passo 1 de 3
                         </Badge>
                       </div>
@@ -761,41 +761,41 @@ export default function ProposalSignature() {
                     <CardContent className="p-5 sm:p-6 space-y-6">
                       {/* Top Info Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-100 space-y-1">
-                          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Curso</span>
-                          <p className="text-base sm:text-lg font-bold text-slate-900">{proposal.curso_nome}</p>
+                        <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-zinc-900/60 border border-slate-100 dark:border-border/60 space-y-1">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-muted-foreground">Curso</span>
+                          <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-foreground">{proposal.curso_nome}</p>
                         </div>
-                        <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-100 space-y-1">
-                          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Turma</span>
-                          <p className="text-base sm:text-lg font-bold text-slate-900">{proposal.turma_nome}</p>
+                        <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-zinc-900/60 border border-slate-100 dark:border-border/60 space-y-1">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-muted-foreground">Turma</span>
+                          <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-foreground">{proposal.turma_nome}</p>
                         </div>
                       </div>
 
                       {/* Period Badge if Course Type 4 */}
                       {(proposal as any)?.curso_tipo && ((proposal as any).curso_tipo === '4' || (proposal as any).curso_tipo === 4) && (proposal as any)?.orc?.modulos?.[0]?.nome && (
-                        <div className="p-3 rounded-lg bg-blue-50/60 border border-blue-100 flex items-center gap-2">
-                          <span className="text-xs font-semibold text-blue-900">Período Selecionado:</span>
-                          <span className="text-xs font-bold text-blue-800 bg-white px-2.5 py-0.5 rounded border border-blue-200">
+                        <div className="p-3 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 flex items-center gap-2">
+                          <span className="text-xs font-semibold text-blue-900 dark:text-blue-300">Período Selecionado:</span>
+                          <span className="text-xs font-bold text-blue-800 dark:text-blue-200 bg-white dark:bg-zinc-900 px-2.5 py-0.5 rounded border border-blue-200 dark:border-blue-800">
                             {(proposal as any).orc.modulos[0].nome}
                           </span>
                         </div>
                       )}
 
                       {/* Main Payment & Investment Card */}
-                      <div className="rounded-2xl border-2 border-emerald-500/20 bg-gradient-to-br from-emerald-50/40 via-white to-teal-50/20 p-5 sm:p-6 space-y-5">
-                        <div className="flex items-center justify-between border-b border-emerald-100/80 pb-4">
+                      <div className="rounded-2xl border-2 border-emerald-500/20 bg-gradient-to-br from-emerald-50/40 via-white to-teal-50/20 dark:from-emerald-950/20 dark:via-zinc-900 dark:to-teal-950/10 p-5 sm:p-6 space-y-5">
+                        <div className="flex items-center justify-between border-b border-emerald-100/80 dark:border-emerald-900/40 pb-4">
                           <div className="flex items-center gap-2.5">
                             <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
                               <CreditCard className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-950">Condição de Pagamento</h3>
-                              <p className="text-xs text-emerald-700">Plano acordado na sua proposta</p>
+                              <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-950 dark:text-emerald-300">Condição de Pagamento</h3>
+                              <p className="text-xs text-emerald-700 dark:text-emerald-400">Plano acordado na sua proposta</p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <span className="text-[11px] font-semibold uppercase text-slate-500 block">Total do Curso</span>
-                            <span className="text-lg sm:text-2xl font-black text-slate-900">
+                            <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-muted-foreground block">Total do Curso</span>
+                            <span className="text-lg sm:text-2xl font-black text-slate-900 dark:text-foreground">
                               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proposal.total)}
                             </span>
                           </div>
@@ -804,85 +804,85 @@ export default function ProposalSignature() {
                         {/* Parcelamento Highlights */}
                         {parcelamentoSummary ? (
                           <div className="space-y-3">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3.5 rounded-xl bg-white border border-emerald-200/60 shadow-sm">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-emerald-200/60 dark:border-emerald-800/40 shadow-sm">
                               <div>
                                 <span className="text-xs text-muted-foreground block font-medium">Plano Escolhido:</span>
-                                <span className="text-lg sm:text-xl font-black text-emerald-700">
+                                <span className="text-lg sm:text-xl font-black text-emerald-700 dark:text-emerald-400">
                                   {parcelamentoSummary.summaryText}
                                 </span>
                               </div>
-                              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300 font-semibold text-xs py-1 px-3 self-start sm:self-center">
+                              <Badge className="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 border-emerald-300 dark:border-emerald-800 font-semibold text-xs py-1 px-3 self-start sm:self-center">
                                 Condição Aprovada
                               </Badge>
                             </div>
 
                             {/* Condição da Matrícula */}
                             {parcelamentoSummary.recebimentoMatricula === 'avulsa' && parcelamentoSummary.matriculaValorFormatted && (
-                              <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <div className="flex items-center gap-2.5">
-                                  <div className="w-7 h-7 rounded-lg bg-amber-200/80 text-amber-900 flex items-center justify-center font-bold text-xs">
+                                  <div className="w-7 h-7 rounded-lg bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 flex items-center justify-center font-bold text-xs">
                                     0
                                   </div>
                                   <div>
-                                    <span className="text-xs font-bold text-amber-950 block">
+                                    <span className="text-xs font-bold text-amber-950 dark:text-amber-200 block">
                                       Taxa de Inscrição / Matrícula (Parcela Avulsa)
                                     </span>
-                                    <span className="text-[11px] text-amber-800">
+                                    <span className="text-[11px] text-amber-800 dark:text-amber-300">
                                       Cobrança separada prévia para efetivação da vaga
                                       {parcelamentoSummary.matriculaVencimentoData ? ` • Vencimento em ${parcelamentoSummary.matriculaVencimentoData.split('-').reverse().join('/')}` : ''}
                                     </span>
                                   </div>
                                 </div>
-                                <span className="text-base font-black text-amber-950 sm:text-right">
+                                <span className="text-base font-black text-amber-950 dark:text-amber-200 sm:text-right">
                                   {parcelamentoSummary.matriculaValorFormatted}
                                 </span>
                               </div>
                             )}
 
                             {parcelamentoSummary.recebimentoMatricula === 'primeira_parcela' && parcelamentoSummary.matriculaValorFormatted && (
-                              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <div>
-                                  <span className="text-xs font-bold text-blue-950 block">
+                                  <span className="text-xs font-bold text-blue-950 dark:text-blue-200 block">
                                     1ª Parcela Inclui Taxa de Matrícula ({parcelamentoSummary.matriculaValorFormatted})
                                   </span>
-                                  <span className="text-[11px] text-blue-800">
+                                  <span className="text-[11px] text-blue-800 dark:text-blue-300">
                                     O valor da matrícula é pago conjuntamente na 1ª mensalidade/entrada.
                                   </span>
                                 </div>
-                                <Badge className="bg-blue-100 text-blue-800 border-blue-300 self-start sm:self-center text-xs">
+                                <Badge className="bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-800 self-start sm:self-center text-xs">
                                   Matrícula na Entrada
                                 </Badge>
                               </div>
                             )}
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                              <div className="p-3 rounded-lg bg-white/80 border border-slate-200/60 flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <div className="p-3 rounded-lg bg-white/80 dark:bg-zinc-900/80 border border-slate-200/60 dark:border-zinc-800 flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                 <div>
-                                  <span className="text-slate-500 block">Forma de Pagamento:</span>
-                                  <span className="font-semibold text-slate-800">{parcelamentoSummary.paymentMethod}</span>
+                                  <span className="text-slate-500 dark:text-muted-foreground block">Forma de Pagamento:</span>
+                                  <span className="font-semibold text-slate-800 dark:text-zinc-200">{parcelamentoSummary.paymentMethod}</span>
                                 </div>
                               </div>
 
                               {parcelamentoSummary.descPontualidadeFormatted ? (
-                                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 flex items-start gap-2.5">
-                                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 flex items-start gap-2.5">
+                                  <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                                   <div className="space-y-0.5">
-                                    <span className="text-emerald-700 block font-medium">Desconto Pontualidade:</span>
-                                    <span className="font-bold text-emerald-900 block">
+                                    <span className="text-emerald-700 dark:text-emerald-300 block font-medium">Desconto Pontualidade:</span>
+                                    <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
                                       {parcelamentoSummary.descPontualidadeFormatted} de desconto por parcela
                                     </span>
-                                    <p className="text-[11px] text-emerald-800 leading-tight">
+                                    <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-tight">
                                       Pagando em dia até o vencimento, o valor da parcela de {parcelamentoSummary.valorParcelaCheioFormatted} passa para <strong>{parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>.
                                     </p>
                                   </div>
                                 </div>
                               ) : (
-                                <div className="p-3 rounded-lg bg-white/80 border border-slate-200/60 flex items-center gap-2">
-                                  <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <div className="p-3 rounded-lg bg-white/80 dark:bg-zinc-900/80 border border-slate-200/60 dark:border-zinc-800 flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                   <div>
-                                    <span className="text-slate-500 block">Status da Matrícula:</span>
-                                    <span className="font-semibold text-slate-800">
+                                    <span className="text-slate-500 dark:text-muted-foreground block">Status da Matrícula:</span>
+                                    <span className="font-semibold text-slate-800 dark:text-zinc-200">
                                       {parcelamentoSummary.recebimentoMatricula === 'diluida' 
                                         ? 'Diluída nas mensalidades' 
                                         : parcelamentoSummary.recebimentoMatricula === 'avulsa' 
@@ -895,7 +895,7 @@ export default function ProposalSignature() {
                             </div>
                           </div>
                         ) : (
-                          <div className="p-4 rounded-xl bg-white border border-slate-200 text-sm text-slate-700">
+                          <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-sm text-slate-700 dark:text-zinc-300">
                             Condição de pagamento à vista no valor integral de{' '}
                             <strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proposal.total)}</strong>.
                           </div>
@@ -907,7 +907,7 @@ export default function ProposalSignature() {
                             variant="ghost"
                             size="sm"
                             type="button"
-                            className="text-blue-700 hover:text-blue-900 hover:bg-blue-50 font-medium text-xs gap-1.5"
+                            className="text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50 font-medium text-xs gap-1.5"
                             onClick={() => setShowBudget(!showBudget)}
                           >
                             {showBudget ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -918,7 +918,7 @@ export default function ProposalSignature() {
 
                       {/* Collapsible Budget Preview */}
                       {showBudget && (
-                        <div className="p-4 rounded-xl border border-slate-200 bg-white overflow-x-auto shadow-inner animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-x-auto shadow-inner animate-in fade-in zoom-in-95 duration-200">
                           <BudgetPreview
                             clientName={proposal.cliente?.name || ''}
                             course={{
@@ -938,12 +938,12 @@ export default function ProposalSignature() {
 
                       {/* Admin Quick Status (if logged in) */}
                       {isAuthenticated && (
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-1.5">
-                          <div className="flex items-center gap-2 font-semibold text-slate-800">
-                            <ShieldCheck className="w-4 h-4 text-blue-600" />
+                        <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/50 p-4 text-xs space-y-1.5">
+                          <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-zinc-200">
+                            <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                             Painel Operacional (Acesso Administrativo)
                           </div>
-                          <p className="text-slate-600">
+                          <p className="text-slate-600 dark:text-zinc-400">
                             Etapa 1: {(proposal as any)?.config?.step1_done ? 'Concluída' : 'Pendente'} • 
                             Etapa 2: {(proposal as any)?.config?.step2_done ? 'Concluída' : 'Aguardando'}
                           </p>
@@ -951,8 +951,8 @@ export default function ProposalSignature() {
                       )}
                     </CardContent>
 
-                    <CardFooter className="bg-slate-50/80 border-t p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-center gap-3">
-                      <span className="text-xs text-slate-500 order-2 sm:order-1 text-center sm:text-left">
+                    <CardFooter className="bg-slate-50/80 dark:bg-zinc-900/60 border-t border-border/60 p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-center gap-3">
+                      <span className="text-xs text-slate-500 dark:text-muted-foreground order-2 sm:order-1 text-center sm:text-left">
                         Revise os dados antes de prosseguir para o cadastro.
                       </span>
                       <Button
@@ -977,14 +977,14 @@ export default function ProposalSignature() {
               {/* ========================================================================= */}
               {currentStep === 2 && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <Card className="border-slate-200/80 shadow-sm">
-                    <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50/30 border-b p-4 sm:p-6">
+                  <Card className="border-slate-200/80 dark:border-border/60 bg-card shadow-sm">
+                    <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-zinc-900 dark:to-blue-950/20 border-b border-border/60 p-4 sm:p-6">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                         <div>
-                          <CardTitle className="text-lg sm:text-xl font-bold text-slate-900">Seus Dados Cadastrais</CardTitle>
-                          <CardDescription className="text-xs sm:text-sm mt-0.5">Confirme e complete as informações para confecção do seu contrato</CardDescription>
+                          <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-foreground">Seus Dados Cadastrais</CardTitle>
+                          <CardDescription className="text-xs sm:text-sm mt-0.5 text-muted-foreground">Confirme e complete as informações para confecção do seu contrato</CardDescription>
                         </div>
-                        <Badge variant="outline" className="bg-white text-blue-700 border-blue-200 font-semibold px-2.5 py-0.5 sm:py-1 self-start sm:self-center text-[11px] sm:text-xs">
+                        <Badge variant="outline" className="bg-white dark:bg-zinc-900 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/60 font-semibold px-2.5 py-0.5 sm:py-1 self-start sm:self-center text-[11px] sm:text-xs">
                           Passo 2 de 3
                         </Badge>
                       </div>
@@ -993,7 +993,7 @@ export default function ProposalSignature() {
                     <CardContent className="p-5 sm:p-6 space-y-6">
                       {/* Dados Pessoais */}
                       <div className="space-y-4">
-                        <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-wide border-b pb-2">
+                        <div className="flex items-center gap-2 text-slate-800 dark:text-zinc-200 font-bold text-sm uppercase tracking-wide border-b border-border/60 pb-2">
                           <User className="w-4 h-4 text-primary" />
                           <span>Identificação Pessoal</span>
                         </div>
@@ -1219,7 +1219,7 @@ export default function ProposalSignature() {
 
                       {/* Endereço */}
                       <div className="space-y-4">
-                        <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-wide border-b pb-2">
+                        <div className="flex items-center gap-2 text-slate-800 dark:text-zinc-200 font-bold text-sm uppercase tracking-wide border-b border-border/60 pb-2">
                           <MapPin className="w-4 h-4 text-primary" />
                           <span>Endereço Residencial</span>
                         </div>
@@ -1340,7 +1340,7 @@ export default function ProposalSignature() {
                       </div>
                     </CardContent>
 
-                    <CardFooter className="bg-slate-50/80 border-t p-4 sm:p-6 flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                    <CardFooter className="bg-slate-50/80 dark:bg-zinc-900/60 border-t border-border/60 p-4 sm:p-6 flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-3">
                       <Button
                         variant="outline"
                         type="button"
@@ -1373,14 +1373,14 @@ export default function ProposalSignature() {
               {/* ========================================================================= */}
               {currentStep === 3 && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <Card className="border-slate-200/80 shadow-sm">
-                    <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50/30 border-b p-4 sm:p-6">
+                  <Card className="border-slate-200/80 dark:border-border/60 bg-card shadow-sm">
+                    <CardHeader className="bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-zinc-900 dark:to-blue-950/20 border-b border-border/60 p-4 sm:p-6">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                         <div>
-                          <CardTitle className="text-lg sm:text-xl font-bold text-slate-900">Termos e Aceitação</CardTitle>
-                          <CardDescription className="text-xs sm:text-sm mt-0.5">Confirme as diretrizes operacionais e aceite a proposta para emissão do contrato</CardDescription>
+                          <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-foreground">Termos e Aceitação</CardTitle>
+                          <CardDescription className="text-xs sm:text-sm mt-0.5 text-muted-foreground">Confirme as diretrizes operacionais e aceite a proposta para emissão do contrato</CardDescription>
                         </div>
-                        <Badge variant="outline" className="bg-white text-blue-700 border-blue-200 font-semibold px-2.5 py-0.5 sm:py-1 self-start sm:self-center text-[11px] sm:text-xs">
+                        <Badge variant="outline" className="bg-white dark:bg-zinc-900 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/60 font-semibold px-2.5 py-0.5 sm:py-1 self-start sm:self-center text-[11px] sm:text-xs">
                           Passo 3 de 3
                         </Badge>
                       </div>
@@ -1388,24 +1388,24 @@ export default function ProposalSignature() {
 
                     <CardContent className="p-5 sm:p-6 space-y-6">
                       {/* Summary Box before finalizing */}
-                      <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-2">
+                      <div className="rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/40 dark:bg-blue-950/20 p-4 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase text-blue-900">Resumo da Contratação</span>
-                          <span className="text-xs font-bold text-blue-900">
+                          <span className="text-xs font-bold uppercase text-blue-900 dark:text-blue-200">Resumo da Contratação</span>
+                          <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proposal.total)}
                           </span>
                         </div>
-                        <p className="text-xs text-blue-800">
+                        <p className="text-xs text-blue-800 dark:text-blue-300">
                           <strong>Aluno:</strong> {form.watch('name') || proposal.cliente?.name} • <strong>Curso:</strong> {proposal.curso_nome}
                         </p>
                         {parcelamentoSummary && (
                           <>
-                            <p className="text-xs text-blue-800">
+                            <p className="text-xs text-blue-800 dark:text-blue-300">
                               <strong>Condição:</strong> {parcelamentoSummary.summaryText} ({parcelamentoSummary.paymentMethod})
                             </p>
                             {parcelamentoSummary.descPontualidadeFormatted && (
-                              <p className="text-xs text-emerald-800 flex items-center gap-1.5 font-medium mt-1">
-                                <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <p className="text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5 font-medium mt-1">
+                                <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                 <span>
                                   Desconto de pontualidade: {parcelamentoSummary.descPontualidadeFormatted} por parcela para pagamentos realizados até a data de vencimento (parcela de {parcelamentoSummary.valorParcelaCheioFormatted} passa para {parcelamentoSummary.valorParcelaEfetivoFormatted}).
                                 </span>
@@ -1420,7 +1420,7 @@ export default function ProposalSignature() {
                         <div className="space-y-6">
                           {showStatusSection && (
                             <div className="space-y-4">
-                              <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-wide border-b pb-2">
+                              <div className="flex items-center gap-2 text-slate-800 dark:text-zinc-200 font-bold text-sm uppercase tracking-wide border-b border-border/60 pb-2">
                                 <ClipboardCheck className="w-4 h-4 text-primary" />
                                 <span>Situação Atual do Aluno</span>
                               </div>
@@ -1455,7 +1455,7 @@ export default function ProposalSignature() {
                                           <FormMessage />
                                         </FormItem>
                                       ) : (
-                                        <FormItem data-field={question.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-slate-200 p-4 hover:bg-slate-50/60 transition-colors">
+                                        <FormItem data-field={question.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-slate-200 dark:border-border/60 p-4 hover:bg-slate-50/60 dark:hover:bg-muted/40 transition-colors">
                                           <FormControl>
                                             <Checkbox 
                                               checked={Boolean(field.value)} 
@@ -1481,7 +1481,7 @@ export default function ProposalSignature() {
 
                           {showInfoSection && (
                             <div className="space-y-4">
-                              <div className="flex items-center gap-2 text-slate-800 font-bold text-sm uppercase tracking-wide border-b pb-2">
+                              <div className="flex items-center gap-2 text-slate-800 dark:text-zinc-200 font-bold text-sm uppercase tracking-wide border-b border-border/60 pb-2">
                                 <ShieldCheck className="w-4 h-4 text-primary" />
                                 <span>Declarações e Ciências Obrigatórias</span>
                               </div>
@@ -1493,7 +1493,7 @@ export default function ProposalSignature() {
                                     control={form.control}
                                     name={question.key}
                                     render={({ field }) => (
-                                      <FormItem data-field={question.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-slate-200 p-4 hover:bg-slate-50/60 transition-colors">
+                                      <FormItem data-field={question.key} className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-slate-200 dark:border-border/60 p-4 hover:bg-slate-50/60 dark:hover:bg-muted/40 transition-colors">
                                         <FormControl>
                                           <Checkbox 
                                             checked={Boolean(field.value)} 
@@ -1519,12 +1519,12 @@ export default function ProposalSignature() {
                       )}
 
                       {/* General consent notice */}
-                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 leading-relaxed">
+                      <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 text-xs text-slate-600 dark:text-zinc-400 leading-relaxed">
                         Ao clicar em <strong>"Aceitar Proposta e Concluir"</strong>, você declara que todas as informações prestadas são verídicas e que está de acordo com as condições de pagamento e diretrizes do curso contratado. A assinatura digital do contrato será realizada via ZapSign.
                       </div>
                     </CardContent>
 
-                    <CardFooter className="bg-slate-50/80 border-t p-4 sm:p-6 flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                    <CardFooter className="bg-slate-50/80 dark:bg-zinc-900/60 border-t border-border/60 p-4 sm:p-6 flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-3">
                       <Button
                         variant="outline"
                         type="button"
