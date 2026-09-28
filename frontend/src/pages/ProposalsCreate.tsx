@@ -174,7 +174,6 @@ export default function ProposalsCreate() {
   }, [searchParams]);
 
   const [isBudgetPreviewCollapsed, setIsBudgetPreviewCollapsed] = useState(false);
-  const [isParcelamentoCollapsed, setIsParcelamentoCollapsed] = useState(false);
 
   const [clientSearch, setClientSearch] = useState('');
   // Termos de busca para autocompletes
@@ -674,6 +673,34 @@ export default function ProposalsCreate() {
     }
     return customQuickLines;
   }, [installmentsList, selectedParcelamentoId, customQuickLines]);
+
+  /**
+   * syncQuickLinesOnTotalChange
+   * pt-BR: Mantém a linha da Simulação Rápida sincronizada com o Total. Se o
+   * total mudar (ex.: volta de etapa com novo preço do curso), recalcula
+   * valor = base de financiamento / N. Linhas de tabela do catálogo não mudam.
+   */
+  const totalForSync = form.watch('total');
+  const inscricaoForSync = form.watch('inscricao');
+  const recebimentoForSync = form.watch('recebimento_matricula');
+  useEffect(() => {
+    if (selectedParcelamentoId) return;
+    const line = customQuickLines[0];
+    if (!line) return;
+    const parcNum = Number(line.parcelas) || 0;
+    if (!parcNum) return;
+    const totalNum = currencyRemoveMaskToNumber(String(totalForSync || '')) || 0;
+    const inscNum = currencyRemoveMaskToNumber(String(inscricaoForSync || '')) || 0;
+    const base = (recebimentoForSync === 'avulsa' || recebimentoForSync === 'primeira_parcela')
+      ? Math.max(0, totalNum - inscNum)
+      : totalNum;
+    if (base <= 0) return;
+    const expected = formatCurrencyBRL(base / parcNum);
+    if (line.valor !== expected) {
+      setCustomQuickLines([{ ...line, valor: expected }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalForSync, inscricaoForSync, recebimentoForSync, selectedParcelamentoId]);
   /**
    * normalizeSituationsList
    * pt-BR: Normaliza a resposta do hook de situações de matrícula em uma lista simples.
@@ -955,19 +982,54 @@ export default function ProposalsCreate() {
   const prevStep = safeCurrentStepIndex > 0 ? wizardSteps[safeCurrentStepIndex - 1] : null;
   const nextStep = safeCurrentStepIndex < wizardSteps.length - 1 ? wizardSteps[safeCurrentStepIndex + 1] : null;
 
+  /**
+   * STEP_REQUIRED_FIELDS
+   * pt-BR: Campos obrigatórios por etapa do wizard (conforme asteriscos da UI).
+   * O botão "Próximo" só avança quando todos estão preenchidos.
+   */
+  const STEP_REQUIRED_FIELDS: Record<string, (keyof ProposalFormData)[]> = {
+    dados: ['id_cliente', 'id_consultor', 'id_curso', 'id_turma'],
+    modulos: [],
+    pagamento: [],
+    preview: [],
+  };
+
+  const REQUIRED_LABELS: Partial<Record<keyof ProposalFormData, string>> = {
+    id_cliente: 'Selecione o cliente',
+    id_consultor: 'Selecione o consultor',
+    id_curso: 'Selecione o curso',
+    id_turma: 'Selecione a turma',
+  };
+
   const handleNextStep = () => {
-    if (nextStep) {
-      const clienteId = form.getValues('id_cliente');
-      const cursoId = form.getValues('id_curso');
-      // Se os dados essenciais da proposta estão preenchidos, salva no backend e avança para a próxima etapa na edição
-      if (clienteId && cursoId) {
-        finishAfterSaveRef.current = false;
-        nextTabOnSuccessRef.current = nextStep.id;
-        form.handleSubmit(onSubmit, onInvalid)();
-      } else {
-        // Dispara validação dos campos obrigatórios
-        form.handleSubmit(onSubmit, onInvalid)();
-      }
+    if (!nextStep) return;
+    // Valida os campos obrigatórios da etapa atual antes de avançar
+    const required = STEP_REQUIRED_FIELDS[activeTab] ?? [];
+    const missing = required.filter((f) => {
+      const v = form.getValues(f);
+      return v === undefined || v === null || String(v).trim() === '';
+    });
+    if (missing.length > 0) {
+      missing.forEach((f) => {
+        form.setError(f, { type: 'required', message: REQUIRED_LABELS[f] || 'Campo obrigatório' });
+      });
+      toast({
+        title: 'Campos obrigatórios',
+        description: 'Preencha os campos obrigatórios da etapa antes de continuar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const clienteId = form.getValues('id_cliente');
+    const cursoId = form.getValues('id_curso');
+    // Se os dados essenciais da proposta estão preenchidos, salva no backend e avança para a próxima etapa na edição
+    if (clienteId && cursoId) {
+      finishAfterSaveRef.current = false;
+      nextTabOnSuccessRef.current = nextStep.id;
+      form.handleSubmit(onSubmit, onInvalid)();
+    } else {
+      // Dispara validação dos campos obrigatórios
+      form.handleSubmit(onSubmit, onInvalid)();
     }
   };
 
@@ -2230,17 +2292,12 @@ export default function ProposalsCreate() {
                     {/* Card de Gerenciamento de Parcelamento */}
                     {shouldShowInstallmentAndDiscountFields() && (
                       <Card>
-                        <CardHeader 
-                          className="flex flex-row items-center justify-between cursor-pointer group"
-                          onClick={() => setIsParcelamentoCollapsed(!isParcelamentoCollapsed)}
-                        >
+                        <CardHeader>
                           <div className="flex items-center gap-2">
-                            {isParcelamentoCollapsed ? <ChevronDown className="h-5 w-5 transition-transform" /> : <ChevronUp className="h-5 w-5 transition-transform" />}
                             <CardTitle>Gerenciamento de Parcelamento</CardTitle>
                           </div>
                         </CardHeader>
-                        {!isParcelamentoCollapsed && (
-                          <CardContent className="animate-in fade-in duration-300 space-y-6">
+                        <CardContent className="space-y-6">
                             {/* Seleção de Tabela de Parcelamento */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <FormField
@@ -2283,7 +2340,11 @@ export default function ProposalsCreate() {
                               <div className="flex flex-wrap items-center gap-1.5">
                                 {[1, 6, 10, 12, 18, 24].map((n) => {
                                   const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
-                                  const perParcel = totalNum > 0 ? totalNum / n : 0;
+                                  // Base de financiamento: matrícula avulsa é cobrança separada, fora das parcelas
+                                  const inscNum = currencyRemoveMaskToNumber(String(form.getValues('inscricao') || '')) || 0;
+                                  const receb = form.getValues('recebimento_matricula') || 'diluida';
+                                  const baseFin = (receb === 'avulsa' || receb === 'primeira_parcela') ? Math.max(0, totalNum - inscNum) : totalNum;
+                                  const perParcel = baseFin > 0 ? baseFin / n : 0;
                                   const currentParc = String(form.getValues('parcela_selecionada') || '');
                                   const isCurrent = currentParc === String(n);
 
@@ -2350,7 +2411,6 @@ export default function ProposalsCreate() {
                               />
                             </div>
                           </CardContent>
-                        )}
                       </Card>
                     )}
 
@@ -2509,6 +2569,20 @@ export default function ProposalsCreate() {
             >
               <Save className="h-3.5 w-3.5 mr-1.5" /> Salvar e Continuar
             </Button>
+
+            {nextStep && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSaveFinish}
+                disabled={createEnrollment.isPending}
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                title="Salvar a proposta e voltar ao funil sem passar pelas próximas etapas"
+              >
+                <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-emerald-600" /> Salvar e Sair
+              </Button>
+            )}
 
             {nextStep ? (
               <Button

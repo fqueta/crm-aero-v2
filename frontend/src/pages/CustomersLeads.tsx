@@ -81,50 +81,49 @@ const getClientAmountBRL = (client: ClientRecord): number => {
 };
 
 /**
+ * normalizeBRLNumber
+ * pt-BR: Converte valores numéricos possivelmente em string (ex.: "17.820,00") para número.
+ *        Aceita strings com máscara de moeda (ex.: "R$ 17.820,00"), removendo
+ *        símbolos e separadores de milhar antes de normalizar o decimal.
+ */
+const normalizeBRLNumber = (v: any): number | undefined => {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v === 'number' && !Number.isNaN(v)) return v;
+  if (typeof v === 'string') {
+    // Remove tudo que não seja dígitos, vírgula, ponto ou sinal
+    const cleanedSymbols = v.trim().replace(/[^\d.,-]/g, '');
+    // Regras de normalização:
+    // - Se tiver vírgula e ponto: assume padrão pt-BR (ponto = milhar, vírgula = decimal)
+    // - Se tiver apenas vírgula: converte vírgula para ponto
+    // - Se tiver apenas ponto: mantém como decimal
+    // - Caso vazio após limpeza, tenta converter a string original como número puro
+    let s = cleanedSymbols;
+    if (s.includes(',') && s.includes('.')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else if (s.includes(',')) {
+      s = s.replace(',', '.');
+    }
+    const n = parseFloat(s);
+    if (!Number.isNaN(n)) return n;
+    // Fallback: tenta converter dígitos puros quando a string não contém separadores
+    const onlyDigits = v.replace(/\D/g, '');
+    if (onlyDigits.length > 0) {
+      const nd = parseFloat(onlyDigits);
+      if (!Number.isNaN(nd)) return nd;
+    }
+  }
+  return undefined;
+};
+
+/**
  * getEnrollmentAmountBRL
  * pt-BR: Obtém um possível valor em BRL da matrícula (quando disponível).
- * en-US: Extracts a possible BRL amount from enrollment data (when available).
+ *        Prioriza o TOTAL cheio (com matrícula inclusa) e só usa o subtotal
+ *        como fallback.
  */
 const getEnrollmentAmountBRL = (enroll: EnrollmentRecord): number => {
   const p = (enroll as any).preferencias || {};
   const c = (enroll as any).config || {};
-  /**
-   * normalizeToNumber
-   * pt-BR: Converte valores numéricos possivelmente em string (ex.: "17.820,00") para número.
-   *        Aceita strings com máscara de moeda (ex.: "R$ 17.820,00"), removendo
-   *        símbolos e separadores de milhar antes de normalizar o decimal.
-   * en-US: Converts possibly string numbers (e.g., "17.820,00") into a numeric value.
-   *        Accepts currency-masked strings (e.g., "R$ 17.820,00"), stripping
-   *        symbols and thousand separators before normalizing the decimal.
-   */
-  const normalizeToNumber = (v: any): number | undefined => {
-    if (v === undefined || v === null) return undefined;
-    if (typeof v === 'number' && !Number.isNaN(v)) return v;
-    if (typeof v === 'string') {
-      // Remove tudo que não seja dígitos, vírgula, ponto ou sinal
-      const cleanedSymbols = v.trim().replace(/[^\d.,-]/g, '');
-      // Regras de normalização:
-      // - Se tiver vírgula e ponto: assume padrão pt-BR (ponto = milhar, vírgula = decimal)
-      // - Se tiver apenas vírgula: converte vírgula para ponto
-      // - Se tiver apenas ponto: mantém como decimal
-      // - Caso vazio após limpeza, tenta converter a string original como número puro
-      let s = cleanedSymbols;
-      if (s.includes(',') && s.includes('.')) {
-        s = s.replace(/\./g, '').replace(',', '.');
-      } else if (s.includes(',')) {
-        s = s.replace(',', '.');
-      }
-      const n = parseFloat(s);
-      if (!Number.isNaN(n)) return n;
-      // Fallback: tenta converter dígitos puros quando a string não contém separadores
-      const onlyDigits = v.replace(/\D/g, '');
-      if (onlyDigits.length > 0) {
-        const nd = parseFloat(onlyDigits);
-        if (!Number.isNaN(nd)) return nd;
-      }
-    }
-    return undefined;
-  };
 
   const rawCandidates = [
     p?.pipeline?.amount_brl,
@@ -132,13 +131,22 @@ const getEnrollmentAmountBRL = (enroll: EnrollmentRecord): number => {
     c?.amount_brl,
     c?.valor_brl,
     (enroll as any)?.amount_brl,
-    (enroll as any)?.subtotal,
     (enroll as any)?.total,
+    (enroll as any)?.subtotal,
   ];
   const hit = rawCandidates
-    .map((v) => normalizeToNumber(v))
+    .map((v) => normalizeBRLNumber(v))
     .find((v) => typeof v === 'number' && !Number.isNaN(v));
   return (hit as number) || 0;
+};
+
+/**
+ * getEnrollmentInscricaoBRL
+ * pt-BR: Obtém a taxa de matrícula/inscrição da matrícula para exibir
+ *        discriminada no card do kanban.
+ */
+const getEnrollmentInscricaoBRL = (enroll: EnrollmentRecord): number => {
+  return normalizeBRLNumber((enroll as any)?.inscricao) || 0;
 };
 
 /**
@@ -2074,6 +2082,7 @@ function EnrollmentKanbanCard({
   const status = String((enrollment as any)?.status || 'a').toLowerCase();
   const consultant = (enrollment as any)?.autor_name || '';
   const amountBRL = formatBRL(getEnrollmentAmountBRL(enrollment));
+  const inscricaoNum = getEnrollmentInscricaoBRL(enrollment);
 
   /**
    * goToView
@@ -2225,6 +2234,14 @@ function EnrollmentKanbanCard({
                 <User2 className="h-3 w-3 " />
                 {consultant}
              </div>
+          )}
+          {inscricaoNum > 0 && (
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 tracking-tight truncate" title={`Taxa de matrícula inclusa no valor: ${formatBRL(inscricaoNum)}`}>
+              <div className="flex items-center justify-center h-4.5 w-4.5 rounded bg-muted/40 p-0.5">
+                <Plus className="h-3 w-3" />
+              </div>
+              Taxa de matrícula: {formatBRL(inscricaoNum)}
+            </div>
           )}
         </div>
       </div>

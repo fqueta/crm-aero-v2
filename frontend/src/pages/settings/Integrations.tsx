@@ -331,6 +331,13 @@ export default function Integrations() {
               placeholder="Buscar rápida..."
               value={filterName}
               onChange={(e) => setFilterName(e.target.value)}
+              type="search"
+              name="integracoes-busca-rapida"
+              id="integracoes-busca-rapida"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
             />
           </div>
           <Button onClick={() => refetch()} variant="outline" disabled={isLoading}>

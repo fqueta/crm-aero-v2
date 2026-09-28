@@ -151,7 +151,6 @@ export default function ProposalsEdit() {
   const [isQuickTurmaOpen, setIsQuickTurmaOpen] = useState(false);
 
   const [isFuelTextOpen, setIsFuelTextOpen] = useState(false);
-  const [isParcelamentoCollapsed, setIsParcelamentoCollapsed] = useState(false);
   const [isBudgetPreviewCollapsed, setIsBudgetPreviewCollapsed] = useState(false);
 
   const handleOpenFuelText = () => {
@@ -567,6 +566,43 @@ export default function ProposalsEdit() {
   }, [discountRows, activeRowIndex]);
 
   /**
+   * valorManualRef
+   * pt-BR: Marca quando o usuário digitou o valor da parcela manualmente
+   * (input "Valor da Parcela" ou modal de parcelas personalizadas). Enquanto
+   * manual, o valor NÃO é recalculado sozinho quando o total muda.
+   */
+  const valorManualRef = useRef(false);
+
+  /**
+   * syncActiveRowValorOnTotalChange
+   * pt-BR: Mantém o valor da linha ativa sincronizado com o Total. Se o valor
+   * foi derivado automaticamente (simulação/tabela) e o total mudar (ex.: volta
+   * de etapa com novo preço do curso), recalcula valor = base / N, onde a base
+   * é o total (menos a inscrição quando ela é avulsa). Edição manual é preservada.
+   */
+  const totalForSync = form.watch('total');
+  const inscricaoForSync = form.watch('inscricao');
+  const recebimentoForSync = form.watch('recebimento_matricula');
+  useEffect(() => {
+    if (valorManualRef.current) return;
+    const row = (discountRows || [])[activeRowIndex];
+    if (!row) return;
+    const parcNum = Number(row.parcela) || 0;
+    if (!parcNum) return;
+    const totalNum = currencyRemoveMaskToNumber(String(totalForSync || '')) || 0;
+    const inscNum = currencyRemoveMaskToNumber(String(inscricaoForSync || '')) || 0;
+    const base = (recebimentoForSync === 'avulsa' || recebimentoForSync === 'primeira_parcela')
+      ? Math.max(0, totalNum - inscNum)
+      : totalNum;
+    if (base <= 0) return;
+    const expected = formatCurrencyBRL(base / parcNum);
+    if (row.valor !== expected) {
+      setDiscountRows((prev) => prev.map((r, i) => (i === activeRowIndex ? { ...r, valor: expected } : r)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalForSync, inscricaoForSync, recebimentoForSync, activeRowIndex]);
+
+  /**
    * hydrateDiscountFromInstallment
    * pt-BR: Ao selecionar uma tabela, preenche Texto de Desconto com `obs` e hidrata tabela a partir de `config.parcelas`.
    * en-US: When an installment is selected, fills Discount Text with `obs` and hydrates table from `config.parcelas`.
@@ -592,6 +628,7 @@ export default function ProposalsEdit() {
       desconto: String(p?.desconto ?? ''),
     }));
     setDiscountRows(rows);
+    valorManualRef.current = false;
     // pt-BR: Ajusta valor da parcela da linha ativa de acordo com Total, se disponível.
     // en-US: Adjust active row installment value according to Total, if available.
     try {
@@ -2693,22 +2730,12 @@ export default function ProposalsEdit() {
                *        Contains the Installment Table select and the Discount Text field.
                */}
               <Card>
-                <CardHeader 
-                  className="flex flex-row items-center justify-between cursor-pointer group"
-                  onClick={() => setIsParcelamentoCollapsed(!isParcelamentoCollapsed)}
-                >
+                <CardHeader>
                   <div className="flex items-center gap-2">
-                    {isParcelamentoCollapsed ? <ChevronDown className="h-5 w-5 transition-transform" /> : <ChevronUp className="h-5 w-5 transition-transform" />}
                     <CardTitle>Gerenciamento de Parcelamento</CardTitle>
                   </div>
-                  {isParcelamentoCollapsed && activeRowResolved && (
-                    <Badge variant="secondary" className="px-2 py-0 h-5 text-[10px]">
-                      {activeRowResolved.parcela}x de {activeRowResolved.parcelaComDesconto || activeRowResolved.valor}
-                    </Badge>
-                  )}
                 </CardHeader>
-                {!isParcelamentoCollapsed && (
-                  <CardContent className="animate-in fade-in duration-300">
+                <CardContent>
                   {/* Seleção de Tabela de Parcelamento */}
                   <div className="grid grid-cols-1 gap-4">
                     <FormField
@@ -2778,7 +2805,11 @@ export default function ProposalsEdit() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         {[1, 6, 10, 12, 18, 24].map((n) => {
                           const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
-                          const perParcel = totalNum > 0 ? totalNum / n : 0;
+                          // Base de financiamento: matrícula avulsa é cobrança separada, fora das parcelas
+                          const inscNum = currencyRemoveMaskToNumber(String(form.getValues('inscricao') || '')) || 0;
+                          const receb = form.getValues('recebimento_matricula') || 'diluida';
+                          const baseFin = (receb === 'avulsa' || receb === 'primeira_parcela') ? Math.max(0, totalNum - inscNum) : totalNum;
+                          const perParcel = baseFin > 0 ? baseFin / n : 0;
                           const currentParc = String(discountRows[activeRowIndex]?.parcela || '');
                           const isCurrent = currentParc === String(n);
 
@@ -2794,6 +2825,7 @@ export default function ProposalsEdit() {
                               title={perParcel > 0 ? `${n}x de ${formatCurrencyBRL(perParcel)}` : `Simular ${n}x`}
                               onClick={() => {
                                 const masked = formatCurrencyBRL(perParcel);
+                                valorManualRef.current = false;
                                 setDiscountRows([{
                                   parcela: String(n),
                                   valor: masked,
@@ -2877,6 +2909,7 @@ export default function ProposalsEdit() {
                                       };
                                       return next;
                                     });
+                                    valorManualRef.current = false;
                                   }}
                                 >
                                   <SelectTrigger className="h-9 w-full"><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -2906,11 +2939,16 @@ export default function ProposalsEdit() {
                                     const val = e.target.value;
                                     setDiscountRows((prev) => {
                                       const next = [...prev];
-                                      // pt-BR: Recalcula valor da parcela a partir do Total quando possível.
-                                      // en-US: Recalculate installment value from Total when possible.
+                                      // pt-BR: Recalcula valor da parcela a partir da base de financiamento
+                                      // (total menos a matrícula quando ela é avulsa).
+                                      // en-US: Recalculate installment value from the financing base
+                                      // (total minus enrollment fee when charged separately).
                                       const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+                                      const inscNum = currencyRemoveMaskToNumber(String(form.getValues('inscricao') || '')) || 0;
+                                      const receb = form.getValues('recebimento_matricula') || 'diluida';
+                                      const baseFin = (receb === 'avulsa' || receb === 'primeira_parcela') ? Math.max(0, totalNum - inscNum) : totalNum;
                                       const parcNum = Number(val) || 0;
-                                      const fromTotal = totalNum > 0 && parcNum > 0 ? (totalNum / parcNum) : 0;
+                                      const fromTotal = baseFin > 0 && parcNum > 0 ? (baseFin / parcNum) : 0;
                                       const maskedValor = fromTotal > 0
                                         ? formatCurrencyBRL(fromTotal)
                                         : next[idx]?.valor || '';
@@ -2921,6 +2959,7 @@ export default function ProposalsEdit() {
                                       };
                                       return next;
                                     });
+                                    valorManualRef.current = false;
                                     if (val) {
                                       form.setValue('parcela_selecionada', val, { shouldDirty: true });
                                     }
@@ -2935,6 +2974,7 @@ export default function ProposalsEdit() {
                                 className="h-9 font-mono text-xs"
                                 onChange={(e) => {
                                   const v = currencyApplyMask(e.target.value, 'pt-BR', 'BRL');
+                                  valorManualRef.current = true;
                                   setDiscountRows((prev) => prev.map((r, i) => i === idx ? { ...r, valor: v } : r));
                                 }}
                               />
@@ -3120,7 +3160,6 @@ export default function ProposalsEdit() {
                     </Card>
                   </div>
                   </CardContent>
-                )}
               </Card>
 
             </TabsContent>
@@ -3467,12 +3506,15 @@ export default function ProposalsEdit() {
                 className="rounded-lg h-9 text-zinc-500"
                 onClick={() => {
                   const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
-                  if (totalNum <= 0) return;
+                  const inscNum = currencyRemoveMaskToNumber(String(form.getValues('inscricao') || '')) || 0;
+                  const receb = form.getValues('recebimento_matricula') || 'diluida';
+                  const baseFin = (receb === 'avulsa' || receb === 'primeira_parcela') ? Math.max(0, totalNum - inscNum) : totalNum;
+                  if (baseFin <= 0) return;
                   
                   const recalculated = tempDiscountRows.map(row => {
                     const pNum = Number(row.parcela) || 0;
                     if (pNum > 0) {
-                      return { ...row, valor: formatCurrencyBRL(totalNum / pNum) };
+                      return { ...row, valor: formatCurrencyBRL(baseFin / pNum) };
                     }
                     return row;
                   });
@@ -3490,6 +3532,7 @@ export default function ProposalsEdit() {
               className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6"
               onClick={() => {
                 setDiscountRows(tempDiscountRows);
+                valorManualRef.current = true;
                 setIsCustomInstallmentModalOpen(false);
                 toast({ title: 'Tabela personalizada', description: 'As novas opções de parcelamento foram aplicadas apenas a esta proposta.' });
               }}

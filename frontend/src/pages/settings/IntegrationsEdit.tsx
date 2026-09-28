@@ -31,6 +31,14 @@ export default function IntegrationsEdit() {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [produto, setProduto] = useState('');
+  // Asaas (integracao-asaas): campos dedicados (API Key, ambiente, cobrança, webhook, multa/juros)
+  const [asaasKey, setAsaasKey] = useState('');
+  const [asaasWebhook, setAsaasWebhook] = useState('');
+  const [asaasEnv, setAsaasEnv] = useState<'sandbox' | 'production'>('sandbox');
+  const [asaasBilling, setAsaasBilling] = useState<'BOLETO' | 'PIX' | 'CREDIT_CARD' | 'UNDEFINED'>('BOLETO');
+  const [fineValue, setFineValue] = useState('');
+  const [fineType, setFineType] = useState<'FIXED' | 'PERCENTAGE'>('PERCENTAGE');
+  const [interestValue, setInterestValue] = useState('');
   const [meta, setMeta] = useState<{ key: string; value: string }[]>([{ key: '', value: '' }]);
   const [showPass, setShowPass] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -44,6 +52,14 @@ export default function IntegrationsEdit() {
       setUser((item.config as any)?.user || '');
       setPass((item.config as any)?.pass || '');
       setProduto((item.config as any)?.produto || '');
+      const cfg: any = item.config || {};
+      setAsaasKey(cfg.access_token || cfg.pass || cfg.api_key || '');
+      setAsaasWebhook(cfg.webhook_token || '');
+      setAsaasEnv(cfg.environment === 'production' ? 'production' : 'sandbox');
+      setAsaasBilling(['BOLETO', 'PIX', 'CREDIT_CARD', 'UNDEFINED'].includes(cfg.billing_type) ? cfg.billing_type : 'BOLETO');
+      setFineValue(cfg.fine_value !== undefined && cfg.fine_value !== null && cfg.fine_value !== '' ? String(cfg.fine_value) : '');
+      setFineType(cfg.fine_type === 'FIXED' ? 'FIXED' : 'PERCENTAGE');
+      setInterestValue(cfg.interest_value !== undefined && cfg.interest_value !== null && cfg.interest_value !== '' ? String(cfg.interest_value) : '');
       const base = (item.meta || []).map((m) => ({ key: m.key, value: m.value ?? '' }));
       setMeta(base.length ? base : [{ key: '', value: '' }]);
     }
@@ -54,15 +70,35 @@ export default function IntegrationsEdit() {
   const updateMeta = (idx: number, field: 'key' | 'value', val: string) =>
     setMeta((rows) => rows.map((r, i) => (i === idx ? { ...r, [field]: val } : r)));
 
+  const isBrevo = name.toLowerCase().includes('brevo') || name.toLowerCase().includes('email');
+  const isZapsign = name.toLowerCase().includes('zapsign') || name.toLowerCase().includes('zapsing');
+  const isZapguru = name.toLowerCase().includes('zapguru') || name.toLowerCase().includes('chat');
+
   const saveMut = useMutation({
     mutationFn: async () => {
+      const metaPairs: IntegracaoMetaPair[] = meta
+        .filter((m) => (m.key || '').trim() !== '')
+        .map((m) => ({ key: m.key.trim(), value: m.value ?? '' }));
+      // Asaas: monta a config no formato canônico (access_token + ambiente +
+      // cobrança + multa/juros). Formato igual ao AsaasSettingsCard — sem isso,
+      // salvar pela tela genérica apagaria essas chaves.
+      if (isAsaas) {
+        const config: IntegracaoConfig = {
+          url: asaasEnv === 'production' ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3',
+          access_token: asaasKey.trim(),
+          environment: asaasEnv,
+          billing_type: asaasBilling,
+          webhook_token: asaasWebhook.trim() || undefined,
+          fine_value: fineValue.trim() || undefined,
+          fine_type: fineType,
+          interest_value: interestValue.trim() || undefined,
+        };
+        return integracoesService.update(id!, { name: name.trim(), active, config, meta: metaPairs });
+      }
       const config: IntegracaoConfig = { url: url.trim() };
       if (user) config.user = user;
       if (pass) config.pass = pass;
       if (produto) config.produto = produto;
-      const metaPairs: IntegracaoMetaPair[] = meta
-        .filter((m) => (m.key || '').trim() !== '')
-        .map((m) => ({ key: m.key.trim(), value: m.value ?? '' }));
       return integracoesService.update(id!, { name: name.trim(), active, config, meta: metaPairs });
     },
     onSuccess: () => {
@@ -89,6 +125,7 @@ export default function IntegrationsEdit() {
         pass,
         produto: produto.trim(),
         meta: metaPairs,
+        ...(isAsaas ? { config: { access_token: asaasKey, environment: asaasEnv } } : {}),
       });
       const msg = (resp as any)?.message || (resp as any)?.data?.message || 'Conexão estabelecida com sucesso!';
       setTesting(false);
@@ -109,11 +146,6 @@ export default function IntegrationsEdit() {
     if (n.includes('zapguru') || n.includes('chat')) return <MessageSquare className="w-8 h-8 text-white" />;
     return <Blocks className="w-8 h-8 text-white" />;
   };
-
-  const isBrevo = name.toLowerCase().includes('brevo') || name.toLowerCase().includes('email');
-  const isAsaas = name.toLowerCase().includes('asaas') || name.toLowerCase().includes('pagamento');
-  const isZapsign = name.toLowerCase().includes('zapsign') || name.toLowerCase().includes('zapsing');
-  const isZapguru = name.toLowerCase().includes('zapguru') || name.toLowerCase().includes('chat');
 
   const webhookUrl = getWebhookUrlForIntegration(name, item?.slug);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
@@ -192,10 +224,131 @@ export default function IntegrationsEdit() {
                     value={url} 
                     onChange={(e) => setUrl(e.target.value)} 
                     className="h-11 border-slate-300"
+                    readOnly={isAsaas}
+                    title={isAsaas ? 'Definida automaticamente pelo Ambiente abaixo' : undefined}
                   />
                   <p className="text-xs text-slate-400 mt-1">O endpoint base para a comunicação com a API.</p>
                 </div>
 
+                {isAsaas ? (
+                  <div className="space-y-6">
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
+                        API Key do Asaas *
+                      </label>
+                      <div className="relative">
+                        <Input
+                          placeholder="Ex: $aact_..."
+                          type={showPass ? 'text' : 'password'}
+                          value={asaasKey}
+                          onChange={(e) => setAsaasKey(e.target.value)}
+                          className="h-11 pr-10 border-slate-300"
+                        />
+                        <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" onClick={() => setShowPass((s) => !s)}>
+                          {showPass ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
+                          Ambiente
+                        </label>
+                        <select
+                          value={asaasEnv}
+                          onChange={(e) => {
+                            const v = e.target.value === 'production' ? 'production' : 'sandbox';
+                            setAsaasEnv(v);
+                            setUrl(v === 'production' ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3');
+                          }}
+                          className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                        >
+                          <option value="sandbox">Sandbox (Testes)</option>
+                          <option value="production">Produção</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
+                          Cobrança Padrão
+                        </label>
+                        <select
+                          value={asaasBilling}
+                          onChange={(e) => setAsaasBilling(e.target.value as any)}
+                          className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                        >
+                          <option value="BOLETO">Boleto</option>
+                          <option value="PIX">Pix</option>
+                          <option value="CREDIT_CARD">Cartão de Crédito</option>
+                          <option value="UNDEFINED">Cliente escolhe na fatura</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
+                        Webhook Token
+                      </label>
+                      <Input
+                        placeholder="Token para validação do webhook"
+                        value={asaasWebhook}
+                        onChange={(e) => setAsaasWebhook(e.target.value)}
+                        className="h-11 border-slate-300"
+                      />
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
+                      <div>
+                        <p className="text-xs font-bold text-slate-600 uppercase">Multa e Juros de mora</p>
+                        <p className="text-[11px] text-slate-400">Pós-vencimento em todas as cobranças. Vazio = usa o padrão da conta Asaas.</p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
+                            Multa
+                          </label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="Ex: 2"
+                            value={fineValue}
+                            onChange={(e) => setFineValue(e.target.value)}
+                            className="h-11 border-slate-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
+                            Tipo da Multa
+                          </label>
+                          <select
+                            value={fineType}
+                            onChange={(e) => setFineType(e.target.value === 'FIXED' ? 'FIXED' : 'PERCENTAGE')}
+                            className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                          >
+                            <option value="PERCENTAGE">Percentual (%)</option>
+                            <option value="FIXED">Valor fixo (R$)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
+                            Juros (% a.m.)
+                          </label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="Ex: 1"
+                            value={interestValue}
+                            onChange={(e) => setInterestValue(e.target.value)}
+                            className="h-11 border-slate-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">
@@ -238,6 +391,8 @@ export default function IntegrationsEdit() {
                     className="h-11 border-slate-300"
                   />
                 </div>
+                </>
+                )}
 
                 {/* URL do Webhook */}
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">

@@ -450,7 +450,7 @@ export function AppSidebar() {
         if (settings.logoUrl) return settings.logoUrl;
       }
     } catch {}
-    return "/aeroclube-logo.svg";
+    return "/logo.png";
   });
 
   React.useEffect(() => {
@@ -458,7 +458,7 @@ export function AppSidebar() {
       if (e.key === 'appearanceSettings') {
         try {
           const settings = JSON.parse(e.newValue || '{}');
-          setLogoUrl(settings.logoUrl || "/aeroclube-logo.svg");
+          setLogoUrl(settings.logoUrl || "/logo.png");
         } catch {}
       }
     };
@@ -468,7 +468,7 @@ export function AppSidebar() {
         const saved = localStorage.getItem('appearanceSettings');
         if (saved) {
           const settings = JSON.parse(saved);
-          setLogoUrl(settings.logoUrl || "/aeroclube-logo.svg");
+          setLogoUrl(settings.logoUrl || "/logo.png");
         }
       } catch {}
     };

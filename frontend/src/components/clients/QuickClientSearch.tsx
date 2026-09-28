@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Search, Loader2, UserSearch, Clock, Trash2, ChevronRight, GraduationCap, BookOpen } from 'lucide-react';
+import { Search, Loader2, UserSearch, Clock, Trash2, ChevronRight, GraduationCap, BookOpen, FileText } from 'lucide-react';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -158,29 +158,33 @@ export function QuickClientSearch() {
     }
   };
 
+  const saveClientToHistory = (item: any) => {
+    try {
+      const stored = localStorage.getItem(HISTORY_KEY);
+      let currentHistory: any[] = stored ? JSON.parse(stored) : [];
+      currentHistory = currentHistory.filter((c) => c.id !== item.id);
+      currentHistory.unshift({
+        id: item.id,
+        name: item.name,
+        cpf: item.cpf,
+        phone: item.phone,
+        celular: item.celular,
+        email: item.email,
+        timestamp: new Date().toISOString()
+      });
+      currentHistory = currentHistory.slice(0, 10);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(currentHistory));
+      setHistory(currentHistory);
+    } catch (e) {
+      console.warn('Erro ao salvar histórico', e);
+    }
+  };
+
   const handleSelectItem = (item: any) => {
     if (!item) return;
 
     if (item._type === 'client') {
-      try {
-        const stored = localStorage.getItem(HISTORY_KEY);
-        let currentHistory: any[] = stored ? JSON.parse(stored) : [];
-        currentHistory = currentHistory.filter((c) => c.id !== item.id);
-        currentHistory.unshift({
-          id: item.id,
-          name: item.name,
-          cpf: item.cpf,
-          phone: item.phone,
-          celular: item.celular,
-          email: item.email,
-          timestamp: new Date().toISOString()
-        });
-        currentHistory = currentHistory.slice(0, 10);
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(currentHistory));
-        setHistory(currentHistory);
-      } catch (e) {
-        console.warn('Erro ao salvar histórico', e);
-      }
+      saveClientToHistory(item);
       setOpen(false);
       navigate(`/admin/clients/${item.id}/view`);
     } else if (item._type === 'matricula') {
@@ -190,6 +194,13 @@ export function QuickClientSearch() {
       setOpen(false);
       navigate(`/admin/school/courses/${item.id}/edit`);
     }
+  };
+
+  const handleCreateProposal = (client: any) => {
+    if (!client?.id) return;
+    saveClientToHistory(client);
+    setOpen(false);
+    navigate(`/admin/sales/proposals/create?id_cliente=${encodeURIComponent(String(client.id))}&funnel=2`);
   };
 
   const clearHistory = () => {
@@ -232,7 +243,18 @@ export function QuickClientSearch() {
           {client.email && <div className="text-xs text-slate-500 dark:text-zinc-400 truncate max-w-[250px]" title={client.email}>{highlightText(client.email, q)}</div>}
         </TableCell>
         <TableCell className="text-right">
-          <ChevronRight className={`h-5 w-5 ml-auto transition-colors ${isSelected ? 'text-blue-500 dark:text-blue-400' : 'text-slate-300 dark:text-zinc-600 group-hover:text-blue-500 dark:group-hover:text-blue-400'}`} />
+          <div className="flex items-center justify-end gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Gerar proposta"
+              className="h-8 w-8 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:text-zinc-500 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/60"
+              onClick={(e) => { e.stopPropagation(); handleCreateProposal(client); }}
+            >
+              <FileText className="h-4 w-4" />
+            </Button>
+            <ChevronRight className={`h-5 w-5 transition-colors ${isSelected ? 'text-blue-500 dark:text-blue-400' : 'text-slate-300 dark:text-zinc-600 group-hover:text-blue-500 dark:group-hover:text-blue-400'}`} />
+          </div>
         </TableCell>
       </TableRow>
     );
@@ -336,6 +358,13 @@ export function QuickClientSearch() {
               onKeyDown={handleInputKeyDown}
               className="text-lg py-6 pl-12 pr-4 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:bg-white dark:focus-visible:bg-zinc-900 rounded-xl shadow-sm transition-all"
               autoFocus
+              type="search"
+              name="quick-client-search"
+              id="quick-client-search"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
             />
           </div>
         </div>

@@ -16,6 +16,7 @@ import { PublicFooter } from "@/components/layout/PublicFooter";
 import { proposalService } from "@/services/proposalService";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { currencyRemoveMaskToNumber } from "@/lib/masks/currency";
+import { buildPaymentSchedule } from "@/lib/paymentSchedule";
 import {
   getStudentFacingQuestionLabel,
   PUBLIC_PROPOSAL_QUESTIONS,
@@ -368,11 +369,35 @@ export default function ProposalApproval() {
     let summaryText = '';
     const hasEntrada = primeiraParcelaValorNum !== null && primeiraParcelaValorNum > 0;
 
+    // Demais parcelas recalculadas (total fixo do financiamento): com 1ª
+    // customizada (entrada), as 2..N diluem a diferença — espelha o
+    // PaymentScheduleService / ProposalViewContent. Sem entrada, é o nominal.
+    let valorDemaisNum = valorParcelaNum;
+    if (primeiraParcelaValorNum !== null && qtdParcelas > 1 && valorParcelaNum > 0) {
+      try {
+        const sched = buildPaymentSchedule({
+          totalParcelas: qtdParcelas,
+          valorParcela: valorParcelaNum,
+          primeiraValor: primeiraParcelaValorNum,
+          primeiraData: parcelamento.primeira_parcela_data || null,
+          diaPagamento: parcelamento.dia_pagamento ? Number(parcelamento.dia_pagamento) || null : null,
+          recebimentoMatricula: recebimentoMatricula as any,
+          valorMatricula: matriculaValorNum,
+          matriculaVencimentoData: parcelamento.matricula_vencimento_data || null,
+          customDueDates: parcelamento.vencimentos_personalizados || null,
+        });
+        if (sched) valorDemaisNum = sched.valorDemaisParcelas;
+      } catch {}
+    }
+    const valorDemaisCheioFormatted = formatCurrencyBRL(valorDemaisNum);
+    const demaisEfetivo = Math.max(0, valorDemaisNum - descPontualidadeNum);
+    const valorDemaisEfetivoFormatted = formatCurrencyBRL(demaisEfetivo > 0 ? demaisEfetivo : valorDemaisNum);
+
     if (recebimentoMatricula === 'primeira_parcela' && primeiraParcelaComMatriculaNum !== null) {
       const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorParcelaCheioFormatted}`;
+        summaryText = `1ª Parcela de ${entradaComMatFormatted} (com matrícula) + ${restantes}x de ${valorDemaisCheioFormatted}`;
       } else {
         summaryText = `1x de ${entradaComMatFormatted} (Curso + Matrícula)`;
       }
@@ -380,7 +405,7 @@ export default function ProposalApproval() {
       const entradaFormatted = formatCurrencyBRL(primeiraParcelaValorNum);
       const restantes = Math.max(0, qtdParcelas - 1);
       if (restantes > 0) {
-        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorParcelaCheioFormatted}`;
+        summaryText = `Entrada de ${entradaFormatted} + ${restantes}x de ${valorDemaisCheioFormatted}`;
       } else {
         summaryText = `1x de ${entradaFormatted} (À vista / Entrada)`;
       }
@@ -409,6 +434,9 @@ export default function ProposalApproval() {
       valorParcelaCheioFormatted,
       valorEfetivoParcela,
       valorParcelaEfetivoFormatted,
+      valorDemaisNum,
+      valorDemaisCheioFormatted,
+      valorDemaisEfetivoFormatted,
       descPontualidadeNum,
       descPontualidadeFormatted: descPontualidadeNum > 0 ? formatCurrencyBRL(descPontualidadeNum) : null,
       hasEntrada,
@@ -705,7 +733,7 @@ export default function ProposalApproval() {
                                       {parcelamentoSummary.descPontualidadeFormatted} de desconto por parcela
                                     </span>
                                     <p className="text-[11px] text-emerald-800 leading-tight">
-                                      Pagando em dia até o vencimento, o valor da parcela de {parcelamentoSummary.valorParcelaCheioFormatted} passa para <strong>{parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>.
+                                      Pagando em dia até o vencimento, o valor da parcela de {parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisCheioFormatted : parcelamentoSummary.valorParcelaCheioFormatted} passa para <strong>{parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisEfetivoFormatted : parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>.
                                     </p>
                                   </div>
                                 </div>
