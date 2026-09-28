@@ -17,13 +17,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Trash2, ExternalLink, RefreshCw, Copy, MessageCircle, Check } from "lucide-react";
+import { Pencil, Trash2, ExternalLink, RefreshCw, Copy, MessageCircle, Check, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { asaasService } from "@/services/asaasService";
 import { enrollmentsService } from "@/services/enrollmentsService";
 import { useAuth } from "@/contexts/AuthContext";
 import { currencyApplyMask, currencyRemoveMaskToNumber } from "@/lib/masks/currency";
 import type { AsaasBillingPayment } from "@/types/asaas";
+import { asaasStatusLabel } from "@/types/asaas";
 
 const EDITABLE = ["PENDING", "OVERDUE"];
 
@@ -42,6 +43,16 @@ function formatBR(ymd: string): string {
 
 function formatBRL(n: number): string {
   return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
+}
+
+/**
+ * formatViewedAt
+ * pt-BR: "2026-09-28 19:26:00" (Asaas lastInvoiceViewedDate) →
+ * "28/09/2026 às 19:26". Retorna null se ausente/inválida.
+ */
+function formatViewedAt(raw?: string | null): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(raw || ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]} às ${m[4]}:${m[5]}` : null;
 }
 
 /**
@@ -222,13 +233,23 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
               const title = p.installment_number
                 ? `Parcela ${p.installment_number}/${p.total_installments || ''}`
                 : (KIND_LABEL[p.kind] || p.kind);
+              const viewedAt = formatViewedAt(p.lastInvoiceViewedDate || p.lastBankSlipViewedDate);
 
               return (
                 <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-semibold">{title}</span>
-                      <Badge variant={st === "PENDING" || st === "OVERDUE" ? "secondary" : "default"}>{st}</Badge>
+                      <Badge variant={st === "PENDING" || st === "OVERDUE" ? "secondary" : "default"}>{asaasStatusLabel(st)}</Badge>
+                      {viewedAt && (
+                        <span
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                          title={`Fatura visualizada pela última vez em ${viewedAt}`}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Visualizada em {viewedAt}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       R$ {formatBRL(p.value)} · venc. {formatBR(p.dueDate)}
@@ -294,7 +315,7 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Editar cobrança no Asaas</DialogTitle>
-              <DialogDescription>Só PENDING/OVERDUE. O cliente nunca é alterado.</DialogDescription>
+              <DialogDescription>Somente pendentes ou vencidas. O cliente nunca é alterado.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="space-y-1">

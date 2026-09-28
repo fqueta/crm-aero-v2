@@ -122,6 +122,8 @@ class AsaasController extends Controller
                                 'invoiceUrl' => $child['invoiceUrl'] ?? null,
                                 'bankSlipUrl' => $child['bankSlipUrl'] ?? null,
                                 'description' => $child['description'] ?? null,
+                                'lastInvoiceViewedDate' => $child['lastInvoiceViewedDate'] ?? null,
+                                'lastBankSlipViewedDate' => $child['lastBankSlipViewedDate'] ?? null,
                             ];
                         }
                         continue;
@@ -137,6 +139,8 @@ class AsaasController extends Controller
                     $row['live_status'] = $live['status'] ?? null;
                     $row['invoiceUrl'] = $live['invoiceUrl'] ?? ($row['invoiceUrl'] ?? null);
                     $row['bankSlipUrl'] = $live['bankSlipUrl'] ?? ($row['bankSlipUrl'] ?? null);
+                    $row['lastInvoiceViewedDate'] = $live['lastInvoiceViewedDate'] ?? ($row['lastInvoiceViewedDate'] ?? null);
+                    $row['lastBankSlipViewedDate'] = $live['lastBankSlipViewedDate'] ?? ($row['lastBankSlipViewedDate'] ?? null);
                 } catch (\Throwable $e) {
                     $row['live_error'] = $e->getMessage();
                 }

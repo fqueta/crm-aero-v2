@@ -40,6 +40,35 @@ export interface AsaasBillingPayment {
   description?: string | null;
   /** Status vivo consultado no Asaas */
   live_status?: AsaasPaymentStatus | null;
+  /** Última visualização da fatura pelo cliente (Asaas: lastInvoiceViewedDate) */
+  lastInvoiceViewedDate?: string | null;
+  /** Última visualização do boleto pelo cliente (Asaas: lastBankSlipViewedDate) */
+  lastBankSlipViewedDate?: string | null;
+}
+
+/**
+ * Rótulos em português dos status de cobrança do Asaas.
+ * Mantém o código original p/ lógica (edição/exclusão) e exibe o rótulo.
+ */
+export const ASAAS_STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Pendente',
+  OVERDUE: 'Vencida',
+  RECEIVED: 'Recebida',
+  CONFIRMED: 'Confirmada',
+  REFUNDED: 'Estornada',
+  REFUND_REQUESTED: 'Estorno solicitado',
+  RECEIVED_IN_CASH: 'Recebida em dinheiro',
+  CHARGEBACK_REQUESTED: 'Chargeback solicitado',
+  CHARGEBACK_DISPUTE: 'Chargeback em disputa',
+  AWAITING_CHARGEBACK_REVERSAL: 'Aguard. reversão chargeback',
+  DUNNING_REQUESTED: 'Em cobrança',
+  DUNNING_RECEIVED: 'Cobrança recebida',
+  AWAITING_RISK_ANALYSIS: 'Em análise de risco',
+};
+
+export function asaasStatusLabel(status?: string | null): string {
+  const st = String(status || '').toUpperCase();
+  return ASAAS_STATUS_LABEL[st] || st || '-';
 }
 
 export interface AsaasBilling {
