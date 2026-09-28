@@ -21,7 +21,7 @@ import { turmasService } from '@/services/turmasService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Save, CheckCircle, Pencil, Plus, Trash2, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings, FileText, ArrowRight, Eye, Clock } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Pencil, Plus, Trash2, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings, FileText, ArrowRight, Eye, Clock, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -2769,6 +2769,52 @@ export default function ProposalsEdit() {
                     />
                   </div>
 
+                  {/* Barra de Simulação Rápida (1x, 6x, 10x, 12x, 18x, 24x) */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                        <span>Simulação Rápida:</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[1, 6, 10, 12, 18, 24].map((n) => {
+                          const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+                          const perParcel = totalNum > 0 ? totalNum / n : 0;
+                          const currentParc = String(discountRows[activeRowIndex]?.parcela || '');
+                          const isCurrent = currentParc === String(n);
+
+                          return (
+                            <Button
+                              key={`quick-sim-${n}`}
+                              type="button"
+                              size="sm"
+                              variant={isCurrent ? "default" : "outline"}
+                              className={`h-7 px-2.5 text-xs font-semibold rounded-lg transition-all ${
+                                isCurrent ? "shadow-xs" : "bg-white dark:bg-zinc-800 hover:bg-zinc-100 text-foreground"
+                              }`}
+                              title={perParcel > 0 ? `${n}x de ${formatCurrencyBRL(perParcel)}` : `Simular ${n}x`}
+                              onClick={() => {
+                                const masked = formatCurrencyBRL(perParcel);
+                                setDiscountRows([{
+                                  parcela: String(n),
+                                  valor: masked,
+                                  desconto: 'R$ 0,00'
+                                }]);
+                                setActiveRowIndex(0);
+                                form.setValue('parcela_selecionada', String(n), { shouldDirty: true });
+                              }}
+                            >
+                              {n === 1 ? '1x (À vista)' : `${n}x`}
+                              {perParcel > 0 && (
+                                <span className={`ml-1 text-[10px] font-normal ${isCurrent ? 'opacity-90' : 'text-muted-foreground'}`}>
+                                  ({formatCurrencyBRL(perParcel)})
+                                </span>
+                              )}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                   {/**
                    * DiscountEditableTable
                    * pt-BR: Tabela de desconto com edição das colunas solicitadas.
@@ -2875,6 +2921,9 @@ export default function ProposalsEdit() {
                                       };
                                       return next;
                                     });
+                                    if (val) {
+                                      form.setValue('parcela_selecionada', val, { shouldDirty: true });
+                                    }
                                   }}
                                 />
                               )}

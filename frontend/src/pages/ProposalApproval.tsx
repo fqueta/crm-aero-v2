@@ -431,7 +431,7 @@ export default function ProposalApproval() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
@@ -439,7 +439,7 @@ export default function ProposalApproval() {
 
   if (!proposal) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex flex-col text-foreground">
          <PublicHeader />
          <div className="flex-1 container mx-auto px-4 py-8 flex items-center justify-center">
             <p className="text-red-500">Proposta não encontrada.</p>
@@ -450,10 +450,10 @@ export default function ProposalApproval() {
   }
   if (step2Done) {
       return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
+        <div className="min-h-screen bg-slate-50 dark:bg-background flex flex-col text-foreground">
             <PublicHeader />
             <div className="flex-1 container mx-auto px-4 py-8 flex flex-col items-center justify-center max-w-2xl">
-                <Card className="w-full">
+                <Card className="w-full border-border/60">
                     <CardHeader className="text-center">
                         <div className="mx-auto bg-green-100 text-green-600 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
                             <CheckCircle className="w-8 h-8" />
@@ -514,22 +514,22 @@ export default function ProposalApproval() {
 
   if (isProposalExpired) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex flex-col text-foreground">
         <PublicHeader />
         <main className="flex-1 container mx-auto px-4 py-10 md:py-12">
           <div className="max-w-3xl mx-auto">
-            <Card className="border-0 shadow-lg ring-1 ring-slate-900/5 overflow-hidden">
+            <Card className="border border-border/60 shadow-lg overflow-hidden">
               <CardHeader className="text-center">
-                <div className="mx-auto bg-red-100 text-red-600 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+                <div className="mx-auto bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
                   <AlertTriangle className="w-8 h-8" />
                 </div>
-                <CardTitle className="text-2xl text-red-800">Proposta vencida</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-2xl text-red-800 dark:text-red-300">Proposta vencida</CardTitle>
+                <CardDescription className="text-slate-500 dark:text-zinc-400">
                   Esta proposta não pode mais ser aprovada com este link.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Alert variant="destructive" className="border-red-200 bg-red-50">
+                <Alert variant="destructive" className="border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertTitle>Solicite uma nova proposta</AlertTitle>
                   <AlertDescription>
@@ -551,7 +551,7 @@ export default function ProposalApproval() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
+    <div className="min-h-screen bg-slate-50 dark:bg-background flex flex-col font-sans text-slate-900 dark:text-foreground">
       <PublicHeader />
 
       <main className="flex-1 container mx-auto px-3 sm:px-6 py-6 sm:py-10 md:py-12">

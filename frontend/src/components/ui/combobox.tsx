@@ -159,7 +159,7 @@ export function Combobox({
                   // Important: value should be searchable text (label)
                   value={option.label}
                   disabled={option.disabled}
-                  className="py-3 px-3 data-[selected=true]:bg-blue-100"
+                  className="py-3 px-3 cursor-pointer transition-colors data-[selected=true]:bg-blue-50 data-[selected=true]:text-blue-900 dark:data-[selected=true]:bg-blue-950 dark:data-[selected=true]:text-blue-100"
                   onSelect={() => {
                     if (option.value === value) {
                       onValueChange("")
@@ -173,13 +173,13 @@ export function Combobox({
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{option.label}</div>
                       {option.description ? (
-                        <div className="text-xs text-muted-foreground truncate">{option.description}</div>
+                        <div className="text-xs text-muted-foreground [data-selected=true]_&]:text-blue-700/90 dark:[data-selected=true]_&]:text-blue-300/90 truncate">{option.description}</div>
                       ) : null}
                     </div>
                     <Check
                       className={cn(
                         "ml-2 h-4 w-4 shrink-0 opacity-0",
-                        value === option.value ? "opacity-100" : "opacity-0"
+                        value === option.value ? "opacity-100 text-blue-600 dark:text-blue-400" : "opacity-0"
                       )}
                     />
                   </div>

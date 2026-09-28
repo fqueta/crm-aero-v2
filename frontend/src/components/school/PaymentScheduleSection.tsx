@@ -4,13 +4,14 @@ import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/comp
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Sparkles } from "lucide-react";
 import { currencyApplyMask, currencyRemoveMaskToNumber } from "@/lib/masks/currency";
 import {
   buildPaymentSchedule,
   formatScheduleCurrencyBRL,
   formatScheduleDateBR,
   resolveSelectedRowValue,
+  nextFixedDay,
   type PaymentScheduleLine,
 } from "@/lib/paymentSchedule";
 
@@ -123,6 +124,24 @@ export function PaymentScheduleSection({
     [lines]
   );
 
+  // Inteligência de defaults: se dia do pagamento estiver vazio, sugere dia 10
+  React.useEffect(() => {
+    if (!dia && setValue) {
+      setValue("dia_pagamento", "10", { shouldDirty: false });
+    }
+  }, [dia, setValue]);
+
+  // Inteligência de defaults: se primeira_parcela_data estiver vazia, calcula próxima ocorrência do dia de pagamento >= hoje
+  React.useEffect(() => {
+    if (!primeiraData && setValue) {
+      const targetDay = Number(dia) || 10;
+      const nextDate = nextFixedDay(targetDay);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const ymd = `${nextDate.getFullYear()}-${pad(nextDate.getMonth() + 1)}-${pad(nextDate.getDate())}`;
+      setValue("primeira_parcela_data", ymd, { shouldDirty: false });
+    }
+  }, [primeiraData, dia, setValue]);
+
   const rowValor = resolveSelectedRowValue(lines, selecionada);
   const hasRowForSelected = !!selecionada && rowValor !== null;
   const valorMatricula = currencyRemoveMaskToNumber(String(inscricaoMasked || "")) || 0;
@@ -158,11 +177,46 @@ export function PaymentScheduleSection({
 
   return (
     <div className="mt-6 rounded-xl border p-4 space-y-4">
-      <div>
-        <h4 className="text-sm font-semibold">Programação de Pagamento</h4>
-        <p className="text-xs text-muted-foreground">
-          Define a parcela do financiamento, a forma de recebimento da matrícula e as datas de vencimento. Alimenta o contrato ({`{tabela_parcelas}`}) e as cobranças do Asaas.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-semibold">Programação de Pagamento</h4>
+          <p className="text-xs text-muted-foreground">
+            Define a parcela do financiamento, a forma de recebimento da matrícula e as datas de vencimento. Alimenta o contrato ({`{tabela_parcelas}`}) e as cobranças do Asaas.
+          </p>
+        </div>
+
+        {/* Atalhos Rápidos de Simulação de Parcelas */}
+        {options.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0 bg-muted/40 p-1.5 rounded-lg border">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1 mr-1">
+              <Sparkles className="w-3 h-3 text-amber-500 fill-amber-500" />
+              Simular:
+            </span>
+            {options.map((opt) => {
+              const isSelected = String(selecionada) === String(opt.value);
+              return (
+                <Button
+                  key={`quick-${opt.value}`}
+                  type="button"
+                  size="sm"
+                  variant={isSelected ? "default" : "outline"}
+                  className={`h-6 px-2 text-xs font-semibold rounded-md transition-all ${
+                    isSelected ? "shadow-xs" : "bg-background hover:bg-muted/70 text-foreground"
+                  }`}
+                  onClick={() => {
+                    if (setValue) {
+                      setValue("parcela_selecionada", opt.value, { shouldDirty: true });
+                    }
+                    onSelectParcela?.(opt.value);
+                  }}
+                  title={`Selecionar ${opt.label}`}
+                >
+                  {opt.value}x
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

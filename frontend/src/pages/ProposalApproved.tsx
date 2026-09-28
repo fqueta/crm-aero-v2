@@ -67,7 +67,7 @@ export default function ProposalApproved() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
@@ -75,10 +75,10 @@ export default function ProposalApproved() {
 
   if (!proposal) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="max-w-md">
+      <div className="min-h-screen bg-slate-50 dark:bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full border-border/60">
           <CardHeader>
-            <CardTitle>Proposta não encontrada</CardTitle>
+            <CardTitle className="text-foreground">Proposta não encontrada</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -86,23 +86,23 @@ export default function ProposalApproved() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 dark:bg-background flex flex-col text-foreground transition-colors duration-300">
       <PublicHeader />
-      <div className="flex-1 container mx-auto px-4 py-8 flex flex-col items-center justify-center max-w-2xl">
-        <Card className="w-full">
+      <div className="flex-1 container mx-auto px-4 py-12 flex flex-col items-center justify-center max-w-2xl">
+        <Card className="w-full border-border/60 shadow-md">
           <CardHeader className="text-center">
-            <div className="mx-auto bg-green-100 text-green-600 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+            <div className="mx-auto bg-green-100 dark:bg-green-950/50 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800/50 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
               <CheckCircle className="w-8 h-8" />
             </div>
-            <CardTitle className="text-2xl text-green-800">
+            <CardTitle className="text-2xl text-green-800 dark:text-green-300 font-bold">
               Proposta Aguardando Assinatura Digital!
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-500 dark:text-zinc-400 mt-1">
               A proposta foi aprovada e está aguardando assinatura digital.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center space-y-4">
-            <p className="text-gray-600">
+            <p className="text-slate-600 dark:text-zinc-300 leading-relaxed">
               Obrigado{" "}
               <strong>
                 {proposal.client?.name ||
@@ -115,18 +115,18 @@ export default function ProposalApproved() {
             </p>
 
             {(proposal as any)?.processo_assinatura?.signers?.[0]?.sign_url && (
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-4 text-left">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 block">
+              <div className="bg-slate-50 dark:bg-zinc-900/60 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 mt-4 text-left">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400 mb-2 block">
                   Link para Assinatura
                 </label>
                 <div className="flex gap-2 items-center">
-                  <code className="flex-1 bg-white border border-slate-200 rounded px-3 py-2 text-sm text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap h-10 flex items-center">
+                  <code className="flex-1 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded px-3 py-2 text-sm text-slate-700 dark:text-zinc-300 overflow-hidden text-ellipsis whitespace-nowrap h-10 flex items-center">
                     {(proposal as any).processo_assinatura.signers[0].sign_url}
                   </code>
                   <Button
                     variant="outline"
                     size="icon"
-                    className="h-10 w-10 shrink-0"
+                    className="h-10 w-10 shrink-0 border-border/80"
                     onClick={() => {
                       navigator.clipboard.writeText(
                         (proposal as any).processo_assinatura.signers[0]
@@ -140,7 +140,7 @@ export default function ProposalApproved() {
                   </Button>
                   <Button
                     variant="default"
-                    className="h-10 shrink-0 bg-blue-600 hover:bg-blue-700"
+                    className="h-10 shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-medium"
                     onClick={() =>
                       window.open(
                         (proposal as any).processo_assinatura.signers[0]
@@ -159,6 +159,7 @@ export default function ProposalApproved() {
             <div className="pt-4">
               <Button
                 variant="outline"
+                className="border-border/80"
                 onClick={() =>
                   window.open("https://aeroclubejf.com.br", "_blank")
                 }

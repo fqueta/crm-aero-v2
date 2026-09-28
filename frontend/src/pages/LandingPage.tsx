@@ -10,9 +10,8 @@ import { PublicFooter } from "@/components/layout/PublicFooter";
 /**
  * LandingPage
  * pt-BR: Página inicial alinhada ao tema do Aeroclube de Juiz de Fora (ACJF).
- *        Atualiza paleta de cores para tons de azul, conteúdo e chamadas.
- * en-US: Home page aligned to Aeroclube de Juiz de Fora theme.
- *        Updates palette to blue tones, content and CTAs.
+ *        Atualiza paleta de cores para tons de azul, conteúdo, chamadas e suporte a modo escuro.
+ * en-US: Home page aligned to Aeroclube de Juiz de Fora theme with dark mode support.
  */
 const LandingPage = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -37,29 +36,29 @@ const LandingPage = () => {
   const permission_id: any = user?.permission_id;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-sky-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-50 to-indigo-50/30 dark:from-slate-950 dark:via-zinc-950 dark:to-slate-950 text-foreground flex flex-col transition-colors duration-300">
       <PublicHeader />
 
       {/* Hero Section */}
-      <section className="py-16 px-4">
+      <section className="py-16 sm:py-20 md:py-24 px-4 flex-1 flex items-center">
         <div className="container mx-auto text-center">
-          <div className="mb-8">
-            <h1 className="text-5xl md:text-5xl font-bold text-blue-800 mb-6">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-blue-900 dark:text-blue-100 mb-6 leading-tight">
               Bem-vindo ao ACJF
-              <span className="text-blue-600 block">Toda formação aeronáutica em um só lugar</span>
+              <span className="text-blue-600 dark:text-blue-400 block mt-2">Toda formação aeronáutica em um só lugar</span>
             </h1>
-            <p className="text-lg text-blue-700 mb-6 max-w-3xl mx-auto">
+            <p className="text-base sm:text-lg text-slate-700 dark:text-slate-300 mb-8 max-w-2xl mx-auto leading-relaxed">
               Somos a escola focada e comprometida com a excelência da sua formação e seu sucesso.
               Conheça nosso Plano de Formação e alcance as melhores companhias aéreas.
             </p>
-            <div className="flex gap-3 justify-center">
-              <a href="https://aeroclubejf.com.br/" target="_blank" rel="noreferrer">
-                <Button size="lg" className="bg-blue-700 hover:bg-blue-800 text-white">
+            <div className="flex flex-col sm:flex-row gap-3.5 justify-center items-center">
+              <a href="https://aeroclubejf.com.br/" target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+                <Button size="lg" className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium shadow-md shadow-blue-500/20 h-12 px-6">
                   Conhecer o site
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </a>
-              <Button size="lg" variant="outline" asChild className="border-blue-300 text-blue-700 hover:bg-blue-50">
+              <Button size="lg" variant="outline" asChild className="w-full sm:w-auto border-blue-300 dark:border-zinc-700 bg-white/80 dark:bg-zinc-900 text-blue-700 dark:text-zinc-100 hover:bg-blue-50 dark:hover:bg-zinc-800 font-medium h-12 px-6 shadow-sm">
                 <Link to="/public-client-form">Fazer cadastro</Link>
               </Button>
             </div>
@@ -68,60 +67,60 @@ const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 px-4 bg-white/60">
+      <section className="py-20 px-4 bg-white/70 dark:bg-zinc-900/40 border-y border-blue-100/60 dark:border-zinc-800/80 backdrop-blur-sm">
         <div className="container mx-auto">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <Card className="border-blue-200 hover:shadow-lg transition-shadow">
-              <CardHeader className="text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <BookOpen className="h-8 w-8 text-blue-700" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+            <Card className="border-blue-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/80 hover:shadow-xl dark:hover:border-blue-800/60 transition-all duration-300">
+              <CardHeader className="text-center pb-2">
+                <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <BookOpen className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                 </div>
-                <CardTitle className="text-blue-800">Curso Teórico</CardTitle>
+                <CardTitle className="text-slate-900 dark:text-zinc-100 text-xl font-bold">Curso Teórico</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription className="text-center text-muted-foreground">
+                <CardDescription className="text-center text-slate-600 dark:text-zinc-400 text-sm leading-relaxed">
                   Todos os cursos homologados pela ANAC.
                 </CardDescription>
               </CardContent>
             </Card>
 
-            <Card className="border-blue-200 hover:shadow-lg transition-shadow">
-              <CardHeader className="text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Plane className="h-8 w-8 text-blue-700" />
+            <Card className="border-blue-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/80 hover:shadow-xl dark:hover:border-blue-800/60 transition-all duration-300">
+              <CardHeader className="text-center pb-2">
+                <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Plane className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                 </div>
-                <CardTitle className="text-blue-800">Curso Prático</CardTitle>
+                <CardTitle className="text-slate-900 dark:text-zinc-100 text-xl font-bold">Curso Prático</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription className="text-center text-muted-foreground">
+                <CardDescription className="text-center text-slate-600 dark:text-zinc-400 text-sm leading-relaxed">
                   Frota completa e estrutura dedicada para treinamento.
                 </CardDescription>
               </CardContent>
             </Card>
 
-            <Card className="border-blue-200 hover:shadow-lg transition-shadow">
-              <CardHeader className="text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Wrench className="h-8 w-8 text-blue-700" />
+            <Card className="border-blue-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/80 hover:shadow-xl dark:hover:border-blue-800/60 transition-all duration-300">
+              <CardHeader className="text-center pb-2">
+                <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Wrench className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                 </div>
-                <CardTitle className="text-blue-800">Revalidações</CardTitle>
+                <CardTitle className="text-slate-900 dark:text-zinc-100 text-xl font-bold">Revalidações</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription className="text-center text-muted-foreground">
+                <CardDescription className="text-center text-slate-600 dark:text-zinc-400 text-sm leading-relaxed">
                   Renovação de todas as carteiras.
                 </CardDescription>
               </CardContent>
             </Card>
 
-            <Card className="border-blue-200 hover:shadow-lg transition-shadow">
-              <CardHeader className="text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Compass className="h-8 w-8 text-blue-700" />
+            <Card className="border-blue-100 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/80 hover:shadow-xl dark:hover:border-blue-800/60 transition-all duration-300">
+              <CardHeader className="text-center pb-2">
+                <div className="w-16 h-16 bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Compass className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                 </div>
-                <CardTitle className="text-blue-800">Especializações</CardTitle>
+                <CardTitle className="text-slate-900 dark:text-zinc-100 text-xl font-bold">Especializações</CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription className="text-center text-muted-foreground">
+                <CardDescription className="text-center text-slate-600 dark:text-zinc-400 text-sm leading-relaxed">
                   Cursos para elevar sua perícia.
                 </CardDescription>
               </CardContent>
@@ -131,21 +130,21 @@ const LandingPage = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4 bg-gradient-to-r from-blue-700 to-blue-800">
+      <section className="py-20 px-4 bg-gradient-to-r from-blue-700 via-blue-800 to-blue-900 dark:from-blue-950 dark:via-slate-900 dark:to-zinc-950 border-t border-transparent dark:border-zinc-800 text-white">
         <div className="container mx-auto text-center">
-          <h2 className="text-4xl font-bold text-white mb-6">Pronto para decolar?</h2>
-          <p className="text-lg text-blue-100 mb-8 max-w-2xl mx-auto">
+          <h2 className="text-3xl sm:text-4xl font-bold mb-4 tracking-tight">Pronto para decolar?</h2>
+          <p className="text-base sm:text-lg text-blue-100 dark:text-slate-300 mb-8 max-w-2xl mx-auto leading-relaxed">
             Cadastre-se e avance na sua formação aeronáutica com o Aeroclube JF.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="bg-white text-blue-800 hover:bg-blue-100" asChild>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Button size="lg" className="w-full sm:w-auto bg-white text-blue-900 hover:bg-blue-50 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 font-semibold shadow-lg shadow-blue-950/30 h-12 px-6" asChild>
               <Link to="/public-client-form">
                 Cadastrar-se
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <a href="https://aeroclubejf.com.br/" target="_blank" rel="noreferrer">
-              <Button size="lg" variant="outline" className="border-white text-white hover:bg-white hover:text-blue-800">
+            <a href="https://aeroclubejf.com.br/" target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+              <Button size="lg" variant="outline" className="w-full sm:w-auto border-white/80 text-white hover:bg-white/10 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800 h-12 px-6">
                 Conhecer o site
               </Button>
             </a>

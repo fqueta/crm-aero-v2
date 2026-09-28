@@ -24,7 +24,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Save, CheckCircle, Plus, Pencil, User, Users, Layers, Wallet, Table as TableIcon, CircleDollarSign, MessageSquare, ArrowRight, Settings, Trash2, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { ArrowLeft, FileText, Save, CheckCircle, Plus, Pencil, User, Users, Layers, Wallet, Table as TableIcon, CircleDollarSign, MessageSquare, ArrowRight, Settings, Trash2, ChevronDown, ChevronUp, Clock, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Combobox, useComboboxOptions } from '@/components/ui/combobox';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -182,9 +182,10 @@ export default function ProposalsCreate() {
   const [courseSearch, setCourseSearch] = useState('');
   const [consultantSearch, setConsultantSearch] = useState('');
   const [classSearch, setClassSearch] = useState('');
-  // Responsável: controle de exibição e busca
-  // Responsible: visibility toggle and search term
+  // Responsável e Observações: controle de exibição sob demanda
+  // Responsible & Observations: visibility toggle and search term
   const [showResponsible, setShowResponsible] = useState(false);
+  const [showObservacoes, setShowObservacoes] = useState(false);
   const [responsibleSearch, setResponsibleSearch] = useState('');
   const [localResponsibles, setLocalResponsibles] = useState<any[]>([]);
   const [proposalCurrency, setProposalCurrency] = useState<'BRL' | 'USD'>('BRL');
@@ -567,6 +568,13 @@ export default function ProposalsCreate() {
     }
   );
   const selectedResponsibleId = form.watch('id_responsavel');
+  const hasResponsibleValue = Boolean(selectedResponsibleId);
+  const isResponsibleVisible = showResponsible || hasResponsibleValue;
+
+  const currentObsValue = form.watch('obs');
+  const hasObsValue = Boolean(currentObsValue && currentObsValue !== '<p></p>' && currentObsValue.trim() !== '');
+  const isObsVisible = showObservacoes || hasObsValue;
+
   const { data: selectedResponsibleDetail } = useResponsible(String(selectedResponsibleId || ''), { enabled: !!selectedResponsibleId });
   // Opções de responsáveis usando o endpoint dedicado
   // Responsible options using the dedicated endpoint
@@ -640,6 +648,8 @@ export default function ProposalsCreate() {
     }
   );
 
+  const [customQuickLines, setCustomQuickLines] = useState<Array<{ parcelas: string; valor: string; desconto: string }>>([]);
+
   /**
    * scheduleLines
    * pt-BR: Linhas da tabela de parcelamento selecionada (config.parcelas) para
@@ -649,18 +659,21 @@ export default function ProposalsCreate() {
    */
   const selectedParcelamentoId = form.watch('parcelamento_id');
   const scheduleLines = useMemo(() => {
-    const table: any = (installmentsList || []).find((t: any) => String(t?.id) === String(selectedParcelamentoId || ''));
-    const cfg = table?.config || {};
-    const raw = cfg?.parcelas;
-    const arr: any[] = Array.isArray(raw) ? raw : Object.values(raw || {});
-    return arr
-      .filter((p: any) => String(p?.parcela ?? '').trim() !== '')
-      .map((p: any) => ({
-        parcelas: String(p?.parcela ?? ''),
-        valor: String(p?.valor ?? ''),
-        desconto: String(p?.desconto ?? ''),
-      }));
-  }, [installmentsList, selectedParcelamentoId]);
+    if (selectedParcelamentoId) {
+      const table: any = (installmentsList || []).find((t: any) => String(t?.id) === String(selectedParcelamentoId || ''));
+      const cfg = table?.config || {};
+      const raw = cfg?.parcelas;
+      const arr: any[] = Array.isArray(raw) ? raw : Object.values(raw || {});
+      return arr
+        .filter((p: any) => String(p?.parcela ?? '').trim() !== '')
+        .map((p: any) => ({
+          parcelas: String(p?.parcela ?? ''),
+          valor: String(p?.valor ?? ''),
+          desconto: String(p?.desconto ?? ''),
+        }));
+    }
+    return customQuickLines;
+  }, [installmentsList, selectedParcelamentoId, customQuickLines]);
   /**
    * normalizeSituationsList
    * pt-BR: Normaliza a resposta do hook de situações de matrícula em uma lista simples.
@@ -1269,6 +1282,17 @@ export default function ProposalsCreate() {
     // Extrai preço do formato "preco::idx" e normaliza para string decimal
     const [rawPrice] = String(values.gera_valor || '').split('::');
     const geraValorPreco = currencyRemoveMaskToString(rawPrice || '') || '';
+
+    // Garante que a situação seja enviada (padrão: "Interessado")
+    let situacaoId = values.situacao_id || '';
+    if (!situacaoId && Array.isArray(enrollmentSituations) && enrollmentSituations.length > 0) {
+      const interessado = enrollmentSituations.find(
+        (s: any) => String(s?.slug || '').toLowerCase() === 'int' || 
+                    String(s?.name || s?.label || s?.nome || '').toLowerCase().includes('interessad')
+      );
+      situacaoId = String(interessado?.id || enrollmentSituations[0]?.id || '');
+    }
+
     const payload: any = {
       id_cliente: values.id_cliente,
       id_curso: values.id_curso,
@@ -1280,9 +1304,9 @@ export default function ProposalsCreate() {
       id_consultor: values.id_consultor,
       funnel_id: effectiveFunnelId ? Number(effectiveFunnelId) : undefined,
       stage_id: effectiveStageId ? Number(effectiveStageId) : undefined,
-      // pt-BR: Envia também o identificador da Situação selecionada no formulário
-      // en-US: Also sends the identifier of the selected Situation from the form
-      situacao_id: values.situacao_id || '',
+      // pt-BR: Envia o identificador da Situação (padrão: Interessado)
+      // en-US: Sends Situation identifier (default: Interessado)
+      situacao_id: situacaoId,
       id_responsavel: values.id_responsavel || '',
       // Normaliza campos monetários para formato plain number string
       desconto: normalizeMonetaryToPlain(values.desconto || '0,00') || '0.00',
@@ -1669,7 +1693,7 @@ export default function ProposalsCreate() {
                     <div className="space-y-4">
                       <div className="flex items-center gap-2 border-b pb-2">
                         <User className="w-4 h-4 text-primary" />
-                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Identificação e Status</h3>
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Identificação</h3>
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1737,32 +1761,6 @@ export default function ProposalsCreate() {
                                 searchTerm={consultantSearch}
                                 debounceMs={250}
                               />
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      {/* Situação */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-                        <FormField
-                          control={form.control}
-                          name="situacao_id"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Situação</FormLabel>
-                              <Select value={field.value || ''} onValueChange={field.onChange} disabled={isLoadingEnrollmentSituations}>
-                                <SelectTrigger className="w-full h-10">
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {enrollmentSituations.map((s: any) => (
-                                    <SelectItem key={String(s?.id)} value={String(s?.id)}>
-                                      {s?.label || s?.name || s?.nome || s?.description || `Situação ${String(s?.id ?? '')}`}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -1856,72 +1854,138 @@ export default function ProposalsCreate() {
                           )}
                         />
 
-                        {/* Responsável Adicional (Opcional) */}
-                        <FormField
-                          control={form.control}
-                          name="id_responsavel"
-                          render={({ field }) => (
-                            <FormItem className="md:col-span-2">
-                              <FormLabel>Responsável Adicional (Opcional)</FormLabel>
-                              <Combobox
-                                options={responsibleOptionsWithSelected}
-                                value={field.value}
-                                onValueChange={field.onChange}
-                                placeholder="Selecione o responsável"
-                                searchPlaceholder="Pesquisar responsável pelo nome..."
-                                emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
-                                disabled={isLoadingResponsibles}
-                                loading={isLoadingResponsibles}
-                                onSearch={setResponsibleSearch}
-                                searchTerm={responsibleSearch}
-                                debounceMs={250}
-                                header={({ setOpen }) => (
+                        {/* Responsável Adicional (Opcional - quando aberto) */}
+                        {isResponsibleVisible && (
+                          <FormField
+                            control={form.control}
+                            name="id_responsavel"
+                            render={({ field }) => (
+                              <FormItem className="md:col-span-2 animate-in fade-in duration-200">
+                                <div className="flex items-center justify-between">
+                                  <FormLabel>Responsável Adicional (Opcional)</FormLabel>
                                   <Button
+                                    type="button"
                                     variant="ghost"
-                                    className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
                                     onClick={() => {
-                                      setIsQuickResponsibleOpen(true);
-                                      setOpen(false);
+                                      field.onChange('');
+                                      setShowResponsible(false);
                                     }}
                                   >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Cadastrar Novo Responsável
+                                    Ocultar / Limpar
                                   </Button>
-                                )}
-                              />
+                                </div>
+                                <Combobox
+                                  options={responsibleOptionsWithSelected}
+                                  value={field.value}
+                                  onValueChange={field.onChange}
+                                  placeholder="Selecione o responsável"
+                                  searchPlaceholder="Pesquisar responsável pelo nome..."
+                                  emptyText={responsibleOptionsWithSelected.length === 0 ? 'Nenhum responsável encontrado' : 'Digite para filtrar'}
+                                  disabled={isLoadingResponsibles}
+                                  loading={isLoadingResponsibles}
+                                  onSearch={setResponsibleSearch}
+                                  searchTerm={responsibleSearch}
+                                  debounceMs={250}
+                                  header={({ setOpen }) => (
+                                    <Button
+                                      variant="ghost"
+                                      className="w-full justify-start h-auto py-2 px-2 text-primary hover:text-primary hover:bg-primary/10"
+                                      onClick={() => {
+                                        setIsQuickResponsibleOpen(true);
+                                        setOpen(false);
+                                      }}
+                                    >
+                                      <Plus className="h-4 w-4 mr-2" />
+                                      Cadastrar Novo Responsável
+                                    </Button>
+                                  )}
+                                />
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        )}
+
+                        {/* Botões opcionais em linha */}
+                        {(!isResponsibleVisible || !isObsVisible) && (
+                          <div className="md:col-span-2 flex flex-wrap items-center gap-2 pt-1">
+                            {!isResponsibleVisible && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowResponsible(true)}
+                                className="text-xs text-muted-foreground hover:text-primary gap-1.5 h-8 px-2"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Adicionar Responsável Adicional (Opcional)
+                              </Button>
+                            )}
+                            {!isObsVisible && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowObservacoes(true)}
+                                className="text-xs text-muted-foreground hover:text-primary gap-1.5 h-8 px-2"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
+                                Adicionar Observações Gerais (Opcional)
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Seção 3: Observações Gerais */}
+                    {isObsVisible && (
+                      <div className="space-y-4 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4 text-primary" />
+                            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Observações Gerais</h3>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              const currentVal = form.getValues('obs');
+                              if (!currentVal || currentVal === '<p></p>' || confirm('Deseja ocultar e limpar as observações?')) {
+                                form.setValue('obs', '');
+                                setShowObservacoes(false);
+                              }
+                            }}
+                          >
+                            Ocultar / Limpar
+                          </Button>
+                        </div>
+                        
+                        <FormField
+                          control={form.control}
+                          name="obs"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <RichTextEditor
+                                  value={field.value || ''}
+                                  onChange={field.onChange}
+                                  placeholder="Digite observações internas ou comerciais... Digite { ou Shift+Espaço para ver os shortcodes."
+                                  enableShortcodeHints
+                                  shortcodes={CONTRACT_SHORTCODES}
+                                />
+                              </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
                       </div>
-                    </div>
-
-                    {/* Seção 3: Observações Gerais */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 border-b pb-2">
-                        <MessageSquare className="w-4 h-4 text-primary" />
-                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Observações Gerais</h3>
-                      </div>
-                      
-                      <FormField
-                        control={form.control}
-                        name="obs"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                              <RichTextEditor
-                                value={field.value || ''}
-                                onChange={field.onChange}
-                                placeholder="Digite observações internas ou comerciais... Digite { ou Shift+Espaço para ver os shortcodes."
-                                enableShortcodeHints
-                                shortcodes={CONTRACT_SHORTCODES}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                    )}
 
                   </TabsContent>
 
@@ -2188,7 +2252,10 @@ export default function ProposalsCreate() {
                                     <Combobox
                                       options={installmentOptions}
                                       value={field.value}
-                                      onValueChange={field.onChange}
+                                      onValueChange={(val) => {
+                                        field.onChange(val);
+                                        if (val) setCustomQuickLines([]);
+                                      }}
                                       placeholder="Selecione a tabela de parcelamento"
                                       searchPlaceholder="Pesquisar tabela pelo nome..."
                                       emptyText={
@@ -2205,6 +2272,52 @@ export default function ProposalsCreate() {
                                   </FormItem>
                                 )}
                               />
+                            </div>
+
+                            {/* Barra de Simulação Rápida (1x, 6x, 10x, 12x, 18x, 24x) */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800">
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                                <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                <span>Simulação Rápida:</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {[1, 6, 10, 12, 18, 24].map((n) => {
+                                  const totalNum = currencyRemoveMaskToNumber(String(form.getValues('total') || '')) || 0;
+                                  const perParcel = totalNum > 0 ? totalNum / n : 0;
+                                  const currentParc = String(form.getValues('parcela_selecionada') || '');
+                                  const isCurrent = currentParc === String(n);
+
+                                  return (
+                                    <Button
+                                      key={`quick-sim-${n}`}
+                                      type="button"
+                                      size="sm"
+                                      variant={isCurrent ? "default" : "outline"}
+                                      className={`h-7 px-2.5 text-xs font-semibold rounded-lg transition-all ${
+                                        isCurrent ? "shadow-xs" : "bg-white dark:bg-zinc-800 hover:bg-zinc-100 text-foreground"
+                                      }`}
+                                      title={perParcel > 0 ? `${n}x de ${formatCurrencyBRL(perParcel)}` : `Simular ${n}x`}
+                                      onClick={() => {
+                                        const masked = formatCurrencyBRL(perParcel);
+                                        setCustomQuickLines([{
+                                          parcelas: String(n),
+                                          valor: masked,
+                                          desconto: 'R$ 0,00'
+                                        }]);
+                                        form.setValue('parcelamento_id', '');
+                                        form.setValue('parcela_selecionada', String(n), { shouldDirty: true });
+                                      }}
+                                    >
+                                      {n === 1 ? '1x (À vista)' : `${n}x`}
+                                      {perParcel > 0 && (
+                                        <span className={`ml-1 text-[10px] font-normal ${isCurrent ? 'opacity-90' : 'text-muted-foreground'}`}>
+                                          ({formatCurrencyBRL(perParcel)})
+                                        </span>
+                                      )}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
                             </div>
 
                             {/* Programação de Pagamento da matrícula */}

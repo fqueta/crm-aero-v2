@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { currencyRemoveMaskToNumber, currencyRemoveMaskToString, currencyApplyMask } from '@/lib/masks/currency';
-import { DollarSign, Plane, ChevronDown, ChevronUp, RotateCcw, AlertTriangle, Settings2 } from 'lucide-react';
+import { DollarSign, Plane, ChevronDown, ChevronUp, RotateCcw, AlertTriangle, Settings2, Sparkles, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -177,6 +177,14 @@ export default function CourseModulesSelector({
     // pt-BR: Só prosseguimos se tivermos os módulos do curso carregados
     if (modules.length === 0) return;
 
+    // pt-BR: Para novas propostas (sem providedInitialSelections), pré-selecionamos a aeronave padrão
+    const defaultAircraft = courseLinkedAircrafts.length > 0 ? courseLinkedAircrafts[0] : null;
+    const defaultAircraftId = defaultAircraft ? String(defaultAircraft.id) : '';
+
+    if (!providedInitialSelections && defaultAircraftId && !globalAircraftId) {
+        setGlobalAircraftId(defaultAircraftId);
+    }
+
     setSelections(prev => {
         const next: Record<number, ModuleSelection> = {};
         modules.forEach((mod: any, idx: number) => {
@@ -187,28 +195,43 @@ export default function CourseModulesSelector({
                 return;
             }
 
-            // Fallback: Se não tem seleção inicial para este módulo, inicializa com valor padrão do curso
-            // Para Etapa 1, os valores vêm zerados por padrão no primeiro acesso se não houver dados gravados.
+            // Fallback: Se não tem seleção inicial para este módulo (nova proposta)
             const isEtapa1 = isModuleEtapa1(mod);
             let defaultPrice = 0;
-            if (mod.valor && !isEtapa1) {
-                defaultPrice = typeof mod.valor === 'number' 
-                    ? mod.valor 
-                    : currencyRemoveMaskToNumber(String(mod.valor));
+            let assignedAircraftId = '';
+
+            if (isEtapa1) {
+                // Etapa 1: usa valor base se configurado
+                if (mod.valor) {
+                    defaultPrice = typeof mod.valor === 'number' 
+                        ? mod.valor 
+                        : currencyRemoveMaskToNumber(String(mod.valor));
+                }
+            } else {
+                // Etapas práticas (Tipo 2): verifica se aeronave padrão é compatível
+                const allowed = getAllowedAircrafts(mod);
+                const canUseDefault = allowed.some(a => String(a.id) === defaultAircraftId);
+                if (canUseDefault && defaultAircraft) {
+                    assignedAircraftId = defaultAircraftId;
+                    const credits = Number(mod.limite || 0);
+                    defaultPrice = credits * getAppliedRate(defaultAircraft, credits);
+                } else if (mod.valor) {
+                    defaultPrice = typeof mod.valor === 'number' 
+                        ? mod.valor 
+                        : currencyRemoveMaskToNumber(String(mod.valor));
+                }
             }
 
             next[idx] = {
-                selected: false,
+                selected: true, // Pré-seleciona ativo por padrão para já calcular de imediato
                 credits: Number(mod.limite || 0),
-                aircraftId: '',
+                aircraftId: assignedAircraftId,
                 price: defaultPrice,
                 course_id_ref: currentCourseId
             } as any;
         });
         
-        // pt-BR: Só marcamos como hidratado se realmente recebemos dados para hidratar
-        // ou se o curso mudou (reset). Se providedInitialSelections ainda for undefined/null,
-        // esperamos a próxima execução para tentar pegar os dados do banco.
+        // pt-BR: Se recebemos seleções prontas do banco, marcamos como hidratado
         if (providedInitialSelections) {
             hydratedRef.current = currentCourseId;
         }
@@ -216,7 +239,7 @@ export default function CourseModulesSelector({
         return next;
     });
 
-  }, [course?.id, providedInitialSelections]);
+  }, [course?.id, providedInitialSelections, courseLinkedAircrafts]);
 
 
   // Agrupa módulos por etapa
@@ -601,6 +624,67 @@ export default function CourseModulesSelector({
     return courseLinkedAircrafts;
   };
 
+  /**
+   * handleApplyDefaultCourseSetup
+   * pt-BR: Ação rápida de 1-clique para aplicar a aeronave padrão e marcar todos os módulos calculados.
+   * en-US: 1-click quick action to apply default aircraft and select all calculated modules.
+   */
+  const handleApplyDefaultCourseSetup = () => {
+    const modules = Array.isArray(course?.modulos) ? course.modulos : [];
+    if (modules.length === 0) return;
+
+    const defaultAircraft = courseLinkedAircrafts.length > 0 ? courseLinkedAircrafts[0] : null;
+    const defaultAircraftId = defaultAircraft ? String(defaultAircraft.id) : '';
+
+    if (defaultAircraftId) {
+      setGlobalAircraftId(defaultAircraftId);
+    }
+
+    setSelections(prev => {
+      const next: Record<number, ModuleSelection> = {};
+      modules.forEach((mod: any, idx: number) => {
+        const isEtapa1 = isModuleEtapa1(mod);
+        let defaultPrice = 0;
+        let assignedAircraftId = '';
+
+        if (isEtapa1) {
+          if (mod.valor) {
+            defaultPrice = typeof mod.valor === 'number' 
+              ? mod.valor 
+              : currencyRemoveMaskToNumber(String(mod.valor));
+          }
+        } else {
+          const allowed = getAllowedAircrafts(mod);
+          const canUseDefault = allowed.some(a => String(a.id) === defaultAircraftId);
+          if (canUseDefault && defaultAircraft) {
+            assignedAircraftId = defaultAircraftId;
+            const credits = Number(mod.limite || 0);
+            defaultPrice = credits * getAppliedRate(defaultAircraft, credits);
+          } else if (mod.valor) {
+            defaultPrice = typeof mod.valor === 'number' 
+              ? mod.valor 
+              : currencyRemoveMaskToNumber(String(mod.valor));
+          }
+        }
+
+        next[idx] = {
+          selected: true,
+          credits: Number(mod.limite || 0),
+          aircraftId: assignedAircraftId,
+          price: defaultPrice,
+        };
+      });
+      return next;
+    });
+
+    toast?.({
+      title: "Configuração Padrão Aplicada",
+      description: defaultAircraft 
+        ? `Aeronave ${defaultAircraft.nome || defaultAircraft.matricula} aplicada e todos os módulos calculados!`
+        : "Todos os módulos foram selecionados e calculados!",
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Controles Globais */}
@@ -644,7 +728,7 @@ export default function CourseModulesSelector({
               </div>
             )}
 
-            <div className="space-y-1 min-w-[280px]">
+            <div className="space-y-1 min-w-[260px]">
               <Label className="text-xs text-muted-foreground uppercase font-semibold">Aplicar aeronave em massa</Label>
               <Select value={globalAircraftId} onValueChange={handleApplyGlobalAircraft}>
                 <SelectTrigger className="h-8 bg-background">
@@ -673,6 +757,22 @@ export default function CourseModulesSelector({
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Botão de Ação Rápida de 1-Clique */}
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase font-semibold invisible block">Ação</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleApplyDefaultCourseSetup}
+                className="h-8 text-xs font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10 shadow-xs"
+                title="Aplica a aeronave padrão e calcula todos os módulos da proposta com 1 clique"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                Configurar Padrão
+              </Button>
+            </div>
           </div>
 
           <div className="hidden md:block">
@@ -682,6 +782,32 @@ export default function CourseModulesSelector({
           </div>
         </CardContent>
       </Card>
+
+      {/* Banner Informativo / Dica amigável se nenhum módulo estiver selecionado ou total zerado */}
+      {(!Object.values(selections).some(s => s.selected && s.price > 0)) && (
+        <div className="flex items-start justify-between gap-3 p-3.5 rounded-lg border border-blue-200 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200 text-xs shadow-xs animate-in fade-in-50 duration-300">
+          <div className="flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold text-blue-800 dark:text-blue-300">
+                Como calcular os valores deste curso prático?
+              </p>
+              <p className="text-blue-700/80 dark:text-blue-300/80 mt-0.5">
+                Para calcular os valores, você pode selecionar a aeronave desejada no campo acima ou clicar diretamente em <strong>"Configurar Padrão"</strong> para aplicar a aeronave e selecionar todos os módulos com 1 clique.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleApplyDefaultCourseSetup}
+            className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white shrink-0 shadow-xs gap-1.5"
+          >
+            <Sparkles className="w-3 h-3 text-amber-300 fill-amber-300" />
+            Aplicar Padrão Agora
+          </Button>
+        </div>
+      )}
 
       {/* Painel de Tarifas de Aeronaves — Editável por Proposta */}
       {courseLinkedAircrafts.length > 0 && (

@@ -112,6 +112,7 @@ import PeriodDetail from "./pages/school/PeriodDetail";
 import EnrollmentSituationPage from "./pages/school/EnrollmentSituation";
 import FormationControl from "./pages/school/FormationControl";
 import Interested from "./pages/school/Interested";
+import Ganhos from "./pages/school/Ganhos";
 
 import SiteComponentsList from "./pages/SiteComponentsList";
 import SiteComponentsForm from "./pages/SiteComponentsForm";
@@ -374,6 +375,20 @@ const App = () => {
                 <AdminProtectedRoute>
                   <AppLayout>
                     <EnrollmentSituationPage />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              {/* Escola / Ganhos */}
+              <Route path="/admin/school/ganhos" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <PermissionGuard
+                      required="school.ganhos.view"
+                      menuPath="/admin/school/ganhos"
+                      requireRemote={false}
+                    >
+                      <Ganhos />
+                    </PermissionGuard>
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

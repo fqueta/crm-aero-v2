@@ -5,7 +5,6 @@ import { Search, Loader2, UserSearch, Clock, Trash2, ChevronRight, GraduationCap
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { clientsService } from '@/services/clientsService';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { BaseApiService } from '@/services/BaseApiService';
@@ -53,7 +52,7 @@ function highlightText(text: string | undefined | null, query: string): React.Re
   if (parts.length === 1) return text;
   return parts.map((part, i) =>
     part.toLowerCase() === query.toLowerCase()
-      ? React.createElement('strong', { key: i, className: 'font-bold text-blue-600' }, part)
+      ? React.createElement('strong', { key: i, className: 'font-bold text-blue-600 dark:text-blue-400' }, part)
       : part
   );
 }
@@ -204,32 +203,36 @@ export function QuickClientSearch() {
     return (
       <TableRow 
         key={`client-${client.id}`}
-        className={`cursor-pointer transition-colors group ${isSelected ? 'bg-blue-50/70 border-l-2 border-l-blue-500' : 'bg-white hover:bg-slate-50 border-l-2 border-l-transparent'}`}
+        className={`cursor-pointer transition-colors border-b border-slate-100 dark:border-zinc-800/60 group ${
+          isSelected 
+            ? 'bg-blue-50/70 dark:bg-blue-950/60 border-l-2 border-l-blue-500 dark:border-l-blue-400' 
+            : 'bg-white dark:bg-zinc-900/40 hover:bg-slate-50 dark:hover:bg-zinc-800/60 border-l-2 border-l-transparent'
+        }`}
         onClick={() => handleSelectItem({ ...client, _type: 'client' })}
         onMouseEnter={() => setSelectedIndex(index)}
       >
         <TableCell>
           <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10 border border-slate-100 shadow-sm">
-              <AvatarFallback className="bg-blue-50 text-blue-700 text-xs font-semibold">
+            <Avatar className="h-10 w-10 border border-slate-100 dark:border-zinc-800 shadow-sm">
+              <AvatarFallback className="bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 text-xs font-semibold">
                 {getInitials(client.name)}
               </AvatarFallback>
             </Avatar>
             <div>
-              <div className="font-semibold text-slate-800 flex items-center gap-2">
-                {isHistory && <Clock className="h-3 w-3 text-slate-400" title="Do seu histórico" />}
+              <div className="font-semibold text-slate-800 dark:text-zinc-100 flex items-center gap-2">
+                {isHistory && <Clock className="h-3 w-3 text-slate-400 dark:text-zinc-500" title="Do seu histórico" />}
                 {highlightText(client.name, q)}
               </div>
-              {client.cpf && <div className="text-xs text-slate-500 font-mono mt-0.5">Doc: {highlightText(formatCPF(client.cpf), q)}</div>}
+              {client.cpf && <div className="text-xs text-slate-500 dark:text-zinc-400 font-mono mt-0.5">Doc: {highlightText(formatCPF(client.cpf), q)}</div>}
             </div>
           </div>
         </TableCell>
         <TableCell>
-          {(client.celular || client.phone) && <div className="text-sm font-medium text-slate-700">{highlightText(formatPhone(client.celular || client.phone), q)}</div>}
-          {client.email && <div className="text-xs text-slate-500 truncate max-w-[250px]" title={client.email}>{highlightText(client.email, q)}</div>}
+          {(client.celular || client.phone) && <div className="text-sm font-medium text-slate-700 dark:text-zinc-200">{highlightText(formatPhone(client.celular || client.phone), q)}</div>}
+          {client.email && <div className="text-xs text-slate-500 dark:text-zinc-400 truncate max-w-[250px]" title={client.email}>{highlightText(client.email, q)}</div>}
         </TableCell>
         <TableCell className="text-right">
-          <ChevronRight className={`h-5 w-5 ml-auto transition-colors ${isSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-blue-500'}`} />
+          <ChevronRight className={`h-5 w-5 ml-auto transition-colors ${isSelected ? 'text-blue-500 dark:text-blue-400' : 'text-slate-300 dark:text-zinc-600 group-hover:text-blue-500 dark:group-hover:text-blue-400'}`} />
         </TableCell>
       </TableRow>
     );
@@ -241,32 +244,36 @@ export function QuickClientSearch() {
     return (
       <TableRow
         key={`mat-${mat.id}`}
-        className={`cursor-pointer transition-colors group ${isSelected ? 'bg-blue-50/70 border-l-2 border-l-blue-500' : 'bg-white hover:bg-slate-50 border-l-2 border-l-transparent'}`}
+        className={`cursor-pointer transition-colors border-b border-slate-100 dark:border-zinc-800/60 group ${
+          isSelected 
+            ? 'bg-blue-50/70 dark:bg-blue-950/60 border-l-2 border-l-blue-500 dark:border-l-blue-400' 
+            : 'bg-white dark:bg-zinc-900/40 hover:bg-slate-50 dark:hover:bg-zinc-800/60 border-l-2 border-l-transparent'
+        }`}
         onClick={() => handleSelectItem({ ...mat, _type: 'matricula' })}
         onMouseEnter={() => setSelectedIndex(index)}
       >
         <TableCell>
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full border border-slate-100 shadow-sm flex items-center justify-center bg-emerald-50 text-emerald-700 text-xs font-semibold">
+            <div className="h-10 w-10 rounded-full border border-slate-100 dark:border-zinc-800 shadow-sm flex items-center justify-center bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
               M
             </div>
             <div>
-              <div className="font-semibold text-slate-800">{highlightText(`#${mat.id}`, q)} - {highlightText(mat.cliente?.name || mat.cliente?.nome || 'Sem cliente', q)}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{highlightText(mat.curso?.nome || mat.curso?.titulo || 'Sem curso', q)}</div>
+              <div className="font-semibold text-slate-800 dark:text-zinc-100">{highlightText(`#${mat.id}`, q)} - {highlightText(mat.cliente?.name || mat.cliente?.nome || 'Sem cliente', q)}</div>
+              <div className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">{highlightText(mat.curso?.nome || mat.curso?.titulo || 'Sem curso', q)}</div>
             </div>
           </div>
         </TableCell>
         <TableCell>
           <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-            mat.status === 'g' ? 'bg-green-100 text-green-700' :
-            mat.status === 'p' ? 'bg-red-100 text-red-700' :
-            'bg-gray-100 text-gray-700'
+            mat.status === 'g' ? 'bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-300' :
+            mat.status === 'p' ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300' :
+            'bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300'
           }`}>
             {mat.status === 'g' ? 'Ganho' : mat.status === 'p' ? 'Perda' : 'Atendimento'}
           </span>
         </TableCell>
         <TableCell className="text-right">
-          <ChevronRight className={`h-5 w-5 ml-auto transition-colors ${isSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-blue-500'}`} />
+          <ChevronRight className={`h-5 w-5 ml-auto transition-colors ${isSelected ? 'text-blue-500 dark:text-blue-400' : 'text-slate-300 dark:text-zinc-600 group-hover:text-blue-500 dark:group-hover:text-blue-400'}`} />
         </TableCell>
       </TableRow>
     );
@@ -278,30 +285,34 @@ export function QuickClientSearch() {
     return (
       <TableRow
         key={`curso-${curso.id}`}
-        className={`cursor-pointer transition-colors group ${isSelected ? 'bg-blue-50/70 border-l-2 border-l-blue-500' : 'bg-white hover:bg-slate-50 border-l-2 border-l-transparent'}`}
+        className={`cursor-pointer transition-colors border-b border-slate-100 dark:border-zinc-800/60 group ${
+          isSelected 
+            ? 'bg-blue-50/70 dark:bg-blue-950/60 border-l-2 border-l-blue-500 dark:border-l-blue-400' 
+            : 'bg-white dark:bg-zinc-900/40 hover:bg-slate-50 dark:hover:bg-zinc-800/60 border-l-2 border-l-transparent'
+        }`}
         onClick={() => handleSelectItem({ ...curso, _type: 'curso' })}
         onMouseEnter={() => setSelectedIndex(index)}
       >
         <TableCell>
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full border border-slate-100 shadow-sm flex items-center justify-center bg-violet-50 text-violet-700 text-xs font-semibold">
+            <div className="h-10 w-10 rounded-full border border-slate-100 dark:border-zinc-800 shadow-sm flex items-center justify-center bg-violet-50 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 text-xs font-semibold">
               C
             </div>
             <div>
-              <div className="font-semibold text-slate-800">{highlightText(curso.nome, q) || '-'}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{highlightText(curso.titulo, q)}</div>
+              <div className="font-semibold text-slate-800 dark:text-zinc-100">{highlightText(curso.nome, q) || '-'}</div>
+              <div className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">{highlightText(curso.titulo, q)}</div>
             </div>
           </div>
         </TableCell>
         <TableCell>
           <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-            curso.ativo === 's' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+            curso.ativo === 's' ? 'bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-300' : 'bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400'
           }`}>
             {curso.ativo === 's' ? 'Ativo' : 'Inativo'}
           </span>
         </TableCell>
         <TableCell className="text-right">
-          <ChevronRight className={`h-5 w-5 ml-auto transition-colors ${isSelected ? 'text-blue-500' : 'text-slate-300 group-hover:text-blue-500'}`} />
+          <ChevronRight className={`h-5 w-5 ml-auto transition-colors ${isSelected ? 'text-blue-500 dark:text-blue-400' : 'text-slate-300 dark:text-zinc-600 group-hover:text-blue-500 dark:group-hover:text-blue-400'}`} />
         </TableCell>
       </TableRow>
     );
@@ -314,39 +325,39 @@ export function QuickClientSearch() {
           <Search className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[1000px] top-[10%] translate-y-0 max-h-[85vh] flex flex-col p-0 overflow-hidden shadow-2xl">
-        <div className="p-4 border-b shrink-0 bg-white relative">
+      <DialogContent className="sm:max-w-[1000px] top-[10%] translate-y-0 max-h-[85vh] flex flex-col p-0 overflow-hidden shadow-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-foreground">
+        <div className="p-4 border-b border-slate-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-950 relative">
           <div className="relative pr-8">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 dark:text-zinc-500" />
             <Input 
               placeholder="Buscar clientes, matrículas ou cursos..." 
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleInputKeyDown}
-              className="text-lg py-6 pl-12 pr-4 bg-slate-50 border border-slate-200 focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:bg-white rounded-xl shadow-sm transition-all"
+              className="text-lg py-6 pl-12 pr-4 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:bg-white dark:focus-visible:bg-zinc-900 rounded-xl shadow-sm transition-all"
               autoFocus
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-0 bg-slate-50/50">
+        <div className="flex-1 overflow-auto p-0 bg-slate-50/50 dark:bg-zinc-950/50">
           {!debouncedQuery ? (
             history.length > 0 ? (
               <div className="p-4">
                 <div className="flex items-center justify-between mb-2 px-2">
-                  <h3 className="text-sm font-semibold text-slate-500 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-500 dark:text-zinc-400 flex items-center gap-2">
                     <Clock className="h-4 w-4" />
                     Consultas Recentes
                   </h3>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-slate-500 hover:text-red-600" onClick={clearHistory}>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-slate-500 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400" onClick={clearHistory}>
                     <Trash2 className="h-3 w-3 mr-1" /> Limpar
                   </Button>
                 </div>
                 <Table>
                   <TableHeader className="bg-transparent sticky top-0 z-10">
-                    <TableRow className="hover:bg-transparent border-b-slate-200">
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Contato</TableHead>
+                    <TableRow className="hover:bg-transparent border-b-slate-200 dark:border-b-zinc-800">
+                      <TableHead className="dark:text-zinc-400">Cliente</TableHead>
+                      <TableHead className="dark:text-zinc-400">Contato</TableHead>
                       <TableHead className="text-right w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -357,12 +368,12 @@ export function QuickClientSearch() {
               </div>
             ) : (
               <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-3">
-                <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center mb-2">
-                  <UserSearch className="h-8 w-8 text-slate-300" />
+                <div className="h-16 w-16 bg-slate-100 dark:bg-zinc-900 rounded-full flex items-center justify-center mb-2">
+                  <UserSearch className="h-8 w-8 text-slate-300 dark:text-zinc-600" />
                 </div>
-                <p className="font-medium text-slate-600">Busca Rápida de Clientes</p>
-                <p className="text-sm max-w-sm">Digite o nome, documento, e-mail ou o final do telefone para encontrar rapidamente.</p>
-                <p className="text-xs text-slate-400 mt-4">Pressione <kbd className="bg-white border shadow-sm rounded px-1.5 py-0.5 mx-1 font-mono text-[10px]">Ctrl</kbd> + <kbd className="bg-white border shadow-sm rounded px-1.5 py-0.5 mx-1 font-mono text-[10px]">Espaço</kbd> de qualquer lugar para abrir.</p>
+                <p className="font-medium text-slate-600 dark:text-zinc-200">Busca Rápida de Clientes</p>
+                <p className="text-sm max-w-sm text-slate-500 dark:text-zinc-400">Digite o nome, documento, e-mail ou o final do telefone para encontrar rapidamente.</p>
+                <p className="text-xs text-slate-400 dark:text-zinc-500 mt-4">Pressione <kbd className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm rounded px-1.5 py-0.5 mx-1 font-mono text-[10px] text-slate-600 dark:text-zinc-300">Ctrl</kbd> + <kbd className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm rounded px-1.5 py-0.5 mx-1 font-mono text-[10px] text-slate-600 dark:text-zinc-300">Espaço</kbd> de qualquer lugar para abrir.</p>
               </div>
             )
           ) : isLoading ? (
@@ -373,15 +384,15 @@ export function QuickClientSearch() {
             <div className="p-4 space-y-6">
               {clients.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-500 flex items-center gap-2 mb-2 px-2">
+                  <h3 className="text-sm font-semibold text-slate-500 dark:text-zinc-400 flex items-center gap-2 mb-2 px-2">
                     <UserSearch className="h-4 w-4" />
                     Clientes ({clients.length})
                   </h3>
                   <Table>
                     <TableHeader className="bg-transparent sticky top-0 z-10">
-                      <TableRow className="hover:bg-transparent border-b-slate-200">
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Contato</TableHead>
+                      <TableRow className="hover:bg-transparent border-b-slate-200 dark:border-b-zinc-800">
+                        <TableHead className="dark:text-zinc-400">Cliente</TableHead>
+                        <TableHead className="dark:text-zinc-400">Contato</TableHead>
                         <TableHead className="text-right w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -393,15 +404,15 @@ export function QuickClientSearch() {
               )}
               {matriculas.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-500 flex items-center gap-2 mb-2 px-2">
+                  <h3 className="text-sm font-semibold text-slate-500 dark:text-zinc-400 flex items-center gap-2 mb-2 px-2">
                     <GraduationCap className="h-4 w-4" />
                     Matrículas ({matriculas.length})
                   </h3>
                   <Table>
                     <TableHeader className="bg-transparent sticky top-0 z-10">
-                      <TableRow className="hover:bg-transparent border-b-slate-200">
-                        <TableHead>Matrícula</TableHead>
-                        <TableHead>Status</TableHead>
+                      <TableRow className="hover:bg-transparent border-b-slate-200 dark:border-b-zinc-800">
+                        <TableHead className="dark:text-zinc-400">Matrícula</TableHead>
+                        <TableHead className="dark:text-zinc-400">Status</TableHead>
                         <TableHead className="text-right w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -413,15 +424,15 @@ export function QuickClientSearch() {
               )}
               {cursos.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-500 flex items-center gap-2 mb-2 px-2">
+                  <h3 className="text-sm font-semibold text-slate-500 dark:text-zinc-400 flex items-center gap-2 mb-2 px-2">
                     <BookOpen className="h-4 w-4" />
                     Cursos ({cursos.length})
                   </h3>
                   <Table>
                     <TableHeader className="bg-transparent sticky top-0 z-10">
-                      <TableRow className="hover:bg-transparent border-b-slate-200">
-                        <TableHead>Curso</TableHead>
-                        <TableHead>Ativo</TableHead>
+                      <TableRow className="hover:bg-transparent border-b-slate-200 dark:border-b-zinc-800">
+                        <TableHead className="dark:text-zinc-400">Curso</TableHead>
+                        <TableHead className="dark:text-zinc-400">Ativo</TableHead>
                         <TableHead className="text-right w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -434,30 +445,30 @@ export function QuickClientSearch() {
             </div>
           ) : (
             <div className="p-16 text-center text-muted-foreground">
-              Nenhum resultado encontrado para "<span className="font-medium text-slate-700">{debouncedQuery}</span>".
+              Nenhum resultado encontrado para "<span className="font-medium text-slate-700 dark:text-zinc-200">{debouncedQuery}</span>".
             </div>
           )}
         </div>
-        <div className="shrink-0 p-2.5 px-4 border-t bg-slate-50/80 flex items-center justify-between text-[11px] text-slate-400 font-medium">
+        <div className="shrink-0 p-2.5 px-4 border-t border-slate-200 dark:border-zinc-800 bg-slate-50/80 dark:bg-zinc-950 flex items-center justify-between text-[11px] text-slate-400 dark:text-zinc-500 font-medium">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
               Navegar 
               <span className="flex gap-0.5">
-                <kbd className="bg-white border shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500">↓</kbd>
-                <kbd className="bg-white border shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500">↑</kbd>
+                <kbd className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500 dark:text-zinc-400">↓</kbd>
+                <kbd className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500 dark:text-zinc-400">↑</kbd>
               </span>
             </span>
             <span className="flex items-center gap-1.5">
               Selecionar 
-              <kbd className="bg-white border shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500">Enter</kbd>
+              <kbd className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500 dark:text-zinc-400">Enter</kbd>
             </span>
           </div>
           <div className="flex items-center gap-1.5">
             Abrir busca: 
             <span className="flex gap-0.5">
-              <kbd className="bg-white border shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500">Ctrl</kbd>
+              <kbd className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500 dark:text-zinc-400">Ctrl</kbd>
               <span className="text-[10px]">+</span>
-              <kbd className="bg-white border shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500">Espaço</kbd>
+              <kbd className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm rounded px-1.5 py-0.5 font-sans text-[10px] text-slate-500 dark:text-zinc-400">Espaço</kbd>
             </span>
           </div>
         </div>

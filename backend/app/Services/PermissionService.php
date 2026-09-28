@@ -135,6 +135,8 @@ class PermissionService
             $url = '/admin/settings/integrations';
         }elseif($name=='api.relatorios.contratos-vencidos.index' || $name == 'api.relatorios.contratos-vencidos.export' || $name == 'api.relatorios.contratos-vencidos.validade' || $name == 'api.relatorios.contratos-vencidos.whatsapp'){
             $url = '/reports/contratos_vencidos';
+        }elseif($name=='financial.reports.won-proposals'){
+            $url = '/school/ganhos';
         }elseif($name=='api.workflows.index' || $name == 'api.workflows.update' || $name == 'api.workflows.show' || $name == 'api.workflows.store' || $name == 'api.workflows.destroy' || $name == 'api.workflows.toggle-active'){
             $url = '/admin/settings/workflows';
         }elseif($name=='api.workflow-rules.index' || $name == 'api.workflow-rules.update' || $name == 'api.workflow-rules.show' || $name == 'api.workflow-rules.store' || $name == 'api.workflow-rules.destroy'){
