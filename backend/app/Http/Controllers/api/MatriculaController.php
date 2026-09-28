@@ -1260,7 +1260,9 @@ class MatriculaController extends Controller
     /**
      * Validação cruzada da programação de pagamento (orc.parcelamento).
      * pt-BR: Garante que a parcela selecionada existe nas linhas e que a
-     *        programação é construtível (PaymentScheduleService).
+     *        programação é construtível (PaymentScheduleService). Sem plano
+     *        (sem selecionada, sem linhas e sem entrada digitada), libera o
+     *        save — os defaults automáticos de dia/data não contam como plano.
      * @return array|null Mapa de erros por campo, ou null quando válido/ausente.
      */
     private function validateParcelamentoSnapshot(?array $orc): ?array
@@ -1271,11 +1273,17 @@ class MatriculaController extends Controller
         }
         $sel = trim((string) ($parc['parcela_selecionada'] ?? ''));
         $linhas = $parc['linhas'] ?? [];
-        $hasInputs = $sel !== ''
-            || ($parc['primeira_parcela_valor'] ?? null) !== null
-            || ($parc['primeira_parcela_data'] ?? null) !== null
-            || ($parc['dia_pagamento'] ?? null) !== null;
-        if (!$hasInputs) {
+        $hasRow = false;
+        if (is_array($linhas)) {
+            foreach ($linhas as $row) {
+                if (is_array($row) && trim((string) ($row['parcelas'] ?? $row['parcela'] ?? '')) !== '') {
+                    $hasRow = true;
+                    break;
+                }
+            }
+        }
+        $hasEntrada = isset($parc['primeira_parcela_valor']) && trim((string) $parc['primeira_parcela_valor']) !== '';
+        if ($sel === '' && !$hasRow && !$hasEntrada) {
             return null;
         }
         if ($sel === '') {
@@ -3740,9 +3748,8 @@ class MatriculaController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Acesso negado'], 403);
         }
-        if (!$this->permissionService->isHasPermission('edit')) {
-            return response()->json(['error' => 'Acesso negado'], 403);
-        }
+        // Exceção das permissões: qualquer usuário autenticado (ex.: vendedor)
+        // pode enviar WhatsApp da proposta via ChatGuru. Só exige login.
 
         $matricula = Matricula::find($id);
         if (!$matricula) {

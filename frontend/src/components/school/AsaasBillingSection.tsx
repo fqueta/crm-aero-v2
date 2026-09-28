@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +20,7 @@ import {
 import { Pencil, Trash2, ExternalLink, RefreshCw, Copy, MessageCircle, Check } from "lucide-react";
 import { toast } from "sonner";
 import { asaasService } from "@/services/asaasService";
+import { enrollmentsService } from "@/services/enrollmentsService";
 import { useAuth } from "@/contexts/AuthContext";
 import { currencyApplyMask, currencyRemoveMaskToNumber } from "@/lib/masks/currency";
 import type { AsaasBillingPayment } from "@/types/asaas";
@@ -57,6 +59,10 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
   const [deleteTarget, setDeleteTarget] = React.useState<AsaasBillingPayment | null>(null);
   const [editDueDate, setEditDueDate] = React.useState("");
   const [editValue, setEditValue] = React.useState("");
+  const [editDescription, setEditDescription] = React.useState("");
+  const [waTarget, setWaTarget] = React.useState<AsaasBillingPayment | null>(null);
+  const [waText, setWaText] = React.useState("");
+  const [waSending, setWaSending] = React.useState(false);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
   const handleCopyLink = (p: AsaasBillingPayment) => {
@@ -71,19 +77,45 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  const handleOpenWhatsApp = (p: AsaasBillingPayment) => {
+  const buildWhatsAppText = (p: AsaasBillingPayment) => {
+    const url = p.invoiceUrl || p.bankSlipUrl || "";
+    const label = p.installment_number
+      ? `Parcela ${p.installment_number}/${p.total_installments || ''}`
+      : (KIND_LABEL[p.kind] || 'Fatura');
+    return `Olá! Segue o link da sua fatura (${label}) no valor de R$ ${formatBRL(p.value)} com vencimento em ${formatBR(p.dueDate)}:\n${url}`;
+  };
+
+  const openWhatsAppModal = (p: AsaasBillingPayment) => {
     const url = p.invoiceUrl || p.bankSlipUrl;
     if (!url) {
       toast.error("Link da fatura não disponível.");
       return;
     }
-    const label = p.installment_number
-      ? `Parcela ${p.installment_number}/${p.total_installments || ''}`
-      : (KIND_LABEL[p.kind] || 'Fatura');
-    const msg = encodeURIComponent(
-      `Olá! Segue o link da sua fatura (${label}) no valor de R$ ${formatBRL(p.value)} com vencimento em ${formatBR(p.dueDate)}:\n${url}`
-    );
-    window.open(`https://api.whatsapp.com/send?text=${msg}`, "_blank");
+    setWaTarget(p);
+    setWaText(buildWhatsAppText(p));
+  };
+
+  const sendWhatsAppApi = async () => {
+    if (!waTarget) return;
+    if (!waText.trim()) {
+      toast.error("A mensagem não pode estar vazia.");
+      return;
+    }
+    setWaSending(true);
+    try {
+      const resp = await enrollmentsService.sendWhatsApp(String(matriculaId), { mensagem: waText });
+      if ((resp as any)?.success) {
+        toast.success((resp as any)?.message || "Mensagem enviada via WhatsApp (ChatGuru)!");
+        setWaTarget(null);
+      } else {
+        toast.error((resp as any)?.error || (resp as any)?.message || "Falha ao enviar a mensagem.");
+      }
+    } catch (err: any) {
+      const detail = err?.body?.error || err?.body?.message || err?.message || "Erro de conexão.";
+      toast.error(`Falha no envio: ${detail}`);
+    } finally {
+      setWaSending(false);
+    }
   };
 
   const billingQuery = useQuery({
@@ -95,6 +127,24 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
 
   const billing = (billingQuery.data as any)?.data || billingQuery.data;
   const payments: AsaasBillingPayment[] = Array.isArray(billing?.payments) ? billing.payments : [];
+
+  /**
+   * orderedPayments
+   * pt-BR: Lista em ordem cronológica (vencimento crescente): matrícula e
+   * entrada primeiro, depois as parcelas 1/N..N/N.
+   */
+  const orderedPayments = React.useMemo(() => {
+    const numOf = (p: AsaasBillingPayment) => {
+      const n = Number((p as any)?.installment_number);
+      return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+    };
+    return [...payments].sort((a, b) => {
+      const da = String(a?.dueDate || '');
+      const db = String(b?.dueDate || '');
+      if (da !== db) return da < db ? -1 : 1;
+      return numOf(a) - numOf(b);
+    });
+  }, [payments]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["asaas", "billing", matriculaId] });
 
@@ -165,7 +215,7 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
           </p>
         ) : (
           <div className="space-y-2">
-            {payments.map((p) => {
+            {orderedPayments.map((p) => {
               const st = String(p.live_status || p.status || "PENDING").toUpperCase();
               const editable = canModify(p);
               const invoiceLink = p.invoiceUrl || p.bankSlipUrl;
@@ -203,8 +253,8 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
                         variant="outline"
                         size="sm"
                         className="h-8 gap-1.5 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
-                        onClick={() => handleOpenWhatsApp(p)}
-                        title="Enviar link via WhatsApp"
+                        onClick={() => openWhatsAppModal(p)}
+                        title="Enviar link via WhatsApp (ChatGuru)"
                       >
                         <MessageCircle className="h-3.5 w-3.5" />
                         WhatsApp
@@ -270,6 +320,35 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
               <Button variant="outline" onClick={() => setEditTarget(null)}>Cancelar</Button>
               <Button onClick={() => updateMut.mutate()} disabled={updateMut.isLoading}>
                 {updateMut.isLoading ? "Salvando..." : "Salvar no Asaas"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!waTarget} onOpenChange={(o) => !o && !waSending && setWaTarget(null)}>
+          <DialogContent className="sm:max-w-[520px]">
+            <DialogHeader>
+              <DialogTitle>Enviar fatura via WhatsApp</DialogTitle>
+              <DialogDescription>
+                {waTarget ? `${KIND_LABEL[waTarget.kind] || 'Fatura'} • R$ ${formatBRL(waTarget.value)} • venc. ${formatBR(waTarget.dueDate)} — envio pela API do ChatGuru.` : 'Envio pela API do ChatGuru.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label>Mensagem</Label>
+              <Textarea
+                value={waText}
+                onChange={(e) => setWaText(e.target.value)}
+                rows={6}
+                className="font-normal"
+                placeholder="Texto da mensagem..."
+              />
+              <p className="text-[11px] text-muted-foreground">Revise o texto antes de enviar. O link da fatura já está incluído.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setWaTarget(null)} disabled={waSending}>Cancelar</Button>
+              <Button onClick={sendWhatsAppApi} disabled={waSending || !waText.trim()} className="bg-green-600 hover:bg-green-700 text-white">
+                <MessageCircle className="h-4 w-4 mr-1.5" />
+                {waSending ? "Enviando..." : "Enviar"}
               </Button>
             </DialogFooter>
           </DialogContent>

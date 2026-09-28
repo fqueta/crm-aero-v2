@@ -240,7 +240,7 @@ export default function ProposalsView() {
   }
 
   return (
-    <div className="container mx-auto py-2 space-y-4">
+    <div className="container mx-auto pt-2 pb-24 space-y-4">
       {/* Conteúdo principal */}
       {id ? <ProposalViewContent id={String(id)} /> : null}
 

@@ -196,6 +196,10 @@ export default function CourseModulesSelector({
             }
 
             // Fallback: Se não tem seleção inicial para este módulo (nova proposta)
+            // Em modo hidratação (edição com orc salvo e ≥1 módulo casado), módulo
+            // sem correspondente significa que foi DESMARCADO ao salvar (ou é novo
+            // no catálogo): mantém desmarcado para preservar o valor persistido.
+            const isHydration = !!providedInitialSelections && Object.keys(providedInitialSelections).length > 0;
             const isEtapa1 = isModuleEtapa1(mod);
             let defaultPrice = 0;
             let assignedAircraftId = '';
@@ -207,8 +211,9 @@ export default function CourseModulesSelector({
                         ? mod.valor 
                         : currencyRemoveMaskToNumber(String(mod.valor));
                 }
-            } else {
+            } else if (!isHydration) {
                 // Etapas práticas (Tipo 2): verifica se aeronave padrão é compatível
+                // (somente em nova proposta; na edição não ressuscita precificação)
                 const allowed = getAllowedAircrafts(mod);
                 const canUseDefault = allowed.some(a => String(a.id) === defaultAircraftId);
                 if (canUseDefault && defaultAircraft) {
@@ -223,7 +228,7 @@ export default function CourseModulesSelector({
             }
 
             next[idx] = {
-                selected: true, // Pré-seleciona ativo por padrão para já calcular de imediato
+                selected: isHydration ? false : true, // Pré-seleciona ativo por padrão só em nova proposta
                 credits: Number(mod.limite || 0),
                 aircraftId: assignedAircraftId,
                 price: defaultPrice,
