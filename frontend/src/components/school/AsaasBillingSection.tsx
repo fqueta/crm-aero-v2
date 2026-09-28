@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Trash2, ExternalLink, RefreshCw } from "lucide-react";
+import { Pencil, Trash2, ExternalLink, RefreshCw, Copy, MessageCircle, Check } from "lucide-react";
 import { toast } from "sonner";
 import { asaasService } from "@/services/asaasService";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +29,7 @@ const KIND_LABEL: Record<string, string> = {
   entrada: "Entrada",
   parcela_unica: "Parcela única",
   parcelas: "Parcelas",
+  parcela: "Parcela",
   matricula: "Taxa de matrícula",
 };
 
@@ -56,7 +57,34 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
   const [deleteTarget, setDeleteTarget] = React.useState<AsaasBillingPayment | null>(null);
   const [editDueDate, setEditDueDate] = React.useState("");
   const [editValue, setEditValue] = React.useState("");
-  const [editDescription, setEditDescription] = React.useState("");
+  const [copiedId, setCopiedId] = React.useState<string | null>(null);
+
+  const handleCopyLink = (p: AsaasBillingPayment) => {
+    const url = p.invoiceUrl || p.bankSlipUrl;
+    if (!url) {
+      toast.error("Link da fatura não disponível.");
+      return;
+    }
+    navigator.clipboard.writeText(url);
+    setCopiedId(p.id);
+    toast.success("Link da fatura copiado para a área de transferência!");
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  const handleOpenWhatsApp = (p: AsaasBillingPayment) => {
+    const url = p.invoiceUrl || p.bankSlipUrl;
+    if (!url) {
+      toast.error("Link da fatura não disponível.");
+      return;
+    }
+    const label = p.installment_number
+      ? `Parcela ${p.installment_number}/${p.total_installments || ''}`
+      : (KIND_LABEL[p.kind] || 'Fatura');
+    const msg = encodeURIComponent(
+      `Olá! Segue o link da sua fatura (${label}) no valor de R$ ${formatBRL(p.value)} com vencimento em ${formatBR(p.dueDate)}:\n${url}`
+    );
+    window.open(`https://api.whatsapp.com/send?text=${msg}`, "_blank");
+  };
 
   const billingQuery = useQuery({
     queryKey: ["asaas", "billing", matriculaId],
@@ -140,39 +168,70 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
             {payments.map((p) => {
               const st = String(p.live_status || p.status || "PENDING").toUpperCase();
               const editable = canModify(p);
+              const invoiceLink = p.invoiceUrl || p.bankSlipUrl;
+              const title = p.installment_number
+                ? `Parcela ${p.installment_number}/${p.total_installments || ''}`
+                : (KIND_LABEL[p.kind] || p.kind);
+
               return (
-                <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
+                <div key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold">{KIND_LABEL[p.kind] || p.kind}</span>
+                      <span className="text-sm font-semibold">{title}</span>
                       <Badge variant={st === "PENDING" || st === "OVERDUE" ? "secondary" : "default"}>{st}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       R$ {formatBRL(p.value)} · venc. {formatBR(p.dueDate)}
-                      {p.installment_id ? ` · plano ${String(p.installment_id).slice(0, 8)}…` : ""}
+                      {p.installment_id && !p.installment_number ? ` · plano ${String(p.installment_id).slice(0, 8)}…` : ""}
                     </p>
                   </div>
-                  {(p.invoiceUrl || p.bankSlipUrl) && (
-                    <Button variant="ghost" size="icon" asChild title="Abrir fatura/boleto">
-                      <a href={String(p.invoiceUrl || p.bankSlipUrl)} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </Button>
+
+                  {invoiceLink && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={() => handleCopyLink(p)}
+                        title="Copiar link da fatura"
+                      >
+                        {copiedId === p.id ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedId === p.id ? "Copiado!" : "Copiar Link"}
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1.5 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950"
+                        onClick={() => handleOpenWhatsApp(p)}
+                        title="Enviar link via WhatsApp"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        WhatsApp
+                      </Button>
+
+                      <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Abrir fatura/boleto em nova aba">
+                        <a href={String(invoiceLink)} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    </>
                   )}
+
                   {editable && canManage && (
-                    <Button variant="outline" size="icon" onClick={() => openEdit(p)} title="Editar no Asaas">
-                      <Pencil className="h-4 w-4" />
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => openEdit(p)} title="Editar no Asaas">
+                      <Pencil className="h-3.5 w-3.5" />
                     </Button>
                   )}
                   {editable && canManage && (
                     <Button
                       variant="outline"
                       size="icon"
-                      className="text-destructive"
+                      className="h-8 w-8 text-destructive"
                       onClick={() => setDeleteTarget(p)}
                       title={p.kind === "parcelas" && p.installment_id ? "Excluir plano inteiro" : "Excluir cobrança"}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
                 </div>

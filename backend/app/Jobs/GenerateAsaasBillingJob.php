@@ -92,7 +92,7 @@ class GenerateAsaasBillingJob implements ShouldQueue
             'created_at' => now()->toDateTimeString(),
         ]), JSON_UNESCAPED_UNICODE));
 
-        $this->syncBillingAccount($matricula, $schedule, $billing, $description);
+        $this->syncBillingAccount($matricula, $schedule, $billing, $description, $asaas);
         $this->logEvent($matricula->id, 'asaas_billing_created', 'Cobrança Asaas gerada: ' . count($billing['payments']) . ' pagamento(s).');
     }
 
@@ -100,50 +100,127 @@ class GenerateAsaasBillingJob implements ShouldQueue
      * Cria/atualiza a conta a receber (source=asaas_billing) para a Fase 3
      * (webhook PAYMENT_* → receive) conciliar por externalReference.
      */
-    private function syncBillingAccount(Matricula $matricula, array $schedule, array $billing, string $description): void
+    /**
+     * Cria/atualiza contas a receber no CRM para cada parcela gerada no Asaas,
+     * permitindo acompanhamento parcela por parcela e links diretos no financeiro.
+     */
+    private function syncBillingAccount(Matricula $matricula, array $schedule, array $billing, string $description, AsaasService $asaas): void
     {
-        $total = (float) ($schedule['total'] ?? 0);
-        $firstDue = $schedule['programacao'][0]['vencimento'] ?? now()->format('Y-m-d');
-        $paymentIds = array_column($billing['payments'], 'id');
+        $itemsToSync = [];
+        $totalInstallments = (int) ($schedule['qtd'] ?? 1);
 
-        $account = FinancialAccount::where('type', 'receivable')
-            ->where('client_id', $matricula->id_cliente)
-            ->whereJsonContains('config->source', 'asaas_billing')
-            ->whereJsonContains('config->matricula_id', (int) $matricula->id)
-            ->first();
+        foreach ($billing['payments'] ?? [] as $pay) {
+            $row = is_array($pay) ? $pay : [];
+            if (!empty($row['installment_id'])) {
+                try {
+                    $instResp = $asaas->getInstallmentPayments((string) $row['installment_id']);
+                    $children = $instResp['data'] ?? [];
+                    if (is_array($children) && count($children) > 0) {
+                        $countChildren = count($children);
+                        foreach ($children as $idx => $child) {
+                            $num = $child['installmentNumber'] ?? ($idx + 1);
+                            $itemsToSync[] = [
+                                'asaas_payment_id' => $child['id'],
+                                'installment_id' => $row['installment_id'],
+                                'installment_number' => $num,
+                                'total_installments' => $countChildren,
+                                'amount' => (float) ($child['value'] ?? 0),
+                                'due_date' => $child['dueDate'] ?? null,
+                                'invoice_url' => $child['invoiceUrl'] ?? null,
+                                'bank_slip_url' => $child['bankSlipUrl'] ?? null,
+                                'label' => sprintf('Parcela %d/%d', $num, $countChildren),
+                                'kind' => 'parcela',
+                            ];
+                        }
+                        continue;
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
 
-        $payload = [
-            'amount' => $total,
-            'type' => 'receivable',
-            'customer_name' => $matricula->cliente?->name,
-            'client_id' => $matricula->id_cliente,
-            'description' => $description . ' (Asaas)',
-            'notes' => 'Cobrança gerada automaticamente após assinatura (Asaas).',
-            'due_date' => $firstDue,
-            'payment_method' => 'other',
-            'status' => 'pending',
-            'payment_date' => null,
-            'paid_amount' => 0,
-            'installments' => (int) ($schedule['qtd'] ?? 1),
-            'token' => $account?->token ?: Qlib::token(),
-            'excluido' => false,
-            'deletado' => false,
-            'config' => [
-                'source' => 'asaas_billing',
-                'matricula_id' => (int) $matricula->id,
-                'asaas_customer_id' => $billing['customer_id'],
-                'asaas_payment_ids' => $paymentIds,
-            ],
-        ];
+            // Pagamentos avulsos: matricula, entrada, parcela_unica ou parcelas fallback
+            $kind = $row['kind'] ?? 'avulsa';
+            $label = match ($kind) {
+                'matricula' => 'Taxa de Matrícula',
+                'entrada' => 'Entrada',
+                'parcela_unica' => 'Parcela Única',
+                default => 'Parcela',
+            };
 
-        if ($account) {
-            $account->fill($payload);
-            $account->save();
-        } else {
-            $account = FinancialAccount::create($payload);
+            $itemsToSync[] = [
+                'asaas_payment_id' => $row['id'] ?? null,
+                'installment_id' => $row['installment_id'] ?? null,
+                'installment_number' => 1,
+                'total_installments' => 1,
+                'amount' => (float) ($row['value'] ?? 0),
+                'due_date' => $row['dueDate'] ?? null,
+                'invoice_url' => $row['invoiceUrl'] ?? null,
+                'bank_slip_url' => $row['bankSlipUrl'] ?? null,
+                'label' => $label,
+                'kind' => $kind,
+            ];
         }
 
-        Qlib::update_matriculameta($matricula->id, 'financial_asaas_account_id', (string) $account->id);
+        $createdAccountIds = [];
+
+        foreach ($itemsToSync as $item) {
+            $paymentId = $item['asaas_payment_id'];
+            if (!$paymentId) {
+                continue;
+            }
+
+            $account = FinancialAccount::where('type', 'receivable')
+                ->where('client_id', $matricula->id_cliente)
+                ->whereJsonContains('config->source', 'asaas_billing')
+                ->whereJsonContains('config->asaas_payment_id', $paymentId)
+                ->first();
+
+            $fullDesc = sprintf('%s — %s (Asaas)', $description, $item['label']);
+
+            $payload = [
+                'amount' => $item['amount'],
+                'type' => 'receivable',
+                'customer_name' => $matricula->cliente?->name,
+                'client_id' => $matricula->id_cliente,
+                'description' => $fullDesc,
+                'notes' => 'Cobrança gerada automaticamente após assinatura (Asaas).',
+                'due_date' => $item['due_date'] ?? now()->format('Y-m-d'),
+                'payment_method' => 'other',
+                'status' => 'pending',
+                'payment_date' => null,
+                'paid_amount' => 0,
+                'installments' => 1,
+                'token' => $account?->token ?: Qlib::token(),
+                'excluido' => false,
+                'deletado' => false,
+                'config' => [
+                    'source' => 'asaas_billing',
+                    'matricula_id' => (int) $matricula->id,
+                    'asaas_customer_id' => $billing['customer_id'] ?? null,
+                    'asaas_payment_id' => $paymentId,
+                    'asaas_installment_id' => $item['installment_id'],
+                    'installment_number' => $item['installment_number'],
+                    'total_installments' => $item['total_installments'],
+                    'invoice_url' => $item['invoice_url'],
+                    'bank_slip_url' => $item['bank_slip_url'],
+                    'kind' => $item['kind'],
+                ],
+            ];
+
+            if ($account) {
+                $account->fill($payload);
+                $account->save();
+            } else {
+                $account = FinancialAccount::create($payload);
+            }
+
+            $createdAccountIds[] = (string) $account->id;
+        }
+
+        if (!empty($createdAccountIds)) {
+            Qlib::update_matriculameta($matricula->id, 'financial_asaas_account_ids', json_encode($createdAccountIds));
+            Qlib::update_matriculameta($matricula->id, 'financial_asaas_account_id', $createdAccountIds[0]);
+        }
     }
 
     private function readBillingMeta(int $matriculaId): array

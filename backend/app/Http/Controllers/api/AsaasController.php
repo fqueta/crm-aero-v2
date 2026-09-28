@@ -99,6 +99,38 @@ class AsaasController extends Controller
         foreach ($billing['payments'] ?? [] as $pay) {
             $row = is_array($pay) ? $pay : [];
             $row['live_status'] = null;
+
+            // Se for parcelas com installment_id, busca as parcelas individuais para permitir link e acompanhamento de cada uma
+            if (!empty($row['installment_id']) && $asaas->isConfigured()) {
+                try {
+                    $instResp = $asaas->getInstallmentPayments((string) $row['installment_id']);
+                    $childPayments = $instResp['data'] ?? [];
+                    if (is_array($childPayments) && count($childPayments) > 0) {
+                        $totalCount = count($childPayments);
+                        foreach ($childPayments as $idx => $child) {
+                            $installmentNum = $child['installmentNumber'] ?? ($idx + 1);
+                            $payments[] = [
+                                'kind' => 'parcela',
+                                'installment_number' => $installmentNum,
+                                'total_installments' => $totalCount,
+                                'id' => $child['id'],
+                                'value' => (float) ($child['value'] ?? 0),
+                                'dueDate' => $child['dueDate'] ?? null,
+                                'installment_id' => $row['installment_id'],
+                                'status' => $child['status'] ?? 'PENDING',
+                                'live_status' => $child['status'] ?? null,
+                                'invoiceUrl' => $child['invoiceUrl'] ?? null,
+                                'bankSlipUrl' => $child['bankSlipUrl'] ?? null,
+                                'description' => $child['description'] ?? null,
+                            ];
+                        }
+                        continue;
+                    }
+                } catch (\Throwable $e) {
+                    $row['live_error'] = $e->getMessage();
+                }
+            }
+
             if ($asaas->isConfigured() && !empty($row['id'])) {
                 try {
                     $live = $asaas->getPayment((string) $row['id']);

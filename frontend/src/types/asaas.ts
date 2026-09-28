@@ -32,9 +32,12 @@ export interface AsaasBillingPayment {
   value: number;
   dueDate: string;
   installment_id?: string | null;
+  installment_number?: number | null;
+  total_installments?: number | null;
   status?: string;
   invoiceUrl?: string | null;
   bankSlipUrl?: string | null;
+  description?: string | null;
   /** Status vivo consultado no Asaas */
   live_status?: AsaasPaymentStatus | null;
 }

@@ -80,7 +80,7 @@ class ProcessAsaasPaymentJob implements ShouldQueue
             return;
         }
 
-        $account = $this->findOrCreateAccount($matricula, $value);
+        $account = $this->findOrCreateAccount($matricula, $value, $pid);
         $account->load('payments');
 
         $exists = $account->payments->first(fn ($p) => ($p->config['asaas_payment_id'] ?? null) === $pid);
@@ -113,28 +113,26 @@ class ProcessAsaasPaymentJob implements ShouldQueue
             $account->status
         ));
 
-        $remaining = round((float) $account->amount - (float) $account->paid_amount, 2);
-        if ((float) $account->amount > 0 && $remaining <= 0 && (string) ($matricula->status ?? 'a') !== 'g') {
-            $this->markGain($matricula, $account);
-        }
+        // Verifica se o total geral de todas as faturas da matrícula foi pago para marcar ganho
+        $this->checkTotalGain($matricula, $account);
     }
 
     private function handleOverdue(Matricula $matricula, string $event): void
     {
-        $account = $this->findOrCreateAccount($matricula, 0);
+        $pid = AsaasPaymentMapper::paymentId($this->payment) ?? 'desconhecido';
+        $account = $this->findOrCreateAccount($matricula, 0, $pid);
         if ($account->status !== 'paid') {
             $account->status = 'overdue';
             $account->save();
             Qlib::update_matriculameta($matricula->id, 'financeiro_status_ganho', 'overdue');
         }
-        $pid = AsaasPaymentMapper::paymentId($this->payment) ?? 'desconhecido';
         $this->logEvent($matricula->id, 'asaas_payment_overdue', "Cobrança Asaas {$pid} vencida.");
     }
 
     private function handleRefund(Matricula $matricula, string $event): void
     {
         $pid = AsaasPaymentMapper::paymentId($this->payment);
-        $account = $this->findOrCreateAccount($matricula, 0);
+        $account = $this->findOrCreateAccount($matricula, 0, $pid);
         $account->load('payments');
 
         if ($pid) {
@@ -197,6 +195,37 @@ class ProcessAsaasPaymentJob implements ShouldQueue
         }
     }
 
+    private function checkTotalGain(Matricula $matricula, FinancialAccount $account): void
+    {
+        // Se já está ganho, nada a fazer
+        if ((string) ($matricula->status ?? 'a') === 'g') {
+            return;
+        }
+
+        // Busca todas as contas a receber geradas para esta matrícula
+        $allAccounts = FinancialAccount::where('type', 'receivable')
+            ->where('client_id', $matricula->id_cliente)
+            ->whereJsonContains('config->source', 'asaas_billing')
+            ->whereJsonContains('config->matricula_id', (int) $matricula->id)
+            ->get();
+
+        if ($allAccounts->isEmpty()) {
+            $remaining = round((float) $account->amount - (float) $account->paid_amount, 2);
+            if ((float) $account->amount > 0 && $remaining <= 0) {
+                $this->markGain($matricula, $account);
+            }
+            return;
+        }
+
+        $totalAmount = (float) $allAccounts->sum('amount');
+        $totalPaid = (float) $allAccounts->sum('paid_amount');
+        $remaining = round($totalAmount - $totalPaid, 2);
+
+        if ($totalAmount > 0 && $remaining <= 0) {
+            $this->markGain($matricula, $account);
+        }
+    }
+
     private function recalc(FinancialAccount $account): void
     {
         $totalPaid = round((float) $account->payments->sum(fn ($p) => (float) $p->amount), 2);
@@ -211,8 +240,26 @@ class ProcessAsaasPaymentJob implements ShouldQueue
 
     private function syncGainMetas(Matricula $matricula, FinancialAccount $account): void
     {
-        $account->loadMissing('payments');
-        $paymentsPayload = $account->payments->map(fn ($p) => [
+        $allAccounts = FinancialAccount::where('type', 'receivable')
+            ->where('client_id', $matricula->id_cliente)
+            ->whereJsonContains('config->source', 'asaas_billing')
+            ->whereJsonContains('config->matricula_id', (int) $matricula->id)
+            ->with('payments')
+            ->get();
+
+        if ($allAccounts->isEmpty()) {
+            $allAccounts = collect([$account]);
+        }
+
+        $totalAmount = (float) $allAccounts->sum('amount');
+        $totalPaid = (float) $allAccounts->sum('paid_amount');
+        $allPaid = $allAccounts->every(fn ($a) => $a->status === 'paid');
+        $hasOverdue = $allAccounts->contains(fn ($a) => $a->status === 'overdue');
+
+        $overallStatus = $totalPaid <= 0 ? 'pending' : ($allPaid ? 'paid' : ($hasOverdue ? 'overdue' : 'partial'));
+
+        $allPayments = $allAccounts->flatMap->payments;
+        $paymentsPayload = $allPayments->map(fn ($p) => [
             'id' => $p->id,
             'amount' => (float) $p->amount,
             'payment_date' => $p->payment_date?->format('Y-m-d'),
@@ -221,15 +268,28 @@ class ProcessAsaasPaymentJob implements ShouldQueue
         ])->values()->all();
 
         Qlib::update_matriculameta($matricula->id, 'financial_asaas_account_id', (string) $account->id);
-        Qlib::update_matriculameta($matricula->id, 'valor_pago', (string) ($account->paid_amount ?? 0));
-        Qlib::update_matriculameta($matricula->id, 'valor_recebido_ganho', (string) ($account->paid_amount ?? 0));
-        Qlib::update_matriculameta($matricula->id, 'saldo_ganho', (string) round((float) $account->amount - (float) ($account->paid_amount ?? 0), 2));
-        Qlib::update_matriculameta($matricula->id, 'financeiro_status_ganho', (string) $account->status);
+        Qlib::update_matriculameta($matricula->id, 'valor_pago', (string) $totalPaid);
+        Qlib::update_matriculameta($matricula->id, 'valor_recebido_ganho', (string) $totalPaid);
+        Qlib::update_matriculameta($matricula->id, 'saldo_ganho', (string) max(0, round($totalAmount - $totalPaid, 2)));
+        Qlib::update_matriculameta($matricula->id, 'financeiro_status_ganho', $overallStatus);
         Qlib::update_matriculameta($matricula->id, 'pagamentos_ganho', json_encode($paymentsPayload, JSON_UNESCAPED_UNICODE));
     }
 
-    private function findOrCreateAccount(Matricula $matricula, float $fallbackValue): FinancialAccount
+    private function findOrCreateAccount(Matricula $matricula, float $fallbackValue, ?string $pid = null): FinancialAccount
     {
+        // 1. Tenta encontrar a conta específica da parcela/cobrança
+        if ($pid) {
+            $account = FinancialAccount::where('type', 'receivable')
+                ->where('client_id', $matricula->id_cliente)
+                ->whereJsonContains('config->source', 'asaas_billing')
+                ->whereJsonContains('config->asaas_payment_id', $pid)
+                ->first();
+            if ($account) {
+                return $account;
+            }
+        }
+
+        // 2. Fallback: conta vinculada à matrícula
         $account = FinancialAccount::where('type', 'receivable')
             ->where('client_id', $matricula->id_cliente)
             ->whereJsonContains('config->source', 'asaas_billing')
@@ -258,13 +318,14 @@ class ProcessAsaasPaymentJob implements ShouldQueue
             'status' => 'pending',
             'payment_date' => null,
             'paid_amount' => 0,
-            'installments' => (int) ($schedule['qtd'] ?? 1),
+            'installments' => 1,
             'token' => Qlib::token(),
             'excluido' => false,
             'deletado' => false,
             'config' => [
                 'source' => 'asaas_billing',
                 'matricula_id' => (int) $matricula->id,
+                'asaas_payment_id' => $pid,
             ],
         ]);
     }

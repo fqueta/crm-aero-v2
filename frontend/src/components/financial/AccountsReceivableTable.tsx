@@ -50,6 +50,9 @@ import {
   Download,
   ChevronDown,
   ChevronUp,
+  Copy,
+  MessageCircle,
+  ExternalLink,
 } from 'lucide-react';
 import {
   AccountReceivable,
@@ -474,6 +477,42 @@ export const AccountsReceivableTable: React.FC<AccountsReceivableTableProps> = (
                                 </DropdownMenuItem>
                               )}
                               
+                              {((account.config as any)?.invoice_url || (account.config as any)?.bank_slip_url) && (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      const url = (account.config as any)?.invoice_url || (account.config as any)?.bank_slip_url;
+                                      navigator.clipboard.writeText(url);
+                                      toast.success('Link da fatura copiado!');
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Copiar link da fatura
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      const url = (account.config as any)?.invoice_url || (account.config as any)?.bank_slip_url;
+                                      const msg = encodeURIComponent(
+                                        `Olá! Segue o link da sua fatura (${account.description}) no valor de ${formatCurrency(account.amount)} com vencimento em ${formatDate(account.dueDate)}:\n${url}`
+                                      );
+                                      window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+                                    }}
+                                  >
+                                    <MessageCircle className="h-4 w-4 mr-2 text-green-600" />
+                                    Enviar via WhatsApp
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      const url = (account.config as any)?.invoice_url || (account.config as any)?.bank_slip_url;
+                                      window.open(url, '_blank');
+                                    }}
+                                  >
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    Abrir fatura
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+
                               <DropdownMenuItem 
                                 onClick={() => handleDeleteAccount(account)}
                                 className="text-red-600"

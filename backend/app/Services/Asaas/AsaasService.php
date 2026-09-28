@@ -420,6 +420,18 @@ class AsaasService
     }
 
     /**
+     * GET /installments/{id}/payments — lista todas as parcelas individuais de um parcelamento.
+     * @return array
+     * @throws \RuntimeException
+     */
+    public function getInstallmentPayments(string $installmentId): array
+    {
+        $this->assertConfigured();
+
+        return $this->request('GET', '/installments/' . urlencode($installmentId) . '/payments');
+    }
+
+    /**
      * Requisição autenticada à API v3. Lança RuntimeException com a mensagem do Asaas.
      */
     private function request(string $method, string $path, array $data = []): array
