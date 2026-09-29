@@ -1949,18 +1949,17 @@ function ClientKanbanCard({ client, funnelId, onDragStart, onDragEnd, onRegister
     >
       {/* Header: ID e Status */}
       <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-1.5 overflow-hidden">
-          <div className="flex items-center justify-center bg-secondary/20 text-secondary-foreground rounded-lg p-1.5 h-7 w-7 shrink-0">
-             <Hash className="h-3.5 w-3.5 opacity-70" />
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center justify-center bg-secondary/30 text-secondary-foreground rounded-md px-1.5 py-0.5 h-6 shrink-0 font-mono text-[11px] font-bold tracking-wider">
+            #{client.id}
           </div>
-          <span className="text-[11px] font-bold text-muted-foreground/60 tracking-widest" title={client.id}>
-            {String(client.id).length > 8 ? `${String(client.id).substring(0, 8)}...` : client.id}
-          </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-          <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap shrink-0">
-            {statusLabel}
-          </Badge>
+          {statusLabel && statusLabel.toLowerCase() !== 'atendimento' && (
+            <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold uppercase tracking-wider bg-secondary/30 border-secondary-foreground/10 text-secondary-foreground/70 whitespace-nowrap shrink-0">
+              {statusLabel}
+            </Badge>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -2104,43 +2103,60 @@ function EnrollmentKanbanCard({
   };
   const statusLabel = getEnrollmentStatusLabel(status);
   const statusBadgeClass = getEnrollmentStatusBadgeClass(status);
+  const signStatus = String((enrollment as any)?.meta?.status_assinatura || (enrollment as any)?.status_assinatura || '').toLowerCase();
+  const isSigned = ['aprovado', 'assinado', 'signed'].includes(signStatus);
+  const isSent = ['enviado', 'sent', 'aguardando'].includes(signStatus);
 
   return (
     <div
-      className={`group relative rounded-2xl border border-border/50 bg-card transition-all duration-300 cursor-grab active:cursor-grabbing ${dense ? 'p-3' : 'p-5'} shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-primary/30 ${isRecentlyMoved ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+      className={`group relative rounded-2xl border border-border/50 bg-card transition-all duration-300 cursor-grab active:cursor-grabbing ${dense ? 'p-3' : 'p-4'} shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-primary/30 ${isRecentlyMoved ? 'ring-2 ring-primary ring-offset-2' : ''}`}
       onClick={goToView}
       title={`Visualizar proposta #${enrollment.id}`}
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
-      {/* Header: ID e Status */}
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-1.5 overflow-hidden">
+      {/* Header: ID, Checkbox e Ações */}
+      <div className="flex items-center justify-between gap-2 mb-2.5">
+        <div className="flex items-center gap-2 min-w-0">
           <Checkbox
             checked={selected}
             onCheckedChange={() => onToggleSelection?.(String(enrollment.id))}
             onClick={(event) => event.stopPropagation()}
             aria-label={`Selecionar proposta ${enrollment.id}`}
+            className="shrink-0"
           />
-          <div className="flex items-center justify-center bg-primary/10 text-primary rounded-lg p-1.5 h-7 w-7 shrink-0">
-             <Hash className="h-3.5 w-3.5 " />
+          <div className="flex items-center bg-primary/10 text-primary font-mono font-bold text-xs px-2 py-0.5 rounded-md shrink-0 tracking-wider">
+            #{enrollment.id}
           </div>
-          <span className="text-[11px] font-bold text-muted-foreground/70 tracking-widest" title={enrollment.id}>
-            {String(enrollment.id).length > 8 ? `${String(enrollment.id).substring(0, 8)}...` : enrollment.id}
-          </span>
         </div>
+
         <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-          <Badge variant="outline" className={`text-[10px] h-5 px-2 font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 ${statusBadgeClass}`}>
-            {statusLabel}
-          </Badge>
+          {/* Badge de status da proposta: oculta 'Atendimento', exibe apenas Ganho ou Perda */}
+          {statusLabel && statusLabel.toLowerCase() !== 'atendimento' && (
+            <Badge variant="outline" className={`text-[10px] h-5 px-2 font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 ${statusBadgeClass}`}>
+              {statusLabel}
+            </Badge>
+          )}
+
+          {/* Badge de Assinatura se houver */}
+          {isSigned ? (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 whitespace-nowrap shrink-0">
+              Assinado
+            </Badge>
+          ) : isSent ? (
+            <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60 whitespace-nowrap shrink-0">
+              Enviado
+            </Badge>
+          ) : null}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all hover:bg-muted hover:text-foreground opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+              <button className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-all hover:bg-muted hover:text-foreground opacity-70 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
                 <MoreHorizontal className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} className="w-40">
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} className="w-44">
               <DropdownMenuItem onClick={goToView} className="cursor-pointer">
                 <Eye className="mr-2 h-4 w-4 opacity-70" /> Visualizar
               </DropdownMenuItem>
@@ -2185,7 +2201,7 @@ function EnrollmentKanbanCard({
 
                 return (
                   <>
-                    {signUrl && (
+                    {signUrl && !isSigned && (
                       <DropdownMenuItem onClick={(e) => handleSendAttendance(e, 'assinatura')} className="cursor-pointer text-emerald-600 focus:text-emerald-700 font-medium">
                         <MessageSquare className="mr-2 h-4 w-4 opacity-70" /> Enviar assinatura (WhatsApp)
                       </DropdownMenuItem>
@@ -2195,7 +2211,7 @@ function EnrollmentKanbanCard({
                         <MessageSquare className="mr-2 h-4 w-4 opacity-70" /> Enviar PDF (WhatsApp)
                       </DropdownMenuItem>
                     )}
-                    {signUrl && (
+                    {signUrl && !isSigned && (
                       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.open(signUrl, '_blank'); }} className="cursor-pointer text-amber-600 focus:text-amber-700">
                         <ExternalLink className="mr-2 h-4 w-4 opacity-70" /> Assinar
                       </DropdownMenuItem>
@@ -2262,7 +2278,7 @@ function EnrollmentKanbanCard({
             <div className="bg-primary/5 px-2.5 py-1 rounded-lg border border-primary/10 shrink-0">
               <span className="text-sm font-bold text-primary tracking-tight">{amountBRL}</span>
             </div>
-            {signUrl && (
+            {signUrl && !isSigned && (
               <button
                 className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/60 hover:border-amber-400 dark:hover:border-amber-700 transition-all shrink-0"
                 title="Abrir link de assinatura"
