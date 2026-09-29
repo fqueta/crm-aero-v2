@@ -1490,10 +1490,16 @@ class MatriculaController extends Controller
                     }
 
                     // Tabela com nota de desconto de pontualidade automática
+                    // Escopo: a taxa de matrícula avulsa nunca tem desconto.
+                    $escopoDesconto = '';
+                    if (($disc['desconto'] ?? 0) > 0 && $valorMatriculaNum > 0 && $recMat === 'avulsa') {
+                        $escopoDesconto = 'Exceto a taxa de matrícula.';
+                    }
                     $dm['tabela_parcelas'] = $service->toHtmlTable($schedule['programacao'], (float) ($schedule['total'] ?? 0), [
                         'desconto_pontualidade' => $disc['desconto'],
                         'parcela_com_desconto' => $disc['liquido'],
                         'nota_desconto' => $dm['texto_desconto'] ?? '',
+                        'escopo_desconto' => $escopoDesconto,
                     ]);
                     $dm['cronograma_parcelas'] = $dm['tabela_parcelas'];
                 }
@@ -3649,6 +3655,189 @@ class MatriculaController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => 'Erro ao revogar assinatura: ' . $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Desfaz o aceite da proposta (uso do administrador em caso de erro/dados errados).
+     * pt-BR: Sem `confirm=1`, retorna prévia (envelopes ZapSign + faturas Asaas).
+     *        Com `confirm=1`, executa: exclui envelopes no ZapSign, exclui faturas
+     *        NÃO pagas no Asaas (pagas são mantidas — Asaas exige estorno) e
+     *        revoga a aprovação (reabre). Tudo consolidado em um EventLog.
+     */
+    public function undoAcceptance(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (!$user || !in_array((int) ($user->permission_id ?? 0), [1, 2], true)) {
+            return response()->json(['error' => 'Permissão insuficiente (Master/Admin).'], 403);
+        }
+
+        $matricula = Matricula::find($id);
+        if (!$matricula) {
+            return response()->json(['error' => 'Matrícula não encontrada.'], 404);
+        }
+        $matriculaId = (int) $matricula->id;
+
+        // 1. Envelopes ZapSign (metas enviar_envelope* → response.token / token)
+        $docTokens = [];
+        try {
+            $rows = DB::table('matriculameta')
+                ->where('matricula_id', $matriculaId)
+                ->where('meta_key', 'like', 'enviar_envelope%')
+                ->pluck('meta_value');
+            foreach ($rows as $raw) {
+                $decoded = is_string($raw) ? (json_decode((string) $raw, true) ?: []) : (is_array($raw) ? $raw : []);
+                $candidates = [];
+                if (isset($decoded['response']['token'])) {
+                    $candidates[] = $decoded['response']['token'];
+                }
+                if (isset($decoded['token'])) {
+                    $candidates[] = $decoded['token'];
+                }
+                if (isset($decoded['response']['tokens']) && is_array($decoded['response']['tokens'])) {
+                    $candidates = array_merge($candidates, $decoded['response']['tokens']);
+                }
+                foreach ($candidates as $tk) {
+                    $tk = trim((string) $tk);
+                    if ($tk !== '') {
+                        $docTokens[] = $tk;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        $docTokens = array_values(array_unique($docTokens));
+
+        // 2. Faturas Asaas (meta asaas_billing)
+        $billing = [];
+        try {
+            $rawBilling = Qlib::get_matriculameta($matriculaId, 'asaas_billing');
+            $decodedBilling = $rawBilling ? json_decode((string) $rawBilling, true) : [];
+            $billing = is_array($decodedBilling) ? ($decodedBilling['payments'] ?? []) : [];
+            if (!is_array($billing)) {
+                $billing = [];
+            }
+        } catch (\Throwable $e) {
+        }
+        $paymentsPreview = array_map(function ($p) {
+            $p = is_array($p) ? $p : [];
+            return [
+                'id' => (string) ($p['id'] ?? ''),
+                'kind' => (string) ($p['kind'] ?? ''),
+                'installment_id' => (string) ($p['installment_id'] ?? ''),
+                'value' => (float) ($p['value'] ?? 0),
+                'status' => (string) ($p['status'] ?? ($p['live_status'] ?? 'PENDING')),
+            ];
+        }, $billing);
+
+        if (!$request->boolean('confirm')) {
+            return response()->json([
+                'success' => true,
+                'preview' => true,
+                'data' => [
+                    'zapsign_docs' => $docTokens,
+                    'asaas_payments' => $paymentsPreview,
+                    'note' => 'Somente faturas NÃO pagas serão excluídas no Asaas. Pagas/confirmadas são mantidas.',
+                ],
+            ]);
+        }
+
+        $summary = [
+            'zapsign_deleted' => [],
+            'zapsign_failed' => [],
+            'asaas_deleted_payments' => [],
+            'asaas_cancelled_installments' => [],
+            'asaas_kept' => [],
+            'asaas_failed' => [],
+            'approval_revoked' => false,
+        ];
+
+        // 3. Exclui envelopes no ZapSign
+        $zapsign = new ZapsingController();
+        foreach ($docTokens as $tk) {
+            $res = $zapsign->deleteDoc($tk);
+            if (!empty($res['exec'])) {
+                $summary['zapsign_deleted'][] = substr($tk, 0, 8) . '…';
+            } else {
+                $summary['zapsign_failed'][] = substr($tk, 0, 8) . '…: ' . ($res['mens'] ?? 'falha');
+            }
+        }
+
+        // 4. Exclui faturas NÃO pagas no Asaas (reaproveita AsaasController:
+        //    checa status vivo, 409 p/ paga, sincroniza espelho da meta)
+        $asaasCtl = new AsaasController();
+        $mkSubRequest = function (string $uri, array $params) use ($request) {
+            $sub = Request::create($uri, 'DELETE', $params);
+            $sub->setUserResolver(fn () => $request->user());
+            try {
+                $sub->headers->set('Authorization', (string) $request->header('Authorization', ''));
+            } catch (\Throwable $e) {
+            }
+            return $sub;
+        };
+        $handledInstallments = [];
+        foreach ($paymentsPreview as $pay) {
+            $pid = (string) ($pay['id'] ?? '');
+            $instId = (string) ($pay['installment_id'] ?? '');
+            try {
+                if ($instId !== '') {
+                    if (in_array($instId, $handledInstallments, true)) {
+                        continue;
+                    }
+                    $handledInstallments[] = $instId;
+                    $resp = $asaasCtl->cancelBillingInstallment($mkSubRequest('/api/v1/asaas/billing/installments/' . $instId, ['matricula_id' => $matriculaId]), $instId);
+                    $data = $resp instanceof \Illuminate\Http\JsonResponse ? $resp->getData(true) : [];
+                    if (($resp instanceof \Illuminate\Http\JsonResponse ? $resp->getStatusCode() : 500) < 300 && !empty($data['success'])) {
+                        $summary['asaas_cancelled_installments'][] = substr($instId, 0, 8) . '…';
+                    } else {
+                        $summary['asaas_failed'][] = 'Plano ' . substr($instId, 0, 8) . '…: ' . ($data['message'] ?? 'falha');
+                    }
+                    continue;
+                }
+                if ($pid === '') {
+                    continue;
+                }
+                $resp = $asaasCtl->deleteBillingPayment($mkSubRequest('/api/v1/asaas/billing/payments/' . $pid, ['matricula_id' => $matriculaId]), $pid);
+                $data = $resp instanceof \Illuminate\Http\JsonResponse ? $resp->getData(true) : [];
+                $code = $resp instanceof \Illuminate\Http\JsonResponse ? $resp->getStatusCode() : 500;
+                if ($code < 300 && !empty($data['success'])) {
+                    $summary['asaas_deleted_payments'][] = substr($pid, 0, 8) . '…';
+                } elseif ($code === 409) {
+                    $summary['asaas_kept'][] = substr($pid, 0, 8) . '… (paga — mantida)';
+                } else {
+                    $summary['asaas_failed'][] = substr($pid, 0, 8) . '…: ' . ($data['message'] ?? 'falha');
+                }
+            } catch (\Throwable $e) {
+                $summary['asaas_failed'][] = substr($pid !== '' ? $pid : $instId, 0, 8) . '…: ' . $e->getMessage();
+            }
+        }
+
+        // 5. Revoga a aprovação (reabre o aceite)
+        try {
+            $revokeResp = $this->revokeApproval($request, (string) $matriculaId);
+            $revokeData = $revokeResp instanceof \Illuminate\Http\JsonResponse ? $revokeResp->getData(true) : [];
+            $summary['approval_revoked'] = !empty($revokeData['exec']);
+        } catch (\Throwable $e) {
+            $summary['approval_revoked'] = false;
+        }
+
+        try {
+            EventLog::create([
+                'entity_type' => 'matricula',
+                'entity_id' => (string) $matriculaId,
+                'action' => 'undo_acceptance',
+                'description' => 'Aceite desfeito pelo administrador (ZapSign + Asaas + aprovação).',
+                'payload' => $summary,
+                'actor_id' => (string) ($user->id ?? '0'),
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Aceite desfeito. Verifique o resumo.',
+            'data' => $summary,
+        ]);
     }
 
     /**

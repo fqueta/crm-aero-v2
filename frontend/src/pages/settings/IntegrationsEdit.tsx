@@ -71,6 +71,7 @@ export default function IntegrationsEdit() {
     setMeta((rows) => rows.map((r, i) => (i === idx ? { ...r, [field]: val } : r)));
 
   const isBrevo = name.toLowerCase().includes('brevo') || name.toLowerCase().includes('email');
+  const isAsaas = name.toLowerCase().includes('asaas') || name.toLowerCase().includes('pagamento') || String((item as any)?.slug || '').toLowerCase().includes('asaas');
   const isZapsign = name.toLowerCase().includes('zapsign') || name.toLowerCase().includes('zapsing');
   const isZapguru = name.toLowerCase().includes('zapguru') || name.toLowerCase().includes('chat');
 

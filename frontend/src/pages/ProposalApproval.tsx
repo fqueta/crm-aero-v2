@@ -393,6 +393,12 @@ export default function ProposalApproval() {
     const demaisEfetivo = Math.max(0, valorDemaisNum - descPontualidadeNum);
     const valorDemaisEfetivoFormatted = formatCurrencyBRL(demaisEfetivo > 0 ? demaisEfetivo : valorDemaisNum);
 
+    // Escopo do desconto: a taxa de matrícula avulsa nunca tem desconto.
+    let escopoDesconto: string | null = null;
+    if (descPontualidadeNum > 0 && matriculaValorNum > 0 && recebimentoMatricula === 'avulsa') {
+      escopoDesconto = 'Exceto a taxa de matrícula.';
+    }
+
     if (recebimentoMatricula === 'primeira_parcela' && primeiraParcelaComMatriculaNum !== null) {
       const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
       const restantes = Math.max(0, qtdParcelas - 1);
@@ -437,6 +443,7 @@ export default function ProposalApproval() {
       valorDemaisNum,
       valorDemaisCheioFormatted,
       valorDemaisEfetivoFormatted,
+      escopoDesconto,
       descPontualidadeNum,
       descPontualidadeFormatted: descPontualidadeNum > 0 ? formatCurrencyBRL(descPontualidadeNum) : null,
       hasEntrada,
@@ -734,6 +741,7 @@ export default function ProposalApproval() {
                                     </span>
                                     <p className="text-[11px] text-emerald-800 leading-tight">
                                       Pagando em dia até o vencimento, o valor da parcela de {parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisCheioFormatted : parcelamentoSummary.valorParcelaCheioFormatted} passa para <strong>{parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisEfetivoFormatted : parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>.
+                                      {parcelamentoSummary.escopoDesconto ? ` ${parcelamentoSummary.escopoDesconto}` : ''}
                                     </p>
                                   </div>
                                 </div>

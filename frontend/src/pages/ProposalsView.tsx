@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Pencil, Printer, FileText, Loader2, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Pencil, Printer, FileText, Loader2, RotateCcw, Trash2, Undo2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,6 +52,10 @@ export default function ProposalsView() {
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
+  const [undoDialogOpen, setUndoDialogOpen] = useState(false);
+  const [undoPreview, setUndoPreview] = useState<any>(null);
+  const [undoLoading, setUndoLoading] = useState(false);
+  const [isUndoing, setIsUndoing] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [asaasLoading, setAsaasLoading] = useState(false);
@@ -213,6 +217,65 @@ export default function ProposalsView() {
   }
 
   /**
+   * fetchUndoPreview
+   * pt-BR: Ao abrir o diálogo "Desfazer Envio", carrega a prévia
+   * (envelopes ZapSign + faturas Asaas que serão afetados).
+   */
+  useEffect(() => {
+    if (!undoDialogOpen || !id) return;
+    setUndoPreview(null);
+    setUndoLoading(true);
+    proposalService
+      .undoAcceptance(String(id), false)
+      .then((resp: any) => setUndoPreview((resp as any)?.data || resp))
+      .catch((err: any) =>
+        toast({
+          title: 'Erro ao carregar prévia',
+          description: String(err?.message || 'Não foi possível carregar o que será desfeito.'),
+          variant: 'destructive',
+        })
+      )
+      .finally(() => setUndoLoading(false));
+  }, [undoDialogOpen, id]);
+
+  /**
+   * handleUndoAcceptance
+   * pt-BR: Executa o desfazimento do aceite (ZapSign + Asaas não pagas + aprovação).
+   */
+  async function handleUndoAcceptance() {
+    if (!id) return;
+    setIsUndoing(true);
+    try {
+      const response: any = await proposalService.undoAcceptance(String(id), true);
+      const s = response?.data || {};
+      const parts: string[] = [];
+      if ((s.zapsign_deleted || []).length) parts.push(`ZapSign: ${s.zapsign_deleted.length} envelope(s) excluído(s)`);
+      const asaasN = (s.asaas_deleted_payments || []).length + (s.asaas_cancelled_installments || []).length;
+      if (asaasN) parts.push(`Asaas: ${asaasN} cobrança(s)/plano(s) excluído(s)`);
+      if ((s.asaas_kept || []).length) parts.push(`${s.asaas_kept.length} paga(s) mantida(s)`);
+      const fails = [...(s.zapsign_failed || []), ...(s.asaas_failed || [])];
+      toast({
+        title: 'Aceite desfeito',
+        description: parts.length ? parts.join(' • ') : response?.message || 'Processo concluído.',
+        variant: fails.length ? 'destructive' : undefined,
+      });
+      if (fails.length) {
+        toast({ title: 'Falhas parciais', description: fails.join(' | '), variant: 'destructive' });
+      }
+      setUndoDialogOpen(false);
+      window.location.reload();
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao desfazer',
+        description: String(err?.message || 'Não foi possível desfazer o aceite.'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUndoing(false);
+    }
+  }
+
+  /**
    * handleDeleteProposal
    * pt-BR: Exclui primeiro as não pagas no Asaas (se marcado) e depois a proposta.
    * Pagas/confirmadas nunca são excluídas (Asaas exige estorno).
@@ -332,6 +395,16 @@ export default function ProposalsView() {
                 <RotateCcw className="h-4 w-4 mr-2" /> Remover Aprovação
               </Button>
             )}
+            {canManageAsaas && isApproved && (
+              <Button
+                variant="outline"
+                onClick={() => setUndoDialogOpen(true)}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                title="Desfazer aceite: exclui envelopes no ZapSign, faturas não pagas no Asaas e revoga a aprovação"
+              >
+                <Undo2 className="h-4 w-4 mr-2" /> Desfazer Envio
+              </Button>
+            )}
             <Button variant="secondary" onClick={handlePrint}>
               <Printer className="h-4 w-4 mr-2" /> Imprimir
             </Button>
@@ -381,6 +454,54 @@ export default function ProposalsView() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isRevoking ? 'Removendo...' : 'Sim, remover aprovação'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog para desfazer o aceite (ZapSign + Asaas + aprovação) */}
+      <AlertDialog open={undoDialogOpen} onOpenChange={(o) => !isUndoing && setUndoDialogOpen(o)}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">Desfazer Envio (Aceite)</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p className="font-semibold text-foreground">Isso irá, nesta ordem:</p>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                <li><span className="font-medium text-foreground">Excluir</span> os envelopes no ZapSign</li>
+                <li><span className="font-medium text-foreground">Excluir</span> as faturas <strong>não pagas</strong> no Asaas (pagas são mantidas)</li>
+                <li><span className="font-medium text-foreground">Revogar</span> a aprovação, reabrindo o aceite</li>
+              </ul>
+              {undoLoading && <p className="text-sm text-muted-foreground">Carregando o que será afetado...</p>}
+              {!undoLoading && undoPreview && (
+                <div className="rounded-lg bg-muted/60 border p-3 text-sm space-y-1.5">
+                  <p>
+                    <strong>ZapSign:</strong>{' '}
+                    {(undoPreview.zapsign_docs || []).length
+                      ? `${(undoPreview.zapsign_docs || []).length} envelope(s) (${(undoPreview.zapsign_docs || []).map((t: string) => String(t).slice(0, 8) + '…').join(', ')})`
+                      : 'nenhum envelope encontrado'}
+                  </p>
+                  <p>
+                    <strong>Asaas:</strong>{' '}
+                    {(undoPreview.asaas_payments || []).length
+                      ? `${(undoPreview.asaas_payments || []).length} cobrança(s) registrada(s) — somente as não pagas serão excluídas`
+                      : 'nenhuma cobrança registrada'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{undoPreview.note}</p>
+                </div>
+              )}
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                <strong>⚠️ Atenção:</strong> ação irreversível nos provedores. Use em caso de erro ou dados errados.
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUndoing || undoLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isUndoing || undoLoading}
+              onClick={handleUndoAcceptance}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isUndoing ? 'Desfazendo...' : 'Sim, desfazer tudo'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

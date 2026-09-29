@@ -6,6 +6,7 @@ use App\Models\EventLog;
 use App\Models\FinancialAccount;
 use App\Models\FinancialAccountPayment;
 use App\Models\Matricula;
+use App\Models\Post;
 use App\Services\Asaas\AsaasPaymentMapper;
 use App\Services\PaymentSchedule\PaymentScheduleService;
 use App\Services\Qlib;
@@ -270,7 +271,15 @@ class ProcessAsaasPaymentJob implements ShouldQueue
         $oldStatus = (string) ($matricula->status ?? 'a');
         $oldSituacaoId = $matricula->situacao_id;
         $matricula->status = 'g';
-        $situacaoId = Qlib::get_post_id_by_slug('mat');
+        // Situação "Matriculado": busca direta (post_type + post_name), pois
+        // Qlib::get_post_id_by_slug() exige post_status='publish' e as
+        // situações usam 's'/'n' — sem isso a situação nunca atualizava.
+        $situacaoId = Post::query()
+            ->where('post_type', 'situacao_matricula')
+            ->where('post_name', 'mat')
+            ->where('deletado', '!=', 's')
+            ->whereIn('post_status', ['publish', 's'])
+            ->value('ID');
         if ($situacaoId && (int) $matricula->situacao_id !== (int) $situacaoId) {
             $matricula->situacao_id = $situacaoId;
         }

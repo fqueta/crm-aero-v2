@@ -447,6 +447,12 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
       paymentMethod += ` • Matrícula avulsa: ${formatCurrencyBRL(matriculaValorNum)}`;
     }
 
+    // Escopo do desconto: a taxa de matrícula avulsa nunca tem desconto.
+    let escopoDesconto: string | null = null;
+    if (descPontualidadeNum > 0 && matriculaValorNum > 0 && recebimento === 'avulsa') {
+      escopoDesconto = 'Exceto a taxa de matrícula.';
+    }
+
     return {
       summaryText,
       paymentMethod,
@@ -458,6 +464,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
       valorParcelaEfetivoFormatted,
       descPontualidadeNum,
       descPontualidadeFormatted: descPontualidadeNum > 0 ? formatCurrencyBRL(descPontualidadeNum) : null,
+      escopoDesconto,
       recebimento,
       matriculaValorNum,
       matriculaValorFormatted: matriculaValorNum > 0 ? formatCurrencyBRL(matriculaValorNum) : null,
@@ -611,6 +618,9 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/70 px-2 py-0.5 rounded-md border border-emerald-300/40">
                         <span>✨ <strong>Desc. Pontualidade:</strong> {parcelamentoSummary.descPontualidadeFormatted} / parcela até o vencimento</span>
                         <span className="text-muted-foreground/80">(líquido: <strong>{parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>)</span>
+                        {parcelamentoSummary.escopoDesconto ? (
+                          <span className="text-muted-foreground/80">{parcelamentoSummary.escopoDesconto}</span>
+                        ) : null}
                       </div>
                     ) : null
                   }

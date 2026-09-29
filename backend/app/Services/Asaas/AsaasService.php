@@ -197,7 +197,8 @@ class AsaasService
         $description = (string) ($opts['description'] ?? 'Cobrança de matrícula');
         $externalReference = (string) ($opts['externalReference'] ?? '');
 
-        // Desconto pontualidade (FIXED até o vencimento) em todas as cobranças.
+        // Desconto pontualidade (FIXED até o vencimento) na entrada e nas
+        // parcelas do financiamento. A matrícula avulsa NUNCA recebe desconto.
         $descontoValue = round((float) ($schedule['desconto_pontualidade'] ?? 0), 2);
         $discount = $descontoValue > 0 ? [
             'value' => $descontoValue,
@@ -222,7 +223,9 @@ class AsaasService
             }
         }
 
-        // Se houver taxa de matrícula avulsa, cria cobrança exclusiva para ela
+        // Se houver taxa de matrícula avulsa, cria cobrança exclusiva para ela.
+        // REGRA: a matrícula NUNCA leva desconto de pontualidade (só as
+        // parcelas do financiamento). Multa/juros de mora seguem a credencial.
         if ($matriculaItem && (float) ($matriculaItem['valor'] ?? 0) > 0) {
             $created = $this->createPayment([
                 'customer' => $customerId,
@@ -231,7 +234,7 @@ class AsaasService
                 'dueDate' => $matriculaItem['vencimento'],
                 'description' => $description . ' — Taxa de Inscrição / Matrícula',
                 'externalReference' => $externalReference !== '' ? $externalReference . ':matricula' : null,
-                'discount' => $discount,
+                'discount' => null,
                 'fine' => $fine,
                 'interest' => $interest,
             ]);
@@ -253,7 +256,7 @@ class AsaasService
         $first = $parcelasItems[0];
         $rest = array_slice($parcelasItems, 1);
 
-        // Entrada / 1ª parcela: cobrança avulsa.
+        // Entrada / 1ª parcela: cobrança avulsa (sempre com desconto, como antes).
         if ((float) ($first['valor'] ?? 0) > 0) {
             $created = $this->createPayment([
                 'customer' => $customerId,

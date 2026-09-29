@@ -436,6 +436,12 @@ export default function ProposalSignature() {
     const demaisEfetivo = Math.max(0, valorDemaisNum - descPontualidadeNum);
     const valorDemaisEfetivoFormatted = formatCurrencyBRL(demaisEfetivo > 0 ? demaisEfetivo : valorDemaisNum);
 
+    // Escopo do desconto: a taxa de matrícula avulsa nunca tem desconto.
+    let escopoDesconto: string | null = null;
+    if (descPontualidadeNum > 0 && matriculaValorNum > 0 && recebimentoMatricula === 'avulsa') {
+      escopoDesconto = 'Exceto a taxa de matrícula.';
+    }
+
     // Exibir sempre o valor nominal (cheio) no resumo do plano
     if (recebimentoMatricula === 'primeira_parcela' && primeiraParcelaComMatriculaNum !== null) {
       const entradaComMatFormatted = formatCurrencyBRL(primeiraParcelaComMatriculaNum);
@@ -481,6 +487,7 @@ export default function ProposalSignature() {
       valorDemaisNum,
       valorDemaisCheioFormatted,
       valorDemaisEfetivoFormatted,
+      escopoDesconto,
       descPontualidadeNum,
       descPontualidadeFormatted: descPontualidadeNum > 0 ? formatCurrencyBRL(descPontualidadeNum) : null,
       hasEntrada,
@@ -902,6 +909,7 @@ export default function ProposalSignature() {
                                     </span>
                                     <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-tight">
                                       Pagando em dia até o vencimento, o valor da parcela de {parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisCheioFormatted : parcelamentoSummary.valorParcelaCheioFormatted} passa para <strong>{parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisEfetivoFormatted : parcelamentoSummary.valorParcelaEfetivoFormatted}</strong>.
+                                      {parcelamentoSummary.escopoDesconto ? ` ${parcelamentoSummary.escopoDesconto}` : ''}
                                     </p>
                                   </div>
                                 </div>
@@ -1435,7 +1443,7 @@ export default function ProposalSignature() {
                               <p className="text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5 font-medium mt-1">
                                 <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                 <span>
-                                  Desconto de pontualidade: {parcelamentoSummary.descPontualidadeFormatted} por parcela para pagamentos realizados até a data de vencimento (parcela de {parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisCheioFormatted : parcelamentoSummary.valorParcelaCheioFormatted} passa para {parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisEfetivoFormatted : parcelamentoSummary.valorParcelaEfetivoFormatted}).
+                                  Desconto de pontualidade: {parcelamentoSummary.descPontualidadeFormatted} por parcela para pagamentos realizados até a data de vencimento (parcela de {parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisCheioFormatted : parcelamentoSummary.valorParcelaCheioFormatted} passa para {parcelamentoSummary.hasEntrada ? parcelamentoSummary.valorDemaisEfetivoFormatted : parcelamentoSummary.valorParcelaEfetivoFormatted}).{parcelamentoSummary.escopoDesconto ? ` ${parcelamentoSummary.escopoDesconto}` : ''}
                                 </span>
                               </p>
                             )}

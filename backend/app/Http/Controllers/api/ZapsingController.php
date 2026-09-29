@@ -56,6 +56,41 @@ class ZapsingController extends Controller
      * @return $config = ['endpoint' => '', 'body' => [''], 'headers' =>'']
      * @uso (new ZapsingController)->post(['body' =>'']);
      */
+    /**
+     * Exclui um documento/envelope no ZapSign (DELETE /docs/{token}).
+     * pt-BR: Usado pelo "Desfazer aceite" (undo-acceptance). Não lança;
+     *        retorna exec/mens para o orquestrador consolidar.
+     * @return array{exec:bool,mens:string,http_code:int,response:mixed}
+     */
+    public function deleteDoc(string $docToken): array
+    {
+        $ret = ['exec' => false, 'mens' => '', 'http_code' => 0, 'response' => null];
+        $token = trim($docToken);
+        if ($token === '') {
+            $ret['mens'] = 'Token do documento vazio.';
+            return $ret;
+        }
+        try {
+            $url = rtrim($this->url_api, '/') . '/docs/' . urlencode($token);
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'Authorization' => $this->api_id,
+            ])->timeout(20)->delete($url);
+            $ret['http_code'] = $response->status();
+            $ret['response'] = Qlib::lib_json_array($response);
+            if ($response->successful()) {
+                $ret['exec'] = true;
+                $ret['mens'] = 'Documento excluído no ZapSign.';
+            } else {
+                $desc = is_array($ret['response']) ? ($ret['response']['message'] ?? $ret['response']['error'] ?? '') : '';
+                $ret['mens'] = 'ZapSign recusou a exclusão (HTTP ' . $response->status() . ').' . ($desc !== '' ? ' ' . $desc : '');
+            }
+        } catch (\Throwable $e) {
+            $ret['mens'] = 'Falha ao excluir no ZapSign: ' . $e->getMessage();
+        }
+        Log::info('ZapsingController::deleteDoc', ['token' => substr($token, 0, 8) . '…', 'exec' => $ret['exec'], 'http_code' => $ret['http_code']]);
+        return $ret;
+    }
     public function post($config){
         $endpoint = isset($config['endpoint']) ? $config['endpoint'] : 'docs'; //'docs'
         $body = isset($config['body']) ? $config['body'] : [];

@@ -243,6 +243,7 @@ Route::name('api.')->prefix('v1')->middleware([
         Route::post('matriculas/{id}/testar-envio-link-assinatura-zapguru', [\App\Http\Controllers\api\MatriculaController::class, 'testar_envio_link_assinatura_zapguru'])->name('matriculas.testar-envio-link-assinatura-zapguru');
         Route::post('matriculas/{id}/enviar-whatsapp', [\App\Http\Controllers\api\MatriculaController::class, 'enviarWhatsapp'])->name('matriculas.enviar-whatsapp');
 Route::post('matriculas/{id}/revoke-approval', [\App\Http\Controllers\api\MatriculaController::class, 'revokeApproval'])->name('matriculas.revoke-approval');
+        Route::post('matriculas/{id}/undo-acceptance', [\App\Http\Controllers\api\MatriculaController::class, 'undoAcceptance'])->name('matriculas.undo-acceptance');
         Route::patch('matriculas/{id}/etapa', [\App\Http\Controllers\api\MatriculaController::class, 'updateStageRapid'])->name('matriculas.update-stage');
         Route::patch('matriculas/{id}/status', [\App\Http\Controllers\api\MatriculaController::class, 'updateStatusRapid'])->name('matriculas.update-status');
         // Logs de eventos

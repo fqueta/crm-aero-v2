@@ -161,6 +161,13 @@ class PaymentScheduleService
                     $this->formatBRL($valorParcelaLiquida)
                 );
 
+            // Escopo do desconto (ex.: 1ª com matrícula ou taxa avulsa sem
+            // desconto): anexado só à mensagem padrão, nunca ao texto do vendedor.
+            $escopo = trim((string) ($options['escopo_desconto'] ?? ''));
+            if ($escopo !== '' && empty($textoNota)) {
+                $msg = rtrim($msg) . ' ' . $escopo;
+            }
+
             // Verifica se a mensagem contém tags HTML (diretas ou codificadas como entidades &lt;...&gt;)
             $decodedMsg = html_entity_decode($msg, ENT_QUOTES, 'UTF-8');
             $hasHtmlTags = (strip_tags($msg) !== $msg) || (strip_tags($decodedMsg) !== $decodedMsg);

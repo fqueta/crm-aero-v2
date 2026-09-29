@@ -165,6 +165,62 @@ it('anexa desconto pontualidade, multa e juros em todas as cobranças', function
     });
 });
 
+it('não aplica desconto pontualidade na taxa de matrícula avulsa', function () {
+    Http::fake([
+        'https://sandbox.asaas.com/api/v3/payments' => Http::response(['id' => 'pay_x'], 200),
+    ]);
+
+    $service = new AsaasService('key', 'sandbox');
+
+    $result = $service->createBilling([
+        'desconto_pontualidade' => 200.00,
+        'programacao' => [
+            ['n' => 0, 'tipo' => 'matricula', 'vencimento' => '2026-09-28', 'valor' => 600.00],
+            ['n' => 1, 'vencimento' => '2026-10-11', 'valor' => 1000.00],
+        ],
+    ], 'cus_123', ['externalReference' => 'matricula:9']);
+
+    expect($result['payments'])->toHaveCount(2)
+        ->and($result['payments'][0]['kind'])->toBe('matricula');
+
+    Http::assertSentCount(2);
+    // Matrícula: sem discount.
+    Http::assertSent(fn ($request) => $request->method() === 'POST'
+        && ($request->data()['externalReference'] ?? '') === 'matricula:9:matricula'
+        && !array_key_exists('discount', $request->data()));
+    // Entrada: com discount.
+    Http::assertSent(fn ($request) => $request->method() === 'POST'
+        && ($request->data()['externalReference'] ?? '') === 'matricula:9'
+        && ($request->data()['discount'] ?? []) === ['value' => 200.00, 'type' => 'FIXED', 'dueDateLimitDays' => 0]);
+});
+
+it('mantém desconto pontualidade na entrada mesmo quando embute a matrícula', function () {
+    Http::fake([
+        'https://sandbox.asaas.com/api/v3/payments' => Http::response(['id' => 'pay_x'], 200),
+    ]);
+
+    $service = new AsaasService('key', 'sandbox');
+
+    $result = $service->createBilling([
+        'desconto_pontualidade' => 200.00,
+        'recebimento_matricula' => 'primeira_parcela',
+        'valor_matricula' => 600.00,
+        'programacao' => [
+            ['n' => 1, 'vencimento' => '2026-10-11', 'valor' => 1600.00],
+            ['n' => 2, 'vencimento' => '2026-11-11', 'valor' => 1000.00],
+        ],
+    ], 'cus_123', ['externalReference' => 'matricula:9']);
+
+    expect($result['payments'])->toHaveCount(2)
+        ->and($result['payments'][0]['kind'])->toBe('entrada');
+
+    Http::assertSentCount(2);
+    // Entrada com matrícula embutida: COM discount (regra mantida).
+    Http::assertSent(fn ($request) => $request->method() === 'POST'
+        && ($request->data()['externalReference'] ?? '') === 'matricula:9'
+        && ($request->data()['discount'] ?? []) === ['value' => 200.00, 'type' => 'FIXED', 'dueDateLimitDays' => 0]);
+});
+
 it('não envia discount/fine/interest quando zerados', function () {
     Http::fake([
         'https://sandbox.asaas.com/api/v3/payments' => Http::response(['id' => 'pay_x'], 200),

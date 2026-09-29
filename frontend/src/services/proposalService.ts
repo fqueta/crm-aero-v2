@@ -115,6 +115,12 @@ class ProposalService extends BaseApiService {
     // pt-BR: Administrador revoga a aprovação para o cliente refazer a assinatura.
     return this.post(`/matriculas/${matriculaId}/revoke-approval`, {});
   }
+
+  async undoAcceptance(matriculaId: string, confirm = false) {
+    // pt-BR: Desfaz o aceite (ZapSign + Asaas não pagas + aprovação). Sem
+    // confirm retorna prévia; com confirm executa. Uso do administrador.
+    return this.post(`/matriculas/${matriculaId}/undo-acceptance`, { confirm });
+  }
 }
 
 export const proposalService = new ProposalService();
