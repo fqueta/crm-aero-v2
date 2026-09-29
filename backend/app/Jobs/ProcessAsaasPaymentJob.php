@@ -19,8 +19,10 @@ use Illuminate\Support\Facades\Log;
 /**
  * ProcessAsaasPaymentJob
  * pt-BR: Processa eventos PAYMENT_* do Asaas: registra a baixa na conta
- * `source=asaas_billing`, marca ganho (`status=g`) aos 100%, trata vencimento
- * e estorno. Idempotente por evento (`asaas_events`) e por pagamento
+ * `source=asaas_billing`, marca ganho (`status=g` + situação Matriculada) no
+ * primeiro pagamento detectado, trata vencimento e estorno (com reversão do
+ * ganho automático se o total recebido zerar). Idempotente por evento
+ * (`asaas_events`) e por pagamento
  * (`config.asaas_payment_id`) — suporta o "at least once" do Asaas.
  */
 class ProcessAsaasPaymentJob implements ShouldQueue
@@ -69,7 +71,7 @@ class ProcessAsaasPaymentJob implements ShouldQueue
     }
 
     /**
-     * Baixa: cria o pagamento (se novo), recalcula e marca ganho aos 100%.
+     * Baixa: cria o pagamento (se novo), recalcula e marca ganho no 1º pagamento.
      */
     private function handlePaid(Matricula $matricula, string $event): void
     {
@@ -151,15 +153,122 @@ class ProcessAsaasPaymentJob implements ShouldQueue
             }
         }
         $this->logEvent($matricula->id, 'asaas_payment_refunded', "Evento {$event} para {$pid}: baixa revertida.");
+        $this->revertGain($matricula, $event);
+    }
+
+    /**
+     * Reverte o ganho quando o estorno zera o total recebido.
+     * pt-BR: Só reverte ganho automático (observacao_ganho "Ganho automático...").
+     * Ganho manual é decisão comercial e é mantido. Restaura o status/situação
+     * anteriores registrados no EventLog do ganho automático.
+     */
+    private function revertGain(Matricula $matricula, string $event): void
+    {
+        if ((string) ($matricula->status ?? 'a') !== 'g') {
+            return;
+        }
+
+        $obs = (string) (Qlib::get_matriculameta($matricula->id, 'observacao_ganho') ?? '');
+        if (!str_starts_with($obs, 'Ganho automático')) {
+            $this->logEvent($matricula->id, 'asaas_gain_kept', 'Estorno total com ganho manual: status g mantido.');
+            return;
+        }
+
+        $totals = $this->gainTotals($matricula, null);
+        if ($totals['paid'] > 0) {
+            return;
+        }
+
+        [$fromStatus, $fromSituacaoId] = $this->previousGainState($matricula->id);
+        $matricula->status = $fromStatus;
+        if ($fromSituacaoId !== null) {
+            $matricula->situacao_id = $fromSituacaoId;
+        }
+        $matricula->save();
+
+        Qlib::delete_matriculameta($matricula->id, 'data_ganho');
+
+        try {
+            EventLog::create([
+                'entity_type' => 'matricula',
+                'entity_id' => (string) $matricula->id,
+                'action' => 'status_changed',
+                'description' => 'Status da matrícula revertido de ganho (estorno total Asaas)',
+                'payload' => [
+                    'from_status' => 'g',
+                    'to_status' => $fromStatus,
+                    'trigger_event' => $event,
+                    'via' => 'asaas_webhook',
+                ],
+                'actor_id' => '1',
+                'ip_address' => request()->ip(),
+            ]);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /**
+     * Recupera o status/situação anteriores ao ganho automático
+     * a partir do EventLog (payload do markGain).
+     * @return array{0:string,1:int|null}
+     */
+    private function previousGainState(int|string $matriculaId): array
+    {
+        try {
+            $logs = EventLog::where('entity_type', 'matricula')
+                ->where('entity_id', (string) $matriculaId)
+                ->where('action', 'status_changed')
+                ->orderByDesc('id')
+                ->limit(20)
+                ->get();
+            foreach ($logs as $log) {
+                $p = is_array($log->payload) ? $log->payload : [];
+                if (($p['via'] ?? null) === 'asaas_webhook' && ($p['to_status'] ?? null) === 'g') {
+                    $fromStatus = ($p['from_status'] ?? 'a');
+                    $fromStatus = in_array($fromStatus, ['a', 'p'], true) ? $fromStatus : 'a';
+                    $fromSituacao = $p['from_situacao_id'] ?? null;
+                    $fromSituacao = is_numeric($fromSituacao) ? (int) $fromSituacao : null;
+                    return [$fromStatus, $fromSituacao];
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return ['a', null];
+    }
+
+    /**
+     * Totais (negociado/pago) de todas as contas asaas_billing da matrícula.
+     * @return array{amount:float,paid:float}
+     */
+    private function gainTotals(Matricula $matricula, ?FinancialAccount $account): array
+    {
+        $allAccounts = FinancialAccount::where('type', 'receivable')
+            ->where('client_id', $matricula->id_cliente)
+            ->whereJsonContains('config->source', 'asaas_billing')
+            ->whereJsonContains('config->matricula_id', (int) $matricula->id)
+            ->get();
+
+        if ($allAccounts->isEmpty()) {
+            if (!$account) {
+                return ['amount' => 0.0, 'paid' => 0.0];
+            }
+            return ['amount' => (float) $account->amount, 'paid' => (float) $account->paid_amount];
+        }
+
+        return [
+            'amount' => (float) $allAccounts->sum('amount'),
+            'paid' => (float) $allAccounts->sum('paid_amount'),
+        ];
     }
 
     /**
      * Transição de ganho (espelha updateStatusRapid 'g'): status, situação
      * Matriculado, metas e eventos.
      */
-    private function markGain(Matricula $matricula, FinancialAccount $account): void
+    private function markGain(Matricula $matricula, FinancialAccount $account, float $negotiatedTotal, float $paidTotal): void
     {
         $oldStatus = (string) ($matricula->status ?? 'a');
+        $oldSituacaoId = $matricula->situacao_id;
         $matricula->status = 'g';
         $situacaoId = Qlib::get_post_id_by_slug('mat');
         if ($situacaoId && (int) $matricula->situacao_id !== (int) $situacaoId) {
@@ -170,22 +279,23 @@ class ProcessAsaasPaymentJob implements ShouldQueue
         $gainDate = date('Y-m-d');
         $firstAmount = (string) ($account->payments->sortBy('payment_date')->first()?->amount ?? 0);
         Qlib::update_matriculameta($matricula->id, 'data_ganho', $gainDate);
-        Qlib::update_matriculameta($matricula->id, 'valor_negociado_ganho', (string) $account->amount);
+        Qlib::update_matriculameta($matricula->id, 'valor_negociado_ganho', (string) $negotiatedTotal);
         Qlib::update_matriculameta($matricula->id, 'valor_entrada_ganho', $firstAmount);
-        Qlib::update_matriculameta($matricula->id, 'observacao_ganho', 'Ganho automático: pagamento integral via Asaas.');
+        Qlib::update_matriculameta($matricula->id, 'observacao_ganho', 'Ganho automático: primeiro pagamento via Asaas.');
 
         try {
             EventLog::create([
                 'entity_type' => 'matricula',
                 'entity_id' => (string) $matricula->id,
                 'action' => 'status_changed',
-                'description' => 'Status da matrícula alterado para ganho (pagamento integral Asaas)',
+                'description' => 'Status da matrícula alterado para ganho (primeiro pagamento Asaas)',
                 'payload' => [
                     'from_status' => $oldStatus,
                     'to_status' => 'g',
+                    'from_situacao_id' => $oldSituacaoId !== null ? (string) $oldSituacaoId : null,
                     'gain_date' => $gainDate,
-                    'negotiated_amount' => (string) $account->amount,
-                    'paid_amount' => (string) $account->paid_amount,
+                    'negotiated_amount' => (string) $negotiatedTotal,
+                    'paid_amount' => (string) $paidTotal,
                     'via' => 'asaas_webhook',
                 ],
                 'actor_id' => '1',
@@ -202,27 +312,15 @@ class ProcessAsaasPaymentJob implements ShouldQueue
             return;
         }
 
-        // Busca todas as contas a receber geradas para esta matrícula
-        $allAccounts = FinancialAccount::where('type', 'receivable')
-            ->where('client_id', $matricula->id_cliente)
-            ->whereJsonContains('config->source', 'asaas_billing')
-            ->whereJsonContains('config->matricula_id', (int) $matricula->id)
-            ->get();
+        $totals = $this->gainTotals($matricula, $account);
+        $totalAmount = $totals['amount'];
+        $totalPaid = $totals['paid'];
 
-        if ($allAccounts->isEmpty()) {
-            $remaining = round((float) $account->amount - (float) $account->paid_amount, 2);
-            if ((float) $account->amount > 0 && $remaining <= 0) {
-                $this->markGain($matricula, $account);
-            }
-            return;
-        }
-
-        $totalAmount = (float) $allAccounts->sum('amount');
-        $totalPaid = (float) $allAccounts->sum('paid_amount');
-        $remaining = round($totalAmount - $totalPaid, 2);
-
-        if ($totalAmount > 0 && $remaining <= 0) {
-            $this->markGain($matricula, $account);
+        // Ganho no primeiro pagamento detectado (não espera 100%).
+        // O acompanhamento do recebimento continua pelo financeiro
+        // (status pending/partial/paid + metas valor_pago/saldo_ganho).
+        if ($totalAmount > 0 && $totalPaid > 0) {
+            $this->markGain($matricula, $account, $totalAmount, $totalPaid);
         }
     }
 
