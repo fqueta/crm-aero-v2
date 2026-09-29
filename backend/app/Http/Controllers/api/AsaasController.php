@@ -262,6 +262,91 @@ class AsaasController extends Controller
     }
 
     /**
+     * Estorna cobrança paga no Asaas e reverte a baixa local.
+     * pt-BR: RECEIVED/CONFIRMED → POST /payments/{id}/refund (Pix/cartão,
+     * total ou parcial via value) ou POST .../bankSlip/refund (boleto, que
+     * retorna requestUrl para o cliente completar dados bancários).
+     * Após estorno concluído (não-boleto), remove a baixa espelho
+     * (source=asaas_payment), recalcula e reverte ganho automático se zerar.
+     */
+    public function refundBillingPayment(Request $request, string $paymentId)
+    {
+        if ($denied = $this->assertAdmin($request)) {
+            return $denied;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'matricula_id' => ['required', 'integer', 'exists:matriculas,id'],
+            'value' => ['nullable', 'numeric', 'gt:0'],
+            'description' => ['nullable', 'string', 'max:500'],
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['message' => 'Erro de validação', 'errors' => $validator->errors()], 422);
+        }
+        $data = $validator->validated();
+        $matriculaId = (int) $data['matricula_id'];
+
+        $matricula = Matricula::find($matriculaId);
+        if (!$matricula) {
+            return response()->json(['success' => false, 'message' => 'Matrícula não encontrada.'], 404);
+        }
+
+        try {
+            $asaas = new AsaasService();
+            $live = $asaas->getPayment($paymentId);
+            $status = strtoupper((string) ($live['status'] ?? ''));
+            if (!in_array($status, ['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Só cobranças pagas/confirmadas podem ser estornadas. Pendentes usam excluir.',
+                ], 409);
+            }
+
+            $billingType = strtoupper((string) ($live['billingType'] ?? ''));
+            if ($billingType === 'BOLETO') {
+                $result = $asaas->refundBankSlip($paymentId);
+                $requestUrl = (string) ($result['requestUrl'] ?? '');
+                $this->logBillingEvent(
+                    $matriculaId,
+                    'asaas_billing_refund_requested',
+                    "Estorno de boleto {$paymentId} iniciado no Asaas. Aguardando dados do cliente.",
+                    $request
+                );
+
+                return response()->json([
+                    'success' => true,
+                    'bank_slip' => true,
+                    'request_url' => $requestUrl,
+                    'data' => $result,
+                    'message' => 'Estorno de boleto iniciado. Envie o link ao cliente para informar os dados bancários.',
+                ]);
+            }
+
+            $value = isset($data['value']) ? round((float) $data['value'], 2) : null;
+            $liveValue = round((float) ($live['value'] ?? 0), 2);
+            if ($value !== null && $liveValue > 0 && $value > $liveValue) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Valor do estorno não pode ser maior que o valor da cobrança.',
+                ], 422);
+            }
+
+            $result = $asaas->refundPayment($paymentId, $value, $data['description'] ?? null);
+            $this->removeLocalBaixa($matricula, $paymentId);
+            $this->logBillingEvent(
+                $matriculaId,
+                'asaas_billing_refunded',
+                "Cobrança {$paymentId} estornada no Asaas" . ($value ? " (R$ " . number_format($value, 2, ',', '.') . ")" : " (integral)") . ".",
+                $request
+            );
+
+            return response()->json(['success' => true, 'data' => $result]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
      * Cancela o plano inteiro (pendentes/vencidas; confirmadas intactas).
      */
     public function cancelBillingInstallment(Request $request, string $installmentId)
@@ -426,5 +511,129 @@ class AsaasController extends Controller
             ]);
         } catch (\Throwable $e) {
         }
+    }
+
+    /**
+     * Remove a baixa espelho (source=asaas_payment) do pagamento estornado,
+     * recalcula conta, sincroniza metas e reverte ganho automático se zerar.
+     * pt-BR: Espelha ProcessAsaasPaymentJob::handleRefund para o estorno manual.
+     */
+    private function removeLocalBaixa(Matricula $matricula, string $paymentId): void
+    {
+        try {
+            $accounts = FinancialAccount::where('type', 'receivable')
+                ->where('client_id', $matricula->id_cliente)
+                ->whereJsonContains('config->source', 'asaas_billing')
+                ->whereJsonContains('config->matricula_id', (int) $matricula->id)
+                ->with('payments')
+                ->get();
+
+            $touched = null;
+            foreach ($accounts as $account) {
+                $removed = 0;
+                foreach ($account->payments as $payment) {
+                    $cfg = is_array($payment->config) ? $payment->config : [];
+                    if (($cfg['asaas_payment_id'] ?? null) === $paymentId) {
+                        $payment->delete();
+                        $removed++;
+                    }
+                }
+                if ($removed > 0) {
+                    $account->unsetRelation('payments');
+                    $account->load('payments');
+                    $this->recalcLocalAccount($account);
+                    $touched = $account;
+                }
+            }
+
+            if ($touched) {
+                $this->syncLocalGainMetas($matricula, $touched);
+            }
+            $this->revertAutoGainIfZero($matricula);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    private function recalcLocalAccount(FinancialAccount $account): void
+    {
+        $totalPaid = round((float) $account->payments->sum(fn ($p) => (float) $p->amount), 2);
+        $latest = $account->payments->sortByDesc(fn ($p) => ($p->payment_date?->format('Y-m-d') ?? '') . '-' . $p->id)->first();
+        $remaining = round((float) $account->amount - $totalPaid, 2);
+
+        $account->paid_amount = $totalPaid;
+        $account->payment_date = $latest?->payment_date;
+        $account->status = $totalPaid <= 0 ? 'pending' : ($remaining <= 0 ? 'paid' : 'partial');
+        $account->save();
+    }
+
+    private function syncLocalGainMetas(Matricula $matricula, FinancialAccount $account): void
+    {
+        $allAccounts = FinancialAccount::where('type', 'receivable')
+            ->where('client_id', $matricula->id_cliente)
+            ->whereJsonContains('config->source', 'asaas_billing')
+            ->whereJsonContains('config->matricula_id', (int) $matricula->id)
+            ->with('payments')
+            ->get();
+
+        if ($allAccounts->isEmpty()) {
+            $allAccounts = collect([$account]);
+        }
+
+        $totalAmount = (float) $allAccounts->sum('amount');
+        $totalPaid = (float) $allAccounts->sum('paid_amount');
+        $allPaid = $allAccounts->every(fn ($a) => $a->status === 'paid');
+        $hasOverdue = $allAccounts->contains(fn ($a) => $a->status === 'overdue');
+        $overallStatus = $totalPaid <= 0 ? 'pending' : ($allPaid ? 'paid' : ($hasOverdue ? 'overdue' : 'partial'));
+
+        Qlib::update_matriculameta($matricula->id, 'valor_pago', (string) $totalPaid);
+        Qlib::update_matriculameta($matricula->id, 'valor_recebido_ganho', (string) $totalPaid);
+        Qlib::update_matriculameta($matricula->id, 'saldo_ganho', (string) max(0, round($totalAmount - $totalPaid, 2)));
+        Qlib::update_matriculameta($matricula->id, 'financeiro_status_ganho', $overallStatus);
+    }
+
+    private function revertAutoGainIfZero(Matricula $matricula): void
+    {
+        if ((string) ($matricula->status ?? 'a') !== 'g') {
+            return;
+        }
+        $obs = (string) (Qlib::get_matriculameta($matricula->id, 'observacao_ganho') ?? '');
+        if (!str_starts_with($obs, 'Ganho automático')) {
+            return;
+        }
+        $totalPaid = (float) FinancialAccount::where('type', 'receivable')
+            ->where('client_id', $matricula->id_cliente)
+            ->whereJsonContains('config->source', 'asaas_billing')
+            ->whereJsonContains('config->matricula_id', (int) $matricula->id)
+            ->sum('paid_amount');
+        if ($totalPaid > 0) {
+            return;
+        }
+
+        $fromStatus = 'a';
+        $fromSituacaoId = null;
+        try {
+            $logs = EventLog::where('entity_type', 'matricula')
+                ->where('entity_id', (string) $matricula->id)
+                ->where('action', 'status_changed')
+                ->orderByDesc('id')
+                ->limit(20)
+                ->get();
+            foreach ($logs as $log) {
+                $p = is_array($log->payload) ? $log->payload : [];
+                if (($p['via'] ?? null) === 'asaas_webhook' && ($p['to_status'] ?? null) === 'g') {
+                    $fromStatus = in_array(($p['from_status'] ?? 'a'), ['a', 'p'], true) ? (string) $p['from_status'] : 'a';
+                    $fromSituacaoId = is_numeric($p['from_situacao_id'] ?? null) ? (int) $p['from_situacao_id'] : null;
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        $matricula->status = $fromStatus;
+        if ($fromSituacaoId !== null) {
+            $matricula->situacao_id = $fromSituacaoId;
+        }
+        $matricula->save();
+        Qlib::delete_matriculameta($matricula->id, 'data_ganho');
     }
 }

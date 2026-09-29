@@ -28,6 +28,10 @@ class AsaasService extends BaseApiService {
   async cancelBillingInstallment(installmentId: string, matriculaId: number | string) {
     return this.delete<{ success: boolean; data: any }>(`/asaas/billing/installments/${installmentId}?matricula_id=${matriculaId}`);
   }
+
+  async refundBillingPayment(paymentId: string, payload: { matricula_id: number | string; value?: number; description?: string }) {
+    return this.post<{ success: boolean; data: any; bank_slip?: boolean; request_url?: string; message?: string }>(`/asaas/billing/payments/${paymentId}/refund`, payload);
+  }
 }
 
 export const asaasService = new AsaasService();

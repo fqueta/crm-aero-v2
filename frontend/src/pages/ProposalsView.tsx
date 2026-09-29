@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowLeft, Pencil, Printer, FileText, Loader2, RotateCcw, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
@@ -19,6 +20,9 @@ import { getApiUrl } from '@/lib/qlib';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEnrollment, useDeleteEnrollment } from '@/hooks/enrollments';
 import { proposalService } from '@/services/proposalService';
+import { asaasService } from '@/services/asaasService';
+import type { AsaasBillingPayment } from '@/types/asaas';
+import { deleteUnpaidBilling, formatUnpaidTotalBRL, getUnpaidBillingPayments } from '@/lib/asaasDeleteUnpaid';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 
@@ -50,9 +54,13 @@ export default function ProposalsView() {
   const [isRevoking, setIsRevoking] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [asaasLoading, setAsaasLoading] = useState(false);
+  const [asaasPayments, setAsaasPayments] = useState<AsaasBillingPayment[]>([]);
+  const [deleteAsaasChecked, setDeleteAsaasChecked] = useState(true);
   const { data: enrollment } = useEnrollment(String(id || ''));
   const deleteEnrollmentMutation = useDeleteEnrollment();
   const isAdmin = Number(user?.permission_id) === 1;
+  const canManageAsaas = !!user && [1, 2].includes(Number((user as any)?.permission_id));
   const meta = (enrollment as any)?.meta || {};
   const statusAssinatura = String(meta?.status_assinatura || '').toLowerCase();
   const isApproved = statusAssinatura === 'aprovado';
@@ -60,6 +68,34 @@ export default function ProposalsView() {
     const value = (enrollment as any)?.id_cliente ?? (enrollment as any)?.client_id;
     return value ? String(value) : '';
   }, [enrollment]);
+
+  /**
+   * fetchDeleteBilling
+   * pt-BR: Ao abrir o diálogo de exclusão, verifica cobranças integradas no Asaas.
+   */
+  useEffect(() => {
+    if (!deleteDialogOpen || !id) return;
+    setDeleteAsaasChecked(true);
+    setAsaasLoading(true);
+    setAsaasPayments([]);
+    asaasService
+      .getBilling(String(id))
+      .then((resp: any) => {
+        const billing = (resp as any)?.data || resp;
+        setAsaasPayments(Array.isArray(billing?.payments) ? billing.payments : []);
+      })
+      .catch(() => setAsaasPayments([]))
+      .finally(() => setAsaasLoading(false));
+  }, [deleteDialogOpen, id]);
+
+  const unpaidDeletePayments = useMemo(
+    () => getUnpaidBillingPayments(asaasPayments),
+    [asaasPayments]
+  );
+  const unpaidDeleteTotal = useMemo(
+    () => unpaidDeletePayments.reduce((sum, p) => sum + (Number(p?.value) || 0), 0),
+    [unpaidDeletePayments]
+  );
 
   const backLabel = useMemo(() => {
     const returnTo = navState?.returnTo;
@@ -178,13 +214,32 @@ export default function ProposalsView() {
 
   /**
    * handleDeleteProposal
-   * pt-BR: Exclui a proposta e redireciona de volta para a tela de origem (funil).
-   * en-US: Deletes the proposal and navigates back to the origin page (funnel).
+   * pt-BR: Exclui primeiro as não pagas no Asaas (se marcado) e depois a proposta.
+   * Pagas/confirmadas nunca são excluídas (Asaas exige estorno).
+   * en-US: Deletes unpaid Asaas charges first (if checked) then the proposal.
    */
   async function handleDeleteProposal() {
     if (!id) return;
     setIsDeleting(true);
     try {
+      if (deleteAsaasChecked && unpaidDeletePayments.length > 0 && canManageAsaas) {
+        const res = await deleteUnpaidBilling(String(id), asaasPayments);
+        if (res.failed.length > 0) {
+          toast({
+            title: 'Asaas com pendências',
+            description: `${res.deletedPayments + res.deletedInstallments} excluída(s) no Asaas, ${res.failed.length} falharam: ${res.failed[0]}`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Asaas atualizado',
+            description:
+              res.deletedInstallments > 0
+                ? `${res.deletedInstallments} plano(s) não pagos cancelados no Asaas.`
+                : `${res.deletedPayments} cobrança(s) não pagas excluídas no Asaas.`,
+          });
+        }
+      }
       await deleteEnrollmentMutation.mutateAsync(String(id));
       toast({
         title: 'Proposta excluída',
@@ -343,6 +398,29 @@ export default function ProposalsView() {
               <p className="text-sm text-muted-foreground">
                 Esta ação removerá a proposta do funil de vendas e de todas as listagens do sistema.
               </p>
+              {asaasLoading ? (
+                <p className="text-sm text-muted-foreground">Verificando cobranças no Asaas...</p>
+              ) : unpaidDeletePayments.length > 0 && canManageAsaas ? (
+                <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  <Checkbox
+                    checked={deleteAsaasChecked}
+                    onCheckedChange={(v) => setDeleteAsaasChecked(v === true)}
+                    disabled={isDeleting}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Excluir também no Asaas as {unpaidDeletePayments.length} cobrança(s) não pagas
+                    ({formatUnpaidTotalBRL(unpaidDeleteTotal)}). Ação irreversível, sem recuperação. Pagas/confirmadas não são afetadas.
+                  </span>
+                </label>
+              ) : unpaidDeletePayments.length > 0 ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  Há {unpaidDeletePayments.length} cobrança(s) não pagas no Asaas que permanecerão ativas
+                  (sem permissão para excluir).
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nenhuma cobrança Asaas encontrada.</p>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

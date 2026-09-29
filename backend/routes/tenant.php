@@ -523,6 +523,7 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::get('asaas/billing/{matriculaId}', [\App\Http\Controllers\api\AsaasController::class, 'billing'])->name('asaas.billing');
         Route::put('asaas/billing/payments/{paymentId}', [\App\Http\Controllers\api\AsaasController::class, 'updateBillingPayment'])->name('asaas.billing-payment.update');
         Route::delete('asaas/billing/payments/{paymentId}', [\App\Http\Controllers\api\AsaasController::class, 'deleteBillingPayment'])->name('asaas.billing-payment.delete');
+        Route::post('asaas/billing/payments/{paymentId}/refund', [\App\Http\Controllers\api\AsaasController::class, 'refundBillingPayment'])->name('asaas.billing-payment.refund');
         Route::delete('asaas/billing/installments/{installmentId}', [\App\Http\Controllers\api\AsaasController::class, 'cancelBillingInstallment'])->name('asaas.billing-installment.cancel');
         //simulador de comustivel
         Route::get('simulador-combustivel/{id_matricula}', [\App\Http\Controllers\api\MatriculaController::class, 'simuladorCombustivel'])->name('simulador-combustivel');

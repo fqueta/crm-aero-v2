@@ -420,6 +420,37 @@ class AsaasService
     }
 
     /**
+     * POST /payments/{id}/refund — estorna cobrança RECEIVED/CONFIRMED
+     * (cartão/Pix). Sem value = integral; com value = parcial (Pix permite
+     * vários parciais até o total). Taxas do Asaas não são devolvidas.
+     * @throws \RuntimeException
+     */
+    public function refundPayment(string $paymentId, ?float $value = null, ?string $description = null): array
+    {
+        $this->assertConfigured();
+
+        $payload = array_filter([
+            'value' => $value !== null ? round($value, 2) : null,
+            'description' => $description !== null && trim($description) !== '' ? trim($description) : null,
+        ], fn ($v) => $v !== null);
+
+        return $this->request('POST', '/payments/' . urlencode($paymentId) . '/refund', $payload);
+    }
+
+    /**
+     * POST /payments/{id}/bankSlip/refund — inicia estorno de boleto pago.
+     * pt-BR: Não conclui na hora: retorna requestUrl para o cliente informar
+     * dados bancários + documentos. Só para billingType=BOLETO.
+     * @throws \RuntimeException
+     */
+    public function refundBankSlip(string $paymentId): array
+    {
+        $this->assertConfigured();
+
+        return $this->request('POST', '/payments/' . urlencode($paymentId) . '/bankSlip/refund', []);
+    }
+
+    /**
      * GET /installments/{id}/payments — lista todas as parcelas individuais de um parcelamento.
      * @return array
      * @throws \RuntimeException

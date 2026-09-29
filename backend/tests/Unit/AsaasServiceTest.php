@@ -207,6 +207,21 @@ it('edita e exclui cobrança, e cancela parcelamento', function () {
     expect($cancelled['deleted'])->toBeTrue();
 });
 
+it('estorna cobrança paga e inicia estorno de boleto', function () {
+    Http::fake([
+        'https://sandbox.asaas.com/api/v3/payments/pay_1/refund' => Http::response(['id' => 'pay_1', 'status' => 'REFUNDED'], 200),
+        'https://sandbox.asaas.com/api/v3/payments/pay_2/bankSlip/refund' => Http::response(['requestUrl' => 'https://asaas.com/estorno/abc'], 200),
+    ]);
+
+    $service = new AsaasService('key', 'sandbox');
+
+    $refunded = $service->refundPayment('pay_1', 10.5, 'cancelamento');
+    expect($refunded['status'])->toBe('REFUNDED');
+
+    $boleto = $service->refundBankSlip('pay_2');
+    expect($boleto['requestUrl'])->toContain('estorno');
+});
+
 it('gera cobrança de matrícula avulsa separada do parcelamento do curso', function () {
     Http::fake([
         'https://sandbox.asaas.com/api/v3/payments' => Http::sequence()

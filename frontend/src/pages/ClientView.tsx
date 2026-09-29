@@ -1,8 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Mail, Phone, MapPin, User, Building, Calendar, GraduationCap, Briefcase, FileText, DollarSign, Edit, Eye, Trash2, ChevronDown, ChevronUp, Copy, ExternalLink, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -12,6 +23,10 @@ import { ClientRecord } from '@/types/clients';
 import { useFunnel, useStagesList } from '@/hooks/funnels';
 import { phoneApplyMask } from '@/lib/masks/phone-apply-mask';
 import { useEnrollmentsList, useDeleteEnrollment } from '@/hooks/enrollments';
+import { useAuth } from '@/contexts/AuthContext';
+import { asaasService } from '@/services/asaasService';
+import type { AsaasBillingPayment } from '@/types/asaas';
+import { deleteUnpaidBilling, formatUnpaidTotalBRL, getUnpaidBillingPayments } from '@/lib/asaasDeleteUnpaid';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import ClientEventLogsCard from '@/components/clients/ClientEventLogsCard';
 
@@ -385,6 +400,86 @@ export default function ClientView() {
    * en-US: Hook to delete enrollment/proposal; used by table action buttons.
    */
   const deleteEnrollmentMutation = useDeleteEnrollment();
+  const { user } = useAuth();
+  const canManageAsaas = !!user && [1, 2].includes(Number((user as any)?.permission_id));
+
+  /**
+   * deleteTarget
+   * pt-BR: Proposta/matrícula pendente de exclusão com verificação Asaas.
+   */
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteTargetKind, setDeleteTargetKind] = useState<'matrícula' | 'proposta'>('proposta');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeletingProposal, setIsDeletingProposal] = useState(false);
+  const [asaasLoading, setAsaasLoading] = useState(false);
+  const [asaasPayments, setAsaasPayments] = useState<AsaasBillingPayment[]>([]);
+  const [deleteAsaasChecked, setDeleteAsaasChecked] = useState(true);
+
+  const unpaidDeletePayments = useMemo(
+    () => getUnpaidBillingPayments(asaasPayments),
+    [asaasPayments]
+  );
+  const unpaidDeleteTotal = useMemo(
+    () => unpaidDeletePayments.reduce((sum, p) => sum + (Number(p?.value) || 0), 0),
+    [unpaidDeletePayments]
+  );
+
+  useEffect(() => {
+    if (!deleteDialogOpen || !deleteTargetId) return;
+    setDeleteAsaasChecked(true);
+    setAsaasLoading(true);
+    setAsaasPayments([]);
+    asaasService
+      .getBilling(String(deleteTargetId))
+      .then((resp: any) => {
+        const billing = (resp as any)?.data || resp;
+        setAsaasPayments(Array.isArray(billing?.payments) ? billing.payments : []);
+      })
+      .catch(() => setAsaasPayments([]))
+      .finally(() => setAsaasLoading(false));
+  }, [deleteDialogOpen, deleteTargetId]);
+
+  /**
+   * openDeleteDialog
+   * pt-BR: Abre o diálogo de exclusão com verificação Asaas em vez do confirm nativo.
+   */
+  const openDeleteDialog = (idStr: string, kind: 'matrícula' | 'proposta') => {
+    if (!idStr || idStr === '-') return;
+    setDeleteTargetId(idStr);
+    setDeleteTargetKind(kind);
+    setDeleteDialogOpen(true);
+  };
+
+  /**
+   * handleConfirmDelete
+   * pt-BR: Exclui não pagas no Asaas (se marcado) e depois a matrícula/proposta.
+   */
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetId) return;
+    setIsDeletingProposal(true);
+    try {
+      if (deleteAsaasChecked && unpaidDeletePayments.length > 0 && canManageAsaas) {
+        const res = await deleteUnpaidBilling(String(deleteTargetId), asaasPayments);
+        if (res.failed.length > 0) {
+          toast.error(`Asaas parcial: ${res.failed[0]}`);
+        } else if (res.deletedInstallments + res.deletedPayments > 0) {
+          toast.success(
+            res.deletedInstallments > 0
+              ? `${res.deletedInstallments} plano(s) não pagos cancelados no Asaas.`
+              : `${res.deletedPayments} cobrança(s) não pagas excluídas no Asaas.`
+          );
+        }
+      }
+      await deleteEnrollmentMutation.mutateAsync(deleteTargetId);
+      toast.success(`${deleteTargetKind === 'matrícula' ? 'Matrícula' : 'Proposta'} excluída com sucesso.`);
+      setDeleteDialogOpen(false);
+      setDeleteTargetId(null);
+    } catch (err: any) {
+      toast.error(String(err?.message || 'Não foi possível excluir no momento.'));
+    } finally {
+      setIsDeletingProposal(false);
+    }
+  };
 
   /**
    * getEnrollmentTitle
@@ -1166,9 +1261,7 @@ export default function ClientView() {
                               title="Excluir"
                               onClick={() => {
                                 const idStr = resolveEnrollmentId(e);
-                                if (!idStr || idStr === '-') return;
-                                const ok = window.confirm(`Confirma excluir a matrícula ID ${idStr}?`);
-                                if (ok) deleteEnrollmentMutation.mutate(idStr);
+                                openDeleteDialog(idStr, 'matrícula');
                               }}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1257,9 +1350,7 @@ export default function ClientView() {
                               title="Excluir"
                               onClick={() => {
                                 const idStr = resolveEnrollmentId(e);
-                                if (!idStr || idStr === '-') return;
-                                const ok = window.confirm(`Confirma excluir a proposta ID ${idStr}?`);
-                                if (ok) deleteEnrollmentMutation.mutate(idStr);
+                                openDeleteDialog(idStr, 'proposta');
                               }}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1281,6 +1372,58 @@ export default function ClientView() {
       <div className="mt-6">
         <ClientEventLogsCard clientId={client.id} />
       </div>
+
+      {/* Dialog de exclusão com verificação Asaas */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive">
+              Excluir {deleteTargetKind} {deleteTargetId ? `ID ${deleteTargetId}` : ''}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p className="font-semibold text-foreground">
+                Tem certeza que deseja excluir?
+              </p>
+              {asaasLoading ? (
+                <p className="text-sm text-muted-foreground">Verificando cobranças no Asaas...</p>
+              ) : unpaidDeletePayments.length > 0 && canManageAsaas ? (
+                <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  <Checkbox
+                    checked={deleteAsaasChecked}
+                    onCheckedChange={(v) => setDeleteAsaasChecked(v === true)}
+                    disabled={isDeletingProposal}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Excluir também no Asaas as {unpaidDeletePayments.length} cobrança(s) não pagas
+                    ({formatUnpaidTotalBRL(unpaidDeleteTotal)}). Ação irreversível, sem recuperação. Pagas/confirmadas não são afetadas.
+                  </span>
+                </label>
+              ) : unpaidDeletePayments.length > 0 ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  Há {unpaidDeletePayments.length} cobrança(s) não pagas no Asaas que permanecerão ativas
+                  (sem permissão para excluir).
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nenhuma cobrança Asaas encontrada.</p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingProposal}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeletingProposal}
+              onClick={(e) => {
+                e.preventDefault();
+                handleConfirmDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingProposal ? 'Excluindo...' : 'Sim, excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

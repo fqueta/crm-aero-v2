@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Trash2, ExternalLink, RefreshCw, Copy, MessageCircle, Check, Eye } from "lucide-react";
+import { Pencil, Trash2, ExternalLink, RefreshCw, Copy, MessageCircle, Check, Eye, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { asaasService } from "@/services/asaasService";
 import { enrollmentsService } from "@/services/enrollmentsService";
@@ -27,6 +27,7 @@ import type { AsaasBillingPayment } from "@/types/asaas";
 import { asaasStatusLabel } from "@/types/asaas";
 
 const EDITABLE = ["PENDING", "OVERDUE"];
+const REFUNDABLE = ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"];
 
 const KIND_LABEL: Record<string, string> = {
   entrada: "Entrada",
@@ -68,6 +69,10 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
   const canManage = !!user && [1, 2].includes(Number(user?.permission_id));
   const [editTarget, setEditTarget] = React.useState<AsaasBillingPayment | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<AsaasBillingPayment | null>(null);
+  const [refundTarget, setRefundTarget] = React.useState<AsaasBillingPayment | null>(null);
+  const [refundValue, setRefundValue] = React.useState("");
+  const [refundDescription, setRefundDescription] = React.useState("");
+  const [refundRequestUrl, setRefundRequestUrl] = React.useState<string | null>(null);
   const [editDueDate, setEditDueDate] = React.useState("");
   const [editValue, setEditValue] = React.useState("");
   const [editDescription, setEditDescription] = React.useState("");
@@ -157,7 +162,12 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
     });
   }, [payments]);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["asaas", "billing", matriculaId] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["asaas", "billing", matriculaId] });
+    qc.invalidateQueries({ queryKey: ["enrollments", "detail", String(matriculaId)] });
+    qc.invalidateQueries({ queryKey: ["enrollments"] });
+    qc.invalidateQueries({ queryKey: ["event-logs"] });
+  };
 
   const updateMut = useMutation({
     mutationFn: () =>
@@ -191,6 +201,39 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
     onError: (e: any) => toast.error(e?.body?.message || e?.message || "Erro ao excluir cobrança"),
   });
 
+  const refundMut = useMutation({
+    mutationFn: () => {
+      const t = refundTarget!;
+      const v = refundValue ? currencyRemoveMaskToNumber(refundValue) : undefined;
+      return asaasService.refundBillingPayment(String(t.id), {
+        matricula_id: matriculaId,
+        value: v,
+        description: refundDescription.trim() || undefined,
+      });
+    },
+    onSuccess: (resp: any) => {
+      const payload = (resp as any)?.data || resp;
+      const requestUrl = String(payload?.request_url || payload?.data?.requestUrl || "");
+      if (payload?.bank_slip || requestUrl) {
+        setRefundRequestUrl(requestUrl);
+        toast.success("Estorno de boleto iniciado. Envie o link ao cliente.");
+      } else {
+        toast.success("Cobrança estornada no Asaas. Baixa revertida no financeiro.");
+        setRefundTarget(null);
+        setRefundRequestUrl(null);
+      }
+      invalidate();
+    },
+    onError: (e: any) => toast.error(e?.body?.message || e?.message || "Erro ao estornar cobrança"),
+  });
+
+  const openRefund = (p: AsaasBillingPayment) => {
+    setRefundTarget(p);
+    setRefundValue(currencyApplyMask(String(Math.round(Number(p.value ?? 0) * 100))));
+    setRefundDescription("");
+    setRefundRequestUrl(null);
+  };
+
   const openEdit = (p: AsaasBillingPayment) => {
     setEditTarget(p);
     setEditDueDate(String(p.dueDate || "").slice(0, 10));
@@ -200,8 +243,13 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
   };
 
   const canModify = (p: AsaasBillingPayment) => {
-    const st = String(p.live_status || "").toUpperCase();
+    const st = String(p.live_status || p.status || "").toUpperCase();
     return st === "" || EDITABLE.includes(st);
+  };
+
+  const canRefund = (p: AsaasBillingPayment) => {
+    const st = String(p.live_status || p.status || "").toUpperCase();
+    return REFUNDABLE.includes(st);
   };
 
   return (
@@ -210,7 +258,7 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>Cobranças Asaas</CardTitle>
-            <CardDescription>Geradas após a assinatura · edição e exclusão sincronizam com o Asaas</CardDescription>
+            <CardDescription>Geradas após a assinatura · editar/excluir (pendentes) e estornar (pagas) sincronizam com o Asaas</CardDescription>
           </div>
           <Button variant="outline" size="icon" onClick={() => billingQuery.refetch()} title="Atualizar status">
             <RefreshCw className={`h-4 w-4 ${billingQuery.isFetching ? "animate-spin" : ""}`} />
@@ -305,6 +353,18 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
+                  {canRefund(p) && canManage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs text-amber-700 hover:text-amber-800 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950"
+                      onClick={() => openRefund(p)}
+                      title="Estornar cobrança paga no Asaas"
+                    >
+                      <Undo2 className="h-3.5 w-3.5" />
+                      Estornar
+                    </Button>
+                  )}
                 </div>
               );
             })}
@@ -379,10 +439,16 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Excluir cobrança</AlertDialogTitle>
-              <AlertDialogDescription>
-                {deleteTarget?.kind === "parcelas" && deleteTarget?.installment_id
-                  ? "Exclui o plano inteiro (pendentes/vencidas; pagas não são afetadas). Confirmar?"
-                  : "Exclui esta cobrança no Asaas. Confirmar?"}
+              <AlertDialogDescription className="space-y-3">
+                <p>
+                  {deleteTarget?.kind === "parcelas" && deleteTarget?.installment_id
+                    ? "Cancela o plano inteiro no Asaas (só pendentes/vencidas; pagas não são afetadas)."
+                    : "Exclui esta cobrança não paga no Asaas."}
+                </p>
+                <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive">
+                  ⚠️ Atenção: ação irreversível. A cobrança é perdida no Asaas sem possibilidade de recuperação —
+                  link/boleto param de funcionar e o histórico é perdido. Só não pagas podem ser excluídas (pagas usam Estornar).
+                </p>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -391,11 +457,68 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={() => deleteMut.mutate()}
               >
-                Excluir
+                Sim, excluir definitivamente
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog open={!!refundTarget} onOpenChange={(o) => { if (!o && !refundMut.isLoading) { setRefundTarget(null); setRefundRequestUrl(null); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Estornar cobrança no Asaas</DialogTitle>
+              <DialogDescription className="space-y-3">
+                <p>
+                  {refundTarget ? `${refundTarget.installment_number ? `Parcela ${refundTarget.installment_number}/${refundTarget.total_installments || ''} • ` : ''}R$ ${formatBRL(refundTarget.value)} — a baixa local é revertida e o ganho automático pode voltar a atendimento.` : 'Estorno da cobrança paga.'}
+                </p>
+                <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive">
+                  ⚠️ Atenção: ação irreversível. O valor devolvido ao cliente é perdido sem possibilidade de recuperação —
+                  taxas do Asaas não voltam e o financeiro é revertido. Só não pagas deveriam estar aqui; pagas exigem este estorno consciente.
+                </p>
+              </DialogDescription>
+            </DialogHeader>
+            {refundRequestUrl ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Estorno de boleto iniciado. Envie este link ao cliente para informar os dados bancários. Sem isso o estorno não conclui.
+                </p>
+                <div className="flex items-center gap-2 rounded-lg border p-2 text-xs break-all">
+                  <span className="flex-1">{refundRequestUrl}</span>
+                  <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(refundRequestUrl); toast.success("Link de estorno copiado!"); }}>
+                    <Copy className="h-3.5 w-3.5" /> Copiar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label>Valor do estorno (R$) — vazio = integral</Label>
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={refundValue}
+                    onChange={(e) => setRefundValue(currencyApplyMask(e.target.value))}
+                    placeholder="R$ 0,00"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Pix permite parciais. Taxas do Asaas não são devolvidas.</p>
+                </div>
+                <div className="space-y-1">
+                  <Label>Motivo (opcional)</Label>
+                  <Input value={refundDescription} onChange={(e) => setRefundDescription(e.target.value)} placeholder="Ex.: cancelamento da matrícula" />
+                </div>
+                <p className="text-[11px] text-muted-foreground">Boleto: inicia solicitação e retorna link para o cliente completar os dados.</p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setRefundTarget(null); setRefundRequestUrl(null); }} disabled={refundMut.isLoading}>Fechar</Button>
+              {!refundRequestUrl && (
+                <Button onClick={() => refundMut.mutate()} disabled={refundMut.isLoading} className="bg-amber-600 hover:bg-amber-700 text-white">
+                  {refundMut.isLoading ? "Estornando..." : "Sim, estornar definitivamente"}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
