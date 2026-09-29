@@ -23,6 +23,7 @@ import { asaasService } from "@/services/asaasService";
 import { enrollmentsService } from "@/services/enrollmentsService";
 import { useAuth } from "@/contexts/AuthContext";
 import { currencyApplyMask, currencyRemoveMaskToNumber } from "@/lib/masks/currency";
+import { deleteUnpaidBilling, formatUnpaidTotalBRL, getUnpaidBillingPayments } from "@/lib/asaasDeleteUnpaid";
 import type { AsaasBillingPayment } from "@/types/asaas";
 import { asaasStatusLabel } from "@/types/asaas";
 
@@ -234,6 +235,28 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
     setRefundRequestUrl(null);
   };
 
+  const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false);
+  const unpaidBulk = React.useMemo(() => getUnpaidBillingPayments(payments), [payments]);
+  const unpaidBulkTotal = React.useMemo(
+    () => unpaidBulk.reduce((sum, p) => sum + (Number(p?.value) || 0), 0),
+    [unpaidBulk]
+  );
+
+  const bulkDeleteMut = useMutation({
+    mutationFn: () => deleteUnpaidBilling(String(matriculaId), payments),
+    onSuccess: (res) => {
+      if (res.failed.length > 0) {
+        toast.error(`Exclusão parcial: ${res.failed[0]}`);
+      } else {
+        const n = res.deletedPayments + res.deletedInstallments;
+        toast.success(n > 0 ? `${n} cobrança(s)/plano(s) não pagos excluídos no Asaas.` : "Nada para excluir.");
+      }
+      setBulkDeleteOpen(false);
+      invalidate();
+    },
+    onError: (e: any) => toast.error(e?.body?.message || e?.message || "Erro ao excluir todas"),
+  });
+
   const openEdit = (p: AsaasBillingPayment) => {
     setEditTarget(p);
     setEditDueDate(String(p.dueDate || "").slice(0, 10));
@@ -260,9 +283,23 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
             <CardTitle>Cobranças Asaas</CardTitle>
             <CardDescription>Geradas após a assinatura · editar/excluir (pendentes) e estornar (pagas) sincronizam com o Asaas</CardDescription>
           </div>
-          <Button variant="outline" size="icon" onClick={() => billingQuery.refetch()} title="Atualizar status">
-            <RefreshCw className={`h-4 w-4 ${billingQuery.isFetching ? "animate-spin" : ""}`} />
-          </Button>
+          <div className="flex items-center gap-2">
+            {canManage && unpaidBulk.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive"
+                onClick={() => setBulkDeleteOpen(true)}
+                title={`Excluir todas as ${unpaidBulk.length} não pagas no Asaas`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Excluir todas não pagas ({unpaidBulk.length})</span>
+              </Button>
+            )}
+            <Button variant="outline" size="icon" onClick={() => billingQuery.refetch()} title="Atualizar status">
+              <RefreshCw className={`h-4 w-4 ${billingQuery.isFetching ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -458,6 +495,34 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
                 onClick={() => deleteMut.mutate()}
               >
                 Sim, excluir definitivamente
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={bulkDeleteOpen} onOpenChange={(o) => !o && setBulkDeleteOpen(false)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir todas não pagas</AlertDialogTitle>
+              <AlertDialogDescription className="space-y-3">
+                <p>
+                  Remove no Asaas as {unpaidBulk.length} cobrança(s) não pagas ({formatUnpaidTotalBRL(unpaidBulkTotal)}).
+                  Planos parcelados são cancelados de uma vez; pagas não são afetadas.
+                </p>
+                <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive">
+                  ⚠️ Atenção: ação irreversível. As cobranças são perdidas no Asaas sem possibilidade de recuperação —
+                  links param de funcionar. Confirme somente se deseja descartar todas.
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={bulkDeleteMut.isLoading}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={bulkDeleteMut.isLoading}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(e) => { e.preventDefault(); bulkDeleteMut.mutate(); }}
+              >
+                {bulkDeleteMut.isLoading ? "Excluindo..." : "Sim, excluir todas"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
