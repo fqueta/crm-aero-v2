@@ -1258,6 +1258,39 @@ class MatriculaController extends Controller
     }
 
     /**
+     * Trava de valor da proposta (update).
+     * pt-BR: Proposta aprovada/assinada ou com faturas Asaas geradas não pode
+     *        ter o total alterado — correções exigem "Desfazer Envio".
+     * @return array|null Mapa de erros por campo, ou null quando liberado.
+     */
+    private function validateValueLock(Matricula $matricula, array $input): ?array
+    {
+        $status = strtolower((string) (Qlib::get_matriculameta($matricula->id, $this->campos_status_assinatura) ?? ''));
+        $approved = in_array($status, ['aprovado', 'assinado'], true);
+        $hasBilling = false;
+        try {
+            $rawBilling = Qlib::get_matriculameta($matricula->id, 'asaas_billing');
+            $decodedBilling = $rawBilling ? json_decode((string) $rawBilling, true) : [];
+            $pays = is_array($decodedBilling) ? ($decodedBilling['payments'] ?? []) : [];
+            $hasBilling = is_array($pays) && count($pays) > 0;
+        } catch (\Throwable $e) {
+        }
+        if (!$approved && !$hasBilling) {
+            return null;
+        }
+        $newRaw = $input['total'] ?? null;
+        if ($newRaw === null || $newRaw === '') {
+            return null;
+        }
+        $old = round((float) ($matricula->total ?? 0), 2);
+        $new = round((float) $newRaw, 2);
+        if (abs($new - $old) > 0.01) {
+            return ['total' => ['Proposta aprovada/faturada: o valor total não pode ser alterado. Use "Desfazer Envio" para corrigir.']];
+        }
+        return null;
+    }
+
+    /**
      * Validação cruzada da programação de pagamento (orc.parcelamento).
      * pt-BR: Garante que a parcela selecionada existe nas linhas e que a
      *        programação é construtível (PaymentScheduleService). Sem plano
@@ -2468,6 +2501,15 @@ class MatriculaController extends Controller
             return response()->json([
                 'message' => 'Erro de validação',
                 'errors' => $snapshotErrors,
+            ], 422);
+        }
+
+        // Trava de valor: proposta aprovada/assinada ou com faturas Asaas
+        // não aceita mudança no total (correções exigem "Desfazer Envio").
+        if ($lockError = $this->validateValueLock($matricula, $input)) {
+            return response()->json([
+                'message' => 'Erro de validação',
+                'errors' => $lockError,
             ], 422);
         }
 

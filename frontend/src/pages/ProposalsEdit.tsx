@@ -20,6 +20,7 @@ import { coursesService } from '@/services/coursesService';
 import { turmasService } from '@/services/turmasService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { installmentsService } from '@/services/installmentsService';
+import { asaasService } from '@/services/asaasService';
 import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, Save, CheckCircle, Pencil, Plus, Trash2, ChevronDown, ChevronUp, CircleDollarSign, Wallet, Layers, Table as TableIcon, Info, MessageSquare, User, Users, Settings, FileText, ArrowRight, Eye, Clock, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -424,6 +425,26 @@ export default function ProposalsEdit() {
 
   const { data: enrollment, isLoading: isLoadingEnrollment } = useEnrollment(String(id || ''), { enabled: !!id });
 
+  /**
+   * isValueLocked
+   * pt-BR: Proposta aprovada/assinada ou com faturas Asaas geradas tem o VALOR
+   * travado: bloqueia edições que mudam o valor (módulos, taxas, parcelamento).
+   * Correções exigem "Desfazer Envio". Backend reforça a trava pelo total.
+   */
+  const { data: asaasBillingData } = useQuery({
+    queryKey: ['asaas-billing-lock', id],
+    queryFn: async () => asaasService.getBilling(String(id)),
+    enabled: !!id,
+    staleTime: 60 * 1000,
+  });
+  const asaasBillingCount = (() => {
+    const billing = (asaasBillingData as any)?.data || asaasBillingData;
+    const pays = Array.isArray(billing?.payments) ? billing.payments : [];
+    return pays.length;
+  })();
+  const statusAssinaturaEdit = String((enrollment as any)?.meta?.status_assinatura || '').toLowerCase();
+  const isValueLocked = statusAssinaturaEdit === 'aprovado' || statusAssinaturaEdit === 'assinado' || asaasBillingCount > 0;
+
   // Hidrata a moeda a partir dos dados carregados
   useEffect(() => {
     if (enrollment?.orc?.meta?.currency) {
@@ -584,6 +605,7 @@ export default function ProposalsEdit() {
   const inscricaoForSync = form.watch('inscricao');
   const recebimentoForSync = form.watch('recebimento_matricula');
   useEffect(() => {
+    if (isValueLocked) return;
     if (valorManualRef.current) return;
     const row = (discountRows || [])[activeRowIndex];
     if (!row) return;
@@ -895,6 +917,7 @@ export default function ProposalsEdit() {
 
   // Efeito para preencher inscrição, subtotal e desconto automaticamente ao selecionar curso/turma
   useEffect(() => {
+    if (isValueLocked) return;
     if (selectedCourse) {
       const currentInscricao = form.getValues('inscricao');
       const currentSubtotal = form.getValues('subtotal');
@@ -1292,6 +1315,7 @@ export default function ProposalsEdit() {
   const inscricaoWatched = form.watch('inscricao');
   const descontoWatched = form.watch('desconto');
   useEffect(() => {
+    if (isValueLocked) return;
     recalcTotal(subtotalWatched, inscricaoWatched, descontoWatched);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtotalWatched, inscricaoWatched, descontoWatched]);
@@ -1302,6 +1326,7 @@ export default function ProposalsEdit() {
    * en-US: Handler for Type 2 course module selector (checklist). Updates subtotal and JSON.
    */
   function handleModulesSelectionChange({ modules, total, etapa1Discount, currency, dollarRate, rateOverrides }: { modules: any[]; total: number; etapa1Discount: number; currency?: 'BRL' | 'USD'; dollarRate?: number; rateOverrides?: Record<string, { brl: number; usd: number }> }) {
+    if (isValueLocked) return;
     if (currency) setProposalCurrency(currency);
     form.setValue('subtotal', formatValueByProposalCurrency(total));
     form.setValue('etapa1_desconto', etapa1Discount);
@@ -1359,6 +1384,7 @@ export default function ProposalsEdit() {
    * en-US: Updates fields when choosing module/value.
    */
   function handleGeraValorChange(val: string) {
+    if (isValueLocked) return;
     const idxStr = String(val).split('::')[1];
     const idx = Number(idxStr);
 
@@ -2210,6 +2236,13 @@ export default function ProposalsEdit() {
                   </div>
                 </div>
 
+                {isValueLocked && (
+                  <div className="mx-2 sm:mx-4 mt-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                    <span className="font-bold">🔒 Valores bloqueados:</span>
+                    <span>proposta aprovada{asaasBillingCount > 0 ? ' com faturas geradas no Asaas' : ''} — edições que mudam o valor estão desativadas. Para corrigir, use <strong>Desfazer Envio</strong> na visualização.</span>
+                  </div>
+                )}
+
                 <div className="px-2 sm:px-4 pt-4 pb-2">
                   {/* Aba 1: Dados do Cliente, Curso e Observações */}
                   <TabsContent value="dados" forceMount className={`space-y-8 ${activeTab !== 'dados' ? 'hidden' : ''}`}>
@@ -2362,7 +2395,7 @@ export default function ProposalsEdit() {
                           placeholder="Selecione o curso"
                           searchPlaceholder="Pesquisar..."
                           emptyText="Nenhum curso"
-                          disabled={isLoadingCourses}
+                          disabled={isLoadingCourses || isValueLocked}
                           loading={isLoadingCourses}
                           onSearch={setCourseSearch}
                           searchTerm={courseSearch}
@@ -2387,7 +2420,7 @@ export default function ProposalsEdit() {
                           placeholder="Selecione a turma"
                           searchPlaceholder="Pesquisar..."
                           emptyText={!selectedCourseId ? 'Selecione curso' : 'Nenhuma turma'}
-                          disabled={!selectedCourseId || isLoadingClasses}
+                          disabled={!selectedCourseId || isLoadingClasses || isValueLocked}
                           loading={isLoadingClasses}
                           onSearch={setClassSearch}
                           searchTerm={classSearch}
@@ -2507,7 +2540,7 @@ export default function ProposalsEdit() {
                     <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500">Seleção de Módulos e Preços</h3>
                   </div>
 
-                  <div className="p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800">
+                  <div className={`p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800 ${isValueLocked ? 'pointer-events-none opacity-60' : ''}`}>
                     {String(selectedCourse?.tipo) === '2' ? (
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
@@ -2557,7 +2590,7 @@ export default function ProposalsEdit() {
                         <h4 className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground">Ajustes Financeiros e Taxas</h4>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-zinc-100/60 dark:bg-zinc-950/40 border border-zinc-200/80 dark:border-zinc-800/80">
+                      <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-zinc-100/60 dark:bg-zinc-950/40 border border-zinc-200/80 dark:border-zinc-800/80 ${isValueLocked ? 'pointer-events-none opacity-60' : ''}`}>
                         {/* Desconto Input */}
                         <FormField control={form.control} name="desconto" render={({ field }) => (
                           <FormItem>
@@ -2639,7 +2672,7 @@ export default function ProposalsEdit() {
                   <StatCard label="Total Líquido" value={form.watch('total')} icon={CheckCircle} colorClass="bg-emerald-600 !text-white" />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800">
+                <div className={`grid grid-cols-1 md:grid-cols-4 gap-6 p-6 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-100 dark:border-zinc-800 ${isValueLocked ? 'pointer-events-none opacity-60' : ''}`}>
                   {/* Desconto Input */}
                   <FormField control={form.control} name="desconto" render={({ field }) => (
                     <FormItem>
@@ -2729,7 +2762,7 @@ export default function ProposalsEdit() {
                * en-US: Card for installment management, placed below the validity field.
                *        Contains the Installment Table select and the Discount Text field.
                */}
-              <Card>
+              <Card className={isValueLocked ? 'pointer-events-none opacity-60' : ''}>
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <CardTitle>Gerenciamento de Parcelamento</CardTitle>

@@ -17,6 +17,10 @@ class AsaasService extends BaseApiService {
     return this.get<AsaasBilling>(`/asaas/billing/${matriculaId}`);
   }
 
+  async generateBilling(matriculaId: number | string) {
+    return this.post<{ success: boolean; message: string }>(`/asaas/billing/${matriculaId}/generate`, {});
+  }
+
   async updateBillingPayment(paymentId: string, payload: { matricula_id: number | string; dueDate?: string; value?: number; description?: string; discount_value?: number }) {
     return this.put<{ success: boolean; data: any }>(`/asaas/billing/payments/${paymentId}`, payload);
   }

@@ -221,6 +221,22 @@ it('mantém desconto pontualidade na entrada mesmo quando embute a matrícula', 
         && ($request->data()['discount'] ?? []) === ['value' => 200.00, 'type' => 'FIXED', 'dueDateLimitDays' => 0]);
 });
 
+it('traz vencimento passado para hoje ao gerar cobrança', function () {
+    Http::fake([
+        'https://sandbox.asaas.com/api/v3/payments' => Http::response(['id' => 'pay_x'], 200),
+    ]);
+
+    $service = new AsaasService('key', 'sandbox');
+    $today = date('Y-m-d');
+
+    $service->createBilling([
+        'programacao' => [['n' => 1, 'vencimento' => '2020-01-01', 'valor' => 1000.00]],
+    ], 'cus_123', ['externalReference' => 'matricula:9']);
+
+    Http::assertSent(fn ($request) => $request->method() === 'POST'
+        && ($request->data()['dueDate'] ?? '') === $today);
+});
+
 it('não envia discount/fine/interest quando zerados', function () {
     Http::fake([
         'https://sandbox.asaas.com/api/v3/payments' => Http::response(['id' => 'pay_x'], 200),

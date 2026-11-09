@@ -212,6 +212,18 @@ class AsaasService
 
         $payments = [];
 
+        // Asaas rejeita vencimento no passado: o snapshot é congelado no aceite
+        // e a assinatura pode ocorrer dias depois. Traz vencidos para hoje
+        // (valores preservados; multa/juros da credencial passam a valer).
+        $today = date('Y-m-d');
+        $dueOrToday = static function ($ymd) use ($today) {
+            $d = trim((string) ($ymd ?? ''));
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) {
+                return $d;
+            }
+            return $d < $today ? $today : $d;
+        };
+
         // 1. Extrair item avulso exclusivo de matrícula (tipo === 'matricula' ou n === 0)
         $matriculaItem = null;
         $parcelasItems = [];
@@ -231,7 +243,7 @@ class AsaasService
                 'customer' => $customerId,
                 'billingType' => $billingType,
                 'value' => round((float) $matriculaItem['valor'], 2),
-                'dueDate' => $matriculaItem['vencimento'],
+                'dueDate' => $dueOrToday($matriculaItem['vencimento']),
                 'description' => $description . ' — Taxa de Inscrição / Matrícula',
                 'externalReference' => $externalReference !== '' ? $externalReference . ':matricula' : null,
                 'discount' => null,
@@ -242,7 +254,7 @@ class AsaasService
                 'kind' => 'matricula',
                 'id' => $created['id'],
                 'value' => round((float) $matriculaItem['valor'], 2),
-                'dueDate' => $matriculaItem['vencimento'],
+                'dueDate' => $dueOrToday($matriculaItem['vencimento']),
                 'status' => $created['status'] ?? 'PENDING',
                 'invoiceUrl' => $created['invoiceUrl'] ?? null,
                 'bankSlipUrl' => $created['bankSlipUrl'] ?? null,
@@ -262,7 +274,7 @@ class AsaasService
                 'customer' => $customerId,
                 'billingType' => $billingType,
                 'value' => round((float) $first['valor'], 2),
-                'dueDate' => $first['vencimento'],
+                'dueDate' => $dueOrToday($first['vencimento']),
                 'description' => $description . ' — Entrada',
                 'externalReference' => $externalReference !== '' ? $externalReference : null,
                 'discount' => $discount,
@@ -273,7 +285,7 @@ class AsaasService
                 'kind' => 'entrada',
                 'id' => $created['id'],
                 'value' => round((float) $first['valor'], 2),
-                'dueDate' => $first['vencimento'],
+                'dueDate' => $dueOrToday($first['vencimento']),
                 'status' => $created['status'] ?? 'PENDING',
                 'invoiceUrl' => $created['invoiceUrl'] ?? null,
                 'bankSlipUrl' => $created['bankSlipUrl'] ?? null,
@@ -287,7 +299,7 @@ class AsaasService
                 'customer' => $customerId,
                 'billingType' => $billingType,
                 'value' => round((float) $rest[0]['valor'], 2),
-                'dueDate' => $rest[0]['vencimento'],
+                'dueDate' => $dueOrToday($rest[0]['vencimento']),
                 'description' => $description . ' — Parcela única',
                 'externalReference' => $externalReference !== '' ? $externalReference . ':parcelas' : null,
                 'discount' => $discount,
@@ -298,7 +310,7 @@ class AsaasService
                 'kind' => 'parcela_unica',
                 'id' => $created['id'],
                 'value' => round((float) $rest[0]['valor'], 2),
-                'dueDate' => $rest[0]['vencimento'],
+                'dueDate' => $dueOrToday($rest[0]['vencimento']),
                 'status' => $created['status'] ?? 'PENDING',
                 'invoiceUrl' => $created['invoiceUrl'] ?? null,
                 'bankSlipUrl' => $created['bankSlipUrl'] ?? null,
@@ -310,7 +322,7 @@ class AsaasService
                 'billingType' => $billingType,
                 'installmentCount' => count($rest),
                 'totalValue' => $total,
-                'dueDate' => $rest[0]['vencimento'],
+                'dueDate' => $dueOrToday($rest[0]['vencimento']),
                 'description' => $description . sprintf(' — %dx', count($rest)),
                 'externalReference' => $externalReference !== '' ? $externalReference . ':parcelas' : null,
                 'discount' => $discount,
@@ -321,7 +333,7 @@ class AsaasService
                 'kind' => 'parcelas',
                 'id' => $created['id'],
                 'value' => $total,
-                'dueDate' => $rest[0]['vencimento'],
+                'dueDate' => $dueOrToday($rest[0]['vencimento']),
                 'installment_id' => $created['installment'] ?? null,
                 'status' => $created['status'] ?? 'PENDING',
                 'invoiceUrl' => $created['invoiceUrl'] ?? null,

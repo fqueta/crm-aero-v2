@@ -8,6 +8,7 @@ use App\Models\FinancialAccount;
 use App\Models\Matricula;
 use App\Services\Asaas\AsaasService;
 use App\Services\Qlib;
+use App\Jobs\GenerateAsaasBillingJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -374,6 +375,33 @@ class AsaasController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
         }
+    }
+
+    /**
+     * Geração manual das cobranças (uso do administrador).
+     * pt-BR: Enfileira o GenerateAsaasBillingJob (idempotente: se já houver
+     * pagamentos na meta, não recria). Útil quando o disparo automático da
+     * webhook não ocorreu ou falhou.
+     */
+    public function generateBilling(Request $request, string $matriculaId)
+    {
+        if ($denied = $this->assertAdmin($request)) {
+            return $denied;
+        }
+
+        $matricula = Matricula::find($matriculaId);
+        if (!$matricula) {
+            return response()->json(['error' => 'Matrícula não encontrada.'], 404);
+        }
+
+        try {
+            GenerateAsaasBillingJob::dispatch((int) $matricula->id);
+            $this->logBillingEvent((int) $matricula->id, 'asaas_billing_manual_queued', 'Geração manual de cobranças enfileirada pelo administrador.', $request);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => 'Falha ao enfileirar: ' . $e->getMessage()], 500);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Geração de cobranças enfileirada. Atualize a lista em instantes.']);
     }
 
     private function isEditableStatus(string $status): bool

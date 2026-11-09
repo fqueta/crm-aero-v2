@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Pencil, Printer, FileText, Loader2, RotateCcw, Trash2, Undo2 } from 'lucide-react';
+import { ArrowLeft, Pencil, Printer, FileText, Loader2, Trash2, Undo2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,8 +50,6 @@ export default function ProposalsView() {
   const navState = (location?.state || {}) as { returnTo?: string; funnelId?: string; stageId?: string };
   const { id } = useParams<{ id: string }>();
   const [isPdfLoading, setIsPdfLoading] = useState(false);
-  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
-  const [isRevoking, setIsRevoking] = useState(false);
   const [undoDialogOpen, setUndoDialogOpen] = useState(false);
   const [undoPreview, setUndoPreview] = useState<any>(null);
   const [undoLoading, setUndoLoading] = useState(false);
@@ -189,33 +187,6 @@ export default function ProposalsView() {
    * pt-BR: Dispara a geração assíncrona atual do PDF para administradores.
    * en-US: Triggers the current asynchronous PDF generation for administrators.
    */
-  /**
-   * handleRevokeApproval
-   * pt-BR: Revoga a assinatura/aprovação da proposta para o cliente refazer.
-   * en-US: Revokes the proposal approval so the client can re-sign.
-   */
-  async function handleRevokeApproval() {
-    if (!id) return;
-    setIsRevoking(true);
-    try {
-      const response = await proposalService.revokeApproval(String(id));
-      toast({
-        title: 'Assinatura revogada',
-        description: response?.message || 'A aprovação foi revogada. O cliente poderá refazer a assinatura.',
-      });
-      setRevokeDialogOpen(false);
-      window.location.reload();
-    } catch (err: any) {
-      toast({
-        title: 'Erro ao revogar',
-        description: String(err?.message || 'Não foi possível revogar a assinatura.'),
-        variant: 'destructive',
-      });
-    } finally {
-      setIsRevoking(false);
-    }
-  }
-
   /**
    * fetchUndoPreview
    * pt-BR: Ao abrir o diálogo "Desfazer Envio", carrega a prévia
@@ -390,16 +361,10 @@ export default function ProposalsView() {
                 <FileText className="h-4 w-4 mr-2" /> Gerar PDF Async
               </Button>
             )}
-            {isAdmin && isApproved && (
-              <Button variant="destructive" onClick={() => setRevokeDialogOpen(true)}>
-                <RotateCcw className="h-4 w-4 mr-2" /> Remover Aprovação
-              </Button>
-            )}
             {canManageAsaas && isApproved && (
               <Button
-                variant="outline"
+                variant="destructive"
                 onClick={() => setUndoDialogOpen(true)}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
                 title="Desfazer aceite: exclui envelopes no ZapSign, faturas não pagas no Asaas e revoga a aprovação"
               >
                 <Undo2 className="h-4 w-4 mr-2" /> Desfazer Envio
@@ -426,38 +391,6 @@ export default function ProposalsView() {
           </div>
         </div>
       </div>
-
-      {/* Dialog de confirmação para remover aprovação */}
-      <AlertDialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive">Remover Aprovação</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
-              <p className="font-semibold text-foreground">Você está prestes a desfazer a aprovação desta proposta. Isso irá:</p>
-              <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                <li><span className="font-medium text-foreground">Resetar</span> o status de assinatura para <strong>"revogado"</strong></li>
-                <li><span className="font-medium text-foreground">Desmarcar</span> a etapa de aprovação (step 2) da proposta</li>
-                <li><span className="font-medium text-foreground">Retornar</span> a proposta e o cliente para a etapa de assinatura no funil de vendas</li>
-                <li><span className="font-medium text-foreground">Exigir</span> que o cliente refaça todo o processo de aprovação (etapa 2)</li>
-              </ul>
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-                <strong>⚠️ Atenção:</strong> Os PDFs e contratos já gerados <strong>não serão excluídos</strong>. 
-                Eles serão regenerados automaticamente quando o cliente aprovar novamente.
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRevoking}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isRevoking}
-              onClick={handleRevokeApproval}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isRevoking ? 'Removendo...' : 'Sim, remover aprovação'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Dialog para desfazer o aceite (ZapSign + Asaas + aprovação) */}
       <AlertDialog open={undoDialogOpen} onOpenChange={(o) => !isUndoing && setUndoDialogOpen(o)}>

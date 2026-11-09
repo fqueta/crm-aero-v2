@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Trash2, ExternalLink, RefreshCw, Copy, MessageCircle, Check, Eye, Undo2 } from "lucide-react";
+import { Pencil, Trash2, ExternalLink, RefreshCw, Copy, MessageCircle, Check, Eye, Undo2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { asaasService } from "@/services/asaasService";
 import { enrollmentsService } from "@/services/enrollmentsService";
@@ -170,6 +170,22 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
     qc.invalidateQueries({ queryKey: ["event-logs"] });
   };
 
+  const generateMut = useMutation({
+    mutationFn: () => asaasService.generateBilling(String(matriculaId)),
+    onSuccess: (resp: any) => {
+      toast.success(resp?.message || "Geração enfileirada. Atualizando lista...");
+      // A geração é assíncrona (fila): pesquisa a lista algumas vezes.
+      let attempts = 0;
+      const poll = () => {
+        attempts += 1;
+        billingQuery.refetch();
+        if (attempts < 6) window.setTimeout(poll, 5000);
+      };
+      window.setTimeout(poll, 5000);
+    },
+    onError: (e: any) => toast.error(e?.body?.message || e?.message || "Erro ao enfileirar geração"),
+  });
+
   const updateMut = useMutation({
     mutationFn: () =>
       asaasService.updateBillingPayment(String(editTarget!.id), {
@@ -299,6 +315,19 @@ export function AsaasBillingSection({ matriculaId }: { matriculaId: string }) {
             <Button variant="outline" size="icon" onClick={() => billingQuery.refetch()} title="Atualizar status">
               <RefreshCw className={`h-4 w-4 ${billingQuery.isFetching ? "animate-spin" : ""}`} />
             </Button>
+            {canManage && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => generateMut.mutate()}
+                disabled={generateMut.isPending}
+                title="Gerar cobranças manualmente (idempotente: não duplica)"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{generateMut.isPending ? "Gerando..." : "Gerar cobranças"}</span>
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
