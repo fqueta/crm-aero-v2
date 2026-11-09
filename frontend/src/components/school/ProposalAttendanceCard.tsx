@@ -25,6 +25,7 @@ import { PaymentMethod } from '@/types/financial';
 import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, CircleDot, Clock3, Headset, MessageSquareText, XCircle } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
+import { ProposalWinDialog } from './ProposalWinDialog';
 
 interface ProposalAttendanceCardProps {
   enrollmentId: string;
@@ -371,9 +372,6 @@ export default function ProposalAttendanceCard({
   const [duration, setDuration] = useState('');
   const [tagsText, setTagsText] = useState('');
 
-  const [gainDate, setGainDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [negotiatedAmount, setNegotiatedAmount] = useState('');
-
   useEffect(() => {
     const openAttendance = searchParams.get('openAttendance');
     if (!openAttendance) return;
@@ -399,8 +397,6 @@ export default function ProposalAttendanceCard({
       setObservation(`Olá, *${nome}*! Segue o link para visualizar e assinar a sua proposta comercial: ${url}`);
     }
   }, [searchParams, pdfUrl, linkAssinatura, clientName, meta, setSearchParams]);
-  const [paidAmount, setPaidAmount] = useState('');
-  const [gainObservation, setGainObservation] = useState('');
   const [lossDate, setLossDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lossReason, setLossReason] = useState('');
   const [lossObservation, setLossObservation] = useState('');
@@ -478,14 +474,6 @@ export default function ProposalAttendanceCard({
     if (!enrollmentId || updateEnrollmentStatusMutation.isPending) return;
 
     if (nextStatus === 'g') {
-      setGainDate(currentGainDate || new Date().toISOString().slice(0, 10));
-      setNegotiatedAmount(
-        currentNegotiatedAmount
-          ? formatCurrencyInputValue(currentNegotiatedAmount)
-          : (proposalAmountLabel || '')
-      );
-      setPaidAmount(currentEntryAmount ? formatCurrencyInputValue(currentEntryAmount) : '');
-      setGainObservation(currentGainObservation || '');
       setWinDialogOpen(true);
       return;
     }
@@ -518,61 +506,7 @@ export default function ProposalAttendanceCard({
     );
   };
 
-  /**
-   * handleConfirmWin
-   * pt-BR: Confirma o ganho da proposta e envia valor negociado, entrada inicial e observacao.
-   * en-US: Confirms the proposal win and sends negotiated value, initial payment and observation.
-   */
-  const handleConfirmWin = () => {
-    if (!enrollmentId || updateEnrollmentStatusMutation.isPending) return;
 
-    const normalizedNegotiatedAmount = currencyRemoveMaskToString(negotiatedAmount || '');
-    const normalizedPaidAmount = currencyRemoveMaskToString(paidAmount || '');
-    if (!gainDate || Number(normalizedNegotiatedAmount) <= 0) {
-      toast({
-        title: 'Campos obrigatorios',
-        description: 'Informe a data do ganho e um valor negociado maior que zero.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (Number(normalizedPaidAmount || '0') > Number(normalizedNegotiatedAmount || '0')) {
-      toast({
-        title: 'Valores inconsistentes',
-        description: 'A entrada inicial nao pode ser maior que o valor negociado.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    updateEnrollmentStatusMutation.mutate(
-      {
-        id: String(enrollmentId),
-        status: 'g',
-        gain_date: gainDate,
-        negotiated_amount: normalizedNegotiatedAmount,
-        paid_amount: normalizedPaidAmount || '0',
-        gain_observation: gainObservation.trim() || undefined,
-      },
-      {
-        onSuccess: () => {
-          setWinDialogOpen(false);
-          toast({
-            title: 'Ganho registrado',
-            description: 'A proposta foi marcada como ganho e o financeiro foi preparado para recebimentos parciais.',
-          });
-        },
-        onError: (error: unknown) => {
-          toast({
-            title: 'Erro ao registrar ganho',
-            description: getErrorMessage(error, 'Nao foi possivel registrar o ganho da proposta.'),
-            variant: 'destructive',
-          });
-        },
-      }
-    );
-  };
 
   /**
    * handleConfirmLoss
@@ -1364,103 +1298,20 @@ export default function ProposalAttendanceCard({
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <ProposalWinDialog
         open={winDialogOpen}
-        onOpenChange={(open) => {
-          setWinDialogOpen(open);
-          if (open) {
-            setGainDate(currentGainDate || new Date().toISOString().slice(0, 10));
-            setNegotiatedAmount(
-              currentNegotiatedAmount
-                ? formatCurrencyInputValue(currentNegotiatedAmount)
-                : (proposalAmountLabel || '')
-            );
-            setPaidAmount(currentEntryAmount ? formatCurrencyInputValue(currentEntryAmount) : '');
-            setGainObservation(currentGainObservation || '');
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>Registrar ganho da proposta</DialogTitle>
-            <DialogDescription>
-              Informe a data do ganho, o valor negociado e a entrada inicial para criar o crediario da proposta.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {proposalAmountLabel && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-700/80">
-                  Valor da proposta
-                </div>
-                <div className="text-sm font-semibold text-emerald-900">
-                  {proposalAmountLabel}
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Data do ganho
-              </label>
-              <Input type="date" value={gainDate} onChange={(event) => setGainDate(event.target.value)} />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Valor negociado
-              </label>
-              <Input
-                inputMode="numeric"
-                placeholder="R$ 0,00"
-                value={negotiatedAmount}
-                onChange={(event) => setNegotiatedAmount(currencyApplyMask(event.target.value))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Entrada recebida agora
-              </label>
-              <Input
-                inputMode="numeric"
-                placeholder="R$ 0,00"
-                value={paidAmount}
-                onChange={(event) => setPaidAmount(currencyApplyMask(event.target.value))}
-              />
-              <p className="text-xs text-muted-foreground">
-                Deixe zerado se a proposta foi ganha, mas ainda nao houve recebimento.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Observacoes ou comentarios
-              </label>
-              <Textarea
-                placeholder="Descreva detalhes relevantes sobre o fechamento da proposta."
-                value={gainObservation}
-                onChange={(event) => setGainObservation(event.target.value)}
-                className="min-h-[120px]"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWinDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700"
-              onClick={handleConfirmWin}
-              disabled={updateEnrollmentStatusMutation.isPending}
-            >
-              Confirmar ganho
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setWinDialogOpen}
+        enrollmentId={enrollmentId}
+        proposalAmountLabel={proposalAmountLabel}
+        initialGainDate={currentGainDate}
+        initialNegotiatedAmount={
+          currentNegotiatedAmount
+            ? formatCurrencyInputValue(currentNegotiatedAmount)
+            : (proposalAmountLabel || '')
+        }
+        initialPaidAmount={currentEntryAmount ? formatCurrencyInputValue(currentEntryAmount) : ''}
+        initialGainObservation={currentGainObservation}
+      />
 
       <Dialog
         open={lossDialogOpen}

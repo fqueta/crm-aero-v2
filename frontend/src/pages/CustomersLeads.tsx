@@ -26,6 +26,7 @@ import { phoneApplyMask, phoneRemoveMask } from '@/lib/masks/phone-apply-mask';
 import { normalizeUrl } from '@/lib/urls';
 import * as attendanceLogsService from '@/services/attendanceLogsService';
 import { ScheduledCommunicationDialog } from '@/components/sales/ScheduledCommunicationDialog';
+import { ProposalWinDialog } from '@/components/school/ProposalWinDialog';
 
 /**
  * hexToRgba
@@ -412,6 +413,7 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
   const [salesStatusFilter, setSalesStatusFilter] = useState<'all' | 'a' | 'g' | 'p'>('a');
   const [selectedEnrollmentIds, setSelectedEnrollmentIds] = useState<string[]>([]);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [winDialogEnrollment, setWinDialogEnrollment] = useState<EnrollmentRecord | null>(null);
   useEffect(() => {
     if (place === 'vendas') setLocalEnrollments(allEnrollments);
   }, [place, allEnrollments]);
@@ -989,13 +991,20 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
 
   /**
    * updateEnrollmentStatusQuickly
-   * pt-BR: Atualiza o status da matrícula com otimização local e rollback em erro.
-   * en-US: Updates enrollment status with local optimistic UI and rollback on error.
+   * pt-BR: Atualiza o status da matrícula. Para ganho ('g'), abre o modal
+   *        padronizado de ganho para preenchimento dos valores de fechamento.
+   * en-US: Updates enrollment status. For win ('g'), opens the standard win modal.
    */
   const updateEnrollmentStatusQuickly = (enrollmentId: string, status: 'a' | 'g' | 'p') => {
     const idx = localEnrollments.findIndex((e) => String(e.id) === String(enrollmentId));
     if (idx < 0) return;
     const base = localEnrollments[idx];
+
+    if (status === 'g') {
+      setWinDialogEnrollment(base);
+      return;
+    }
+
     const currentStatus = String((base as any)?.status || 'a').toLowerCase();
     if (currentStatus === status) return;
 
@@ -1662,6 +1671,37 @@ export default function CustomersLeads({ place = 'atendimento' }: { place?: 'ven
         enrollments={selectedEnrollments}
         onSuccess={() => setSelectedEnrollmentIds([])}
       />
+
+      {winDialogEnrollment && (
+        <ProposalWinDialog
+          open={!!winDialogEnrollment}
+          onOpenChange={(open) => {
+            if (!open) setWinDialogEnrollment(null);
+          }}
+          enrollmentId={winDialogEnrollment.id}
+          proposalAmountLabel={formatBRL(getEnrollmentAmountBRL(winDialogEnrollment))}
+          initialGainDate={typeof (winDialogEnrollment as any)?.meta?.data_ganho === 'string' ? (winDialogEnrollment as any).meta.data_ganho : undefined}
+          initialNegotiatedAmount={
+            typeof (winDialogEnrollment as any)?.meta?.valor_negociado_ganho === 'string'
+              ? (winDialogEnrollment as any).meta.valor_negociado_ganho
+              : formatBRL(getEnrollmentAmountBRL(winDialogEnrollment))
+          }
+          initialPaidAmount={
+            typeof (winDialogEnrollment as any)?.meta?.valor_entrada_ganho === 'string'
+              ? (winDialogEnrollment as any).meta.valor_entrada_ganho
+              : undefined
+          }
+          initialGainObservation={
+            typeof (winDialogEnrollment as any)?.meta?.observacao_ganho === 'string'
+              ? (winDialogEnrollment as any).meta.observacao_ganho
+              : undefined
+          }
+          onSuccess={() => {
+            setLocalEnrollments((prev) => prev.filter((e) => String(e.id) !== String(winDialogEnrollment.id)));
+            setWinDialogEnrollment(null);
+          }}
+        />
+      )}
     </div>
   );
 }
