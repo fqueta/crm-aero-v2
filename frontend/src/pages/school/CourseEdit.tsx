@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CourseForm } from '@/components/school/CourseForm';
+import { CourseInstructionProgramCard } from '@/components/school/CourseInstructionProgramCard';
 import EditFooterBar from '@/components/ui/edit-footer-bar';
 import { coursesService } from '@/services/coursesService';
 import { CoursePayload, CourseRecord } from '@/types/courses';
@@ -81,6 +82,7 @@ export default function CourseEdit() {
           <Button variant="outline" onClick={() => navigate('/admin/school/courses')}>Voltar</Button>
         </div>
       </div>
+      <CourseInstructionProgramCard courseId={id} courseName={course?.nome} />
       <Card>
         <CardHeader>
           <CardTitle>Atualização de Curso</CardTitle>

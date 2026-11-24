@@ -120,6 +120,12 @@ Route::name('api.')->prefix('api/v1')->middleware([
     // Public theme route
     Route::get('options/theme', [\App\Http\Controllers\api\OptionController::class, 'publicTheme']);
 
+    // Public routes for Instruction Programs (Programa de Instrução + Chat RAG público)
+    Route::get('instruction-programs/public', [\App\Http\Controllers\api\InstructionProgramController::class, 'publicIndex']);
+    Route::get('instruction-programs/public/{slug}', [\App\Http\Controllers\api\InstructionProgramController::class, 'publicShow']);
+    Route::post('instruction-programs/public/{slug}/chat', [\App\Http\Controllers\api\InstructionProgramController::class, 'publicChat'])
+        ->middleware('throttle:20,1');
+
     Route::fallback(function () {
         return response()->json(['message' => 'Rota não encontrada'], 404);
     });
@@ -512,10 +518,30 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::get('relatorios/contratos-vencidos/export', [\App\Http\Controllers\api\ContratosVencidosController::class, 'export'])->name('relatorios.contratos-vencidos.export');
         Route::patch('relatorios/contratos-vencidos/{id}/validade', [\App\Http\Controllers\api\ContratosVencidosController::class, 'setValidade'])->name('relatorios.contratos-vencidos.validade');
         Route::post('relatorios/contratos-vencidos/{id}/whatsapp', [\App\Http\Controllers\api\ContratosVencidosController::class, 'whatsapp'])->name('relatorios.contratos-vencidos.whatsapp');
-        // Assistente de IA (guia do sistema — padrão Help Desk)
+        // Assistente de IA (guia do sistema — padrão Help Desk + RAG)
         Route::post('ai/assistant', [\App\Http\Controllers\api\AiChatController::class, 'chat'])->name('ai.assistant.chat');
         Route::get('ai/assistant/suggestions', [\App\Http\Controllers\api\AiChatController::class, 'suggestions'])->name('ai.assistant.suggestions');
         Route::get('ai/status', [\App\Http\Controllers\api\AiChatController::class, 'status'])->name('ai.status');
+        Route::post('ai/rag/reindex', [\App\Http\Controllers\api\InstructionProgramController::class, 'reindexRag'])->name('ai.rag.reindex');
+
+        // Programas de Instrução (PI, revisões e edição assistida por IA)
+        Route::apiResource('instruction-programs', \App\Http\Controllers\api\InstructionProgramController::class, ['parameters' => [
+            'instruction-programs' => 'id',
+        ]]);
+        Route::post('instruction-programs/{id}/publish-revision', [\App\Http\Controllers\api\InstructionProgramController::class, 'publishRevision'])
+            ->name('instruction-programs.publish-revision');
+        Route::get('instruction-programs/{id}/revisions', [\App\Http\Controllers\api\InstructionProgramController::class, 'revisions'])
+            ->name('instruction-programs.revisions');
+        Route::post('instruction-programs/{id}/revisions/{revisionId}/restore', [\App\Http\Controllers\api\InstructionProgramController::class, 'restoreRevision'])
+            ->name('instruction-programs.restore-revision');
+        Route::post('instruction-programs/{id}/ai-edit', [\App\Http\Controllers\api\InstructionProgramController::class, 'aiEdit'])
+            ->name('instruction-programs.ai-edit');
+
+        // Configurações Institucionais de Contratos (canais, MGR, regras padrão)
+        Route::get('settings/contract-defaults', [\App\Http\Controllers\api\ContractInstitutionalDefaultsController::class, 'show'])
+            ->name('settings.contract-defaults.show');
+        Route::put('settings/contract-defaults', [\App\Http\Controllers\api\ContractInstitutionalDefaultsController::class, 'update'])
+            ->name('settings.contract-defaults.update');
         // Asaas: status e teste de conexão (padrão Help Desk)
         Route::get('asaas/status', [\App\Http\Controllers\api\AsaasController::class, 'status'])->name('asaas.status');
         Route::post('asaas/test-connection', [\App\Http\Controllers\api\AsaasController::class, 'testConnection'])->name('asaas.test-connection');

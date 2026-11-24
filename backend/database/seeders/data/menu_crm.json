@@ -105,6 +105,10 @@
                 "url": "/school/contracts"
             },
             {
+                "title": "Programas de Instrução",
+                "url": "/school/instruction-programs"
+            },
+            {
                 "title": "Períodos",
                 "url": "/school/periods"
             },

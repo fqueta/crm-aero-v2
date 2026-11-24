@@ -2,17 +2,35 @@
 
 namespace App\Services\Ai;
 
+use App\Contracts\AiPromptContextStrategyInterface;
 use App\Models\EventLog;
+use App\Models\InstructionProgram;
 use App\Services\Ai\Chat\AiChatProviderFactory;
+use App\Services\Ai\Prompts\AdminAssistantContextStrategy;
+use App\Services\Ai\Prompts\PublicInstructionProgramContextStrategy;
+use App\Services\Ai\Rag\RagRetrieverService;
 use Exception;
 
 class AiChatService
 {
+    protected RagRetrieverService $ragRetriever;
+
+    protected AiPromptContextStrategyInterface $adminPromptStrategy;
+
+    protected AiPromptContextStrategyInterface $publicProgramPromptStrategy;
+
+    public function __construct(
+        ?RagRetrieverService $ragRetriever = null,
+        ?AiPromptContextStrategyInterface $adminPromptStrategy = null,
+        ?AiPromptContextStrategyInterface $publicProgramPromptStrategy = null
+    ) {
+        $this->ragRetriever = $ragRetriever ?? new RagRetrieverService();
+        $this->adminPromptStrategy = $adminPromptStrategy ?? new AdminAssistantContextStrategy();
+        $this->publicProgramPromptStrategy = $publicProgramPromptStrategy ?? new PublicInstructionProgramContextStrategy();
+    }
+
     /**
-     * Responde uma mensagem do guia do sistema.
-     * pt-BR: Sem cota (decisão do projeto) — registra EventLog best-effort.
-     * Se o provedor preferido falhar na chamada, tenta o próximo configurado
-     * (fallback em runtime). Se todos falharem, lança erro amigável em PT-BR.
+     * Responde uma mensagem do guia do sistema (admin), enriquecida com RAG.
      */
     public function chat(string $message, array $context, array $history = []): array
     {
@@ -24,7 +42,16 @@ class AiChatService
             throw new Exception('Nenhum provedor de IA configurado. Cadastre a chave em Configurações > Integrações (OpenAI ou Gemini).');
         }
 
-        $systemPrompt = $this->buildSystemPrompt($context);
+        $ragChunks = [];
+        try {
+            $ragChunks = $this->ragRetriever->search($message, [
+                'publicOnly' => false,
+                'limit' => 5,
+            ]);
+        } catch (\Throwable $e) {
+        }
+
+        $systemPrompt = $this->adminPromptStrategy->buildSystemPrompt($context, $ragChunks);
 
         $lastError = null;
         foreach ($providers as $provider) {
@@ -40,6 +67,7 @@ class AiChatService
                         'payload' => [
                             'provider' => $provider->getProviderSlug(),
                             'model' => $result['model'] ?? 'unknown',
+                            'rag_hits' => count($ragChunks),
                         ],
                         'actor_id' => (string) ($userId ?? '0'),
                         'ip_address' => request()->ip(),
@@ -50,6 +78,7 @@ class AiChatService
                 return [
                     'reply' => $result['reply'],
                     'actions' => $this->extractActions((string) ($result['reply'] ?? '')),
+                    'sources' => $this->formatSources($ragChunks),
                     'provider' => $provider->getProviderSlug(),
                     'quota' => null,
                 ];
@@ -62,8 +91,78 @@ class AiChatService
     }
 
     /**
+     * Responde perguntas públicas na página do Programa de Instrução usando RAG restrito ao escopo público.
+     */
+    public function publicProgramChat(InstructionProgram $program, string $message, array $history = []): array
+    {
+        $providers = AiChatProviderFactory::configuredProviders();
+
+        if (empty($providers)) {
+            throw new Exception('Assistente virtual temporariamente indisponível.');
+        }
+
+        $ragChunks = [];
+        try {
+            $ragChunks = $this->ragRetriever->search($message, [
+                'publicOnly' => true,
+                'instructionProgramId' => (int) $program->id,
+                'limit' => 6,
+            ]);
+        } catch (\Throwable $e) {
+        }
+
+        // Fallback seguro caso o PI ainda não tenha sido indexado em chunks
+        if (empty($ragChunks) && !empty($program->content_html)) {
+            $ragChunks = [[
+                'title' => $program->title,
+                'section_title' => 'Conteúdo publicado',
+                'content' => mb_substr(trim(strip_tags((string) $program->content_html)), 0, 4000),
+                'metadata' => ['revision' => $program->current_revision, 'slug' => $program->slug],
+            ]];
+        }
+
+        $systemPrompt = $this->publicProgramPromptStrategy->buildSystemPrompt([
+            'programTitle' => $program->title,
+            'programCode' => $program->code,
+            'revision' => $program->current_revision,
+            'revisionDate' => $program->revision_date?->format('d/m/Y'),
+        ], $ragChunks);
+
+        $lastError = null;
+        foreach ($providers as $provider) {
+            try {
+                $result = $provider->chat($message, $systemPrompt, $history, ['temperature' => 0.3]);
+
+                return [
+                    'reply' => $result['reply'],
+                    'sources' => $this->formatSources($ragChunks),
+                    'provider' => $provider->getProviderSlug(),
+                ];
+            } catch (\Throwable $e) {
+                $lastError = $e;
+            }
+        }
+
+        throw new Exception($this->friendlyError($lastError));
+    }
+
+    protected function formatSources(array $ragChunks): array
+    {
+        $sources = [];
+        foreach ($ragChunks as $chunk) {
+            $sources[] = [
+                'title' => $chunk['title'] ?? 'Documento',
+                'section' => $chunk['section_title'] ?? null,
+                'revision' => $chunk['metadata']['revision'] ?? null,
+                'score' => $chunk['score'] ?? null,
+            ];
+        }
+
+        return $sources;
+    }
+
+    /**
      * Converte erros técnicos dos provedores em mensagem curta PT-BR.
-     * pt-BR: Evita vazar JSON cru da API no chat do widget.
      */
     protected function friendlyError(?\Throwable $e): string
     {
@@ -104,12 +203,13 @@ class AiChatService
             '/admin/school/enroll' => ['Como criar uma matrícula?', 'Como gerar o contrato em PDF?', 'Como enviar a proposta para assinatura?'],
             '/admin/school/courses' => ['Como cadastrar um curso?', 'Quais páginas aparecem no PDF da proposta?'],
             '/admin/school/classes' => ['Como criar uma turma?', 'Como vincular alunos à turma?'],
+            '/admin/school/instruction-programs' => ['Como publicar uma nova revisão do PI?', 'Como editar o Programa de Instrução com IA?', 'Quais shortcodes do PI vão para o contrato?'],
             '/admin/school/termination' => ['Como lançar uma rescisão?', 'Como funciona o cálculo da multa de 30%?'],
-            '/admin/school/contracts' => ['Como funcionam os shortcodes do contrato?', 'O que é a {tabela_parcelas}?'],
+            '/admin/school/contracts' => ['Como funcionam os shortcodes do contrato?', 'O que é a {tabela_parcelas}?', 'De onde vêm {identificacao_pi} e {revisao_pi}?'],
             '/admin/financial' => ['Como funcionam as cobranças Asaas?', 'Onde configuro multa e juros de mora?'],
             '/admin/reports' => ['Quais relatórios existem?', 'Como ver as horas voadas?'],
             '/admin/settings/integrations' => ['Como configurar a integração Asaas?', 'Como testar a conexão de uma integração?', 'Onde cadastro a chave da IA?'],
-            '/admin/settings' => ['Como gerenciar usuários e permissões?', 'Como configurar o funil e as etapas?'],
+            '/admin/settings' => ['Como gerenciar usuários e permissões?', 'Onde configuro os canais oficiais e MGR padrão dos contratos?'],
         ];
 
         foreach ($map as $path => $suggestions) {
@@ -118,83 +218,14 @@ class AiChatService
             }
         }
 
-        return ['Como criar uma proposta?', 'Onde vejo as cobranças Asaas?', 'Como gerar o contrato em PDF?', 'Como cadastrar um novo cliente?'];
-    }
-
-    protected function buildSystemPrompt(array $context): string
-    {
-        $currentRoute = $context['currentRoute'] ?? '/admin/';
-
-        return <<<PROMPT
-Você é o Assistente do CRM Aeroclube (escola de aviação).
-Sua função é ajudar os usuários do sistema com dúvidas, sugerir ações e auxiliá-los na navegação.
-
-Regras:
-1. Responda sempre em Português do Brasil (PT-BR).
-2. Seja conciso e direto.
-3. Use links markdown [Texto do Link](/admin/rota/destino) para sugerir navegação para páginas do sistema.
-4. Se o usuário perguntar sobre algo que você não sabe ou não encontrou, responda: "Não encontrei esse recurso no sistema. Tente a Consulta Geral (lupa no topo) ou o menu lateral."
-
-Contexto Atual: O usuário está na rota "{$currentRoute}".
-
-MAPA DO SISTEMA (rotas com prefixo /admin):
-🏠 Dashboard → /admin/
-💼 Vendas e Propostas:
-  - Funil de vendas (Atendimento FloW) → /admin/sales
-  - Ver proposta/matrícula → /admin/sales/proposals/view/{id}
-👥 Clientes:
-  - Leads → /admin/customers/leads
-  - Arquivo de clientes → /admin/clients
-  - Ver cliente → /admin/clients/{id}/view
-🏫 Escola:
-  - Interessados → /admin/school/interested
-  - Matrículas → /admin/school/enroll
-  - Cursos → /admin/school/courses (editar: /admin/school/courses/{id}/edit)
-  - Turmas → /admin/school/classes
-  - Rescisões → /admin/school/termination
-  - Ganhos → /admin/school/ganhos
-  - Situações de matrícula → /admin/school/enrollment-situation
-  - Controle de Formação (PNL) → /admin/school/formation-control
-  - Períodos → /admin/school/periods
-  - Contratos e termos (shortcodes, {tabela_parcelas}) → /admin/school/contracts
-💰 Financeiro:
-  - Contas → /admin/financial
-  - Categorias → /admin/financial/categories
-  - Cobranças Asaas da matrícula (ver/editar/excluir, multa e juros de mora) → na tela da proposta
-📊 Relatórios:
-  - Geral → /admin/reports/relatorio-geral
-  - Vendas → /admin/reports/relatorio-vendas
-  - Acessos → /admin/reports/relatorio-acessos
-⚙️ Configurações:
-  - Usuários → /admin/settings/users
-  - Aeronaves → /admin/settings/aircrafts
-  - Permissões → /admin/settings/permissions
-  - Funil e etapas → /admin/settings/stages
-  - Tabelas de preço → /admin/settings/table-price
-  - Tabelas de parcelamento → /admin/settings/table-installment
-  - Tabelas de desconto → /admin/settings/table-discount
-  - Cupom de desconto → /admin/settings/cupom_desconto
-  - Sistema (logo de e-mail, nome remetente) → /admin/settings/system
-  - Integrações (Asaas, Brevo, ZapSign, ChatGuru, IA) → /admin/settings/integrations
-  - Importação de dados legados → /admin/settings/import-data
-  - Categorias → /admin/categories
-  - Site (páginas e componentes) → /admin/site/paginas
-
-Funções principais:
-- O funil de Vendas acompanha matrículas por etapa; visualizar a proposta pública move a etapa só quando quem vê não é usuário do sistema.
-- A proposta congela a Programação de Pagamento no aceite; o Asaas gera cobranças (entrada avulsa + restante parcelado) e o webhook dá baixa e ganho automáticos.
-- O contrato usa shortcodes (ex.: {tabela_parcelas}, {nome_aluno}) editáveis em Contratos e termos.
-- A rescisão calcula multa de 30%, taxa de matrícula, horas voadas e alojamento, com termo público assinável.
-PROMPT;
+        return ['Como criar uma proposta?', 'Qual a revisão vigente do Programa de Instrução?', 'Como gerar o contrato em PDF?', 'Onde configuro os canais oficiais dos contratos?'];
     }
 
     protected function extractActions(string $reply): array
     {
         $actions = [];
-        // Links markdown: [label](/route)
         if (preg_match_all('/\[([^\]]+)\]\(([^)]+)\)/', $reply, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
-                // Apenas rotas relativas internas
                 if (strpos($match[2], '/') === 0) {
                     $actions[] = [
                         'label' => $match[1],
@@ -203,6 +234,7 @@ PROMPT;
                 }
             }
         }
+
         return $actions;
     }
 }

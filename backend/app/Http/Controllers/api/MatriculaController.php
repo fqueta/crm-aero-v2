@@ -1547,6 +1547,12 @@ class MatriculaController extends Controller
                 }
             }
         } catch (\Throwable $e) {}
+
+        // Injeta shortcodes do Quadro da Contratação (Institucional → PI → Turma → Proposta)
+        try {
+            $dm = (new \App\Services\Contracts\ContractContextFacade())->inject($dm);
+        } catch (\Throwable $e) {}
+
         return $dm;
     }
 

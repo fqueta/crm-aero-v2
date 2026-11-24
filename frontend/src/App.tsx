@@ -105,6 +105,9 @@ import Termination from "./pages/school/Termination";
 import ContractsList from "./pages/school/ContractsList";
 import ContractCreate from "./pages/school/ContractCreate";
 import ContractEdit from "./pages/school/ContractEdit";
+import InstructionProgramsList from "./pages/school/InstructionProgramsList";
+import InstructionProgramEdit from "./pages/school/InstructionProgramEdit";
+import PublicInstructionProgram from "./pages/PublicInstructionProgram";
 import PeriodsList from "./pages/school/PeriodsList";
 import PeriodCreate from "./pages/school/PeriodCreate";
 import PeriodEdit from "./pages/school/PeriodEdit";
@@ -211,6 +214,8 @@ const App = () => {
               <Route path="/aluno/matricula/:compositeId/2" element={<ProposalApproval />} />
               <Route path="/aluno/matricula/:compositeId/2/aprovado" element={<ProposalApproved />} />
               <Route path="/solicitar-rescisao/:token" element={<PublicTerminationRequest />} />
+              <Route path="/programas-instrucao" element={<PublicInstructionProgram />} />
+              <Route path="/programa-instrucao/:slug" element={<PublicInstructionProgram />} />
               
               {/* Rotas da loja - protegidas */}
               <Route path={link_loja + "/area-cliente"} element={ 
@@ -306,6 +311,28 @@ const App = () => {
                 <AdminProtectedRoute>
                   <AppLayout>
                     <ContractEdit />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              {/* Escola / Programas de Instrução */}
+              <Route path="/admin/school/instruction-programs" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <InstructionProgramsList />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/school/instruction-programs/create" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <InstructionProgramEdit />
+                  </AppLayout>
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/school/instruction-programs/:id/edit" element={
+                <AdminProtectedRoute>
+                  <AppLayout>
+                    <InstructionProgramEdit />
                   </AppLayout>
                 </AdminProtectedRoute>
               } />

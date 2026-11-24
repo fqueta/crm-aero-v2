@@ -399,6 +399,12 @@ export const defaultMenu: MenuItemDTO[] = [
         can_view: true
       },
       {
+        title: "Programas de Instrução",
+        url: "/school/instruction-programs",
+        permission: "school.contracts.view",
+        can_view: true
+      },
+      {
         title: "Períodos",
         url: "/school/periods",
         permission: "school.periods.view",

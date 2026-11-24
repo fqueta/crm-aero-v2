@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ContractInstitutionalDefaultsCard } from "@/components/settings/ContractInstitutionalDefaultsCard";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -593,10 +594,11 @@ export default function SystemSettings() {
 
       {/* Abas de Configurações */}
       <Tabs defaultValue="basic" className="w-full" onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="basic">Configurações Básicas</TabsTrigger>
           <TabsTrigger value="advanced">Configurações Avançadas</TabsTrigger>
           <TabsTrigger value="api">Configurações de API</TabsTrigger>
+          <TabsTrigger value="contracts">Contratos &amp; Canais</TabsTrigger>
         </TabsList>
 
         {/* Aba de Configurações Básicas */}
@@ -1431,6 +1433,11 @@ export default function SystemSettings() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Aba de Padrões Institucionais de Contratos & Canais */}
+        <TabsContent value="contracts" className="space-y-6">
+          <ContractInstitutionalDefaultsCard />
         </TabsContent>
       </Tabs>
     </div>

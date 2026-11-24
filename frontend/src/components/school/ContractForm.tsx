@@ -392,6 +392,10 @@ export function ContractForm({
                 {[
                   { id: 'all', label: 'Todos' },
                   { id: 'Vendas / Parcelamento', label: '⭐ Vendas / Parcelamento' },
+                  { id: 'Programa de Instrução', label: '📘 Programa de Instrução' },
+                  { id: 'Turma & Vigência', label: 'Turma & Vigência' },
+                  { id: 'Tarifas & Aeronave', label: 'Tarifas & Aeronave' },
+                  { id: 'Escala & Canais', label: 'Escala & Canais' },
                   { id: 'Aluno', label: 'Aluno' },
                   { id: 'Responsável', label: 'Responsável' },
                   { id: 'Curso', label: 'Curso' },
