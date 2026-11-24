@@ -525,6 +525,13 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::post('ai/test-connection', [\App\Http\Controllers\api\AiChatController::class, 'testConnection'])->name('ai.test-connection');
         Route::post('ai/rag/reindex', [\App\Http\Controllers\api\InstructionProgramController::class, 'reindexRag'])->name('ai.rag.reindex');
 
+        // Créditos de IA (recarga via PIX Asaas Central e extrato)
+        Route::get('ai/credits/balance', [\App\Http\Controllers\api\AiCreditController::class, 'getBalance'])->name('ai.credits.balance');
+        Route::get('ai/credits/packages', [\App\Http\Controllers\api\AiCreditController::class, 'getPackages'])->name('ai.credits.packages');
+        Route::post('ai/credits/buy', [\App\Http\Controllers\api\AiCreditController::class, 'buyPackage'])->name('ai.credits.buy');
+        Route::get('ai/credits/purchases/{id}/status', [\App\Http\Controllers\api\AiCreditController::class, 'checkPurchaseStatus'])->name('ai.credits.purchase-status');
+        Route::get('ai/credits/transactions', [\App\Http\Controllers\api\AiCreditController::class, 'getTransactions'])->name('ai.credits.transactions');
+
         // Programas de Instrução (PI, revisões e edição assistida por IA)
         Route::apiResource('instruction-programs', \App\Http\Controllers\api\InstructionProgramController::class, ['parameters' => [
             'instruction-programs' => 'id',

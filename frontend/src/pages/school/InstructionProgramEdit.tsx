@@ -45,6 +45,7 @@ import {
   parseProgramSections,
   rebuildProgramHtml,
 } from '@/lib/instructionProgramSections';
+import { BuyAiCreditsModal } from '@/components/ai/BuyAiCreditsModal';
 import '@/styles/instruction-program-viewer.css';
 
 interface AiChatEntry {
@@ -53,6 +54,7 @@ interface AiChatEntry {
   proposal?: AiEditProposal;
   targetSectionIdx?: number | null;
   targetSectionLabel?: string | null;
+  isCreditExhausted?: boolean;
 }
 
 const CONTRACT_DEFAULT_FIELDS: { key: string; label: string; placeholder: string }[] = [
@@ -106,6 +108,7 @@ export default function InstructionProgramEdit() {
   const [aiInput, setAiInput] = useState('');
   const [aiMessages, setAiMessages] = useState<AiChatEntry[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [showBuyCreditsModal, setShowBuyCreditsModal] = useState(false);
 
   const { data: coursesResp } = useQuery({
     queryKey: ['courses-for-pi'],
@@ -330,11 +333,25 @@ export default function InstructionProgramEdit() {
         throw new Error(resp.message || 'Falha ao processar instrução na IA.');
       }
     } catch (err: any) {
+      const errorMsg = String(err?.message || '');
+      const isQuotaError =
+        errorMsg.includes('créditos') ||
+        errorMsg.includes('cotas') ||
+        errorMsg.includes('credit_balance_exhausted') ||
+        errorMsg.includes('insufficient_quota') ||
+        errorMsg.includes('RESOURCE_EXHAUSTED') ||
+        errorMsg.includes('Quota exceeded');
+
+      const friendlyMessage = isQuotaError
+        ? 'Os créditos de Inteligência Artificial da plataforma estão esgotados no momento. Adicione créditos via PIX para continuar gerando propostas e revisando os conteúdos automaticamente.'
+        : errorMsg || 'Não foi possível falar com a IA. Verifique as chaves em Configurações > Integrações.';
+
       setAiMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: err?.message || 'Não foi possível falar com a IA. Verifique as chaves em Configurações > Integrações.',
+          content: friendlyMessage,
+          isCreditExhausted: isQuotaError,
         },
       ]);
     } finally {
@@ -916,6 +933,19 @@ export default function InstructionProgramEdit() {
                     </div>
                     <div className="whitespace-pre-wrap text-xs leading-relaxed">{msg.content}</div>
 
+                    {msg.isCreditExhausted && (
+                      <div className="pt-2 border-t border-border/60">
+                        <Button
+                          size="sm"
+                          className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-medium shadow-sm"
+                          onClick={() => setShowBuyCreditsModal(true)}
+                        >
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                          Adicionar Créditos via PIX
+                        </Button>
+                      </div>
+                    )}
+
                     {msg.proposal && (msg.proposal.proposed_content_html || msg.proposal.proposed_metadata) && (
                       <div className="pt-2 border-t border-border/60 space-y-2">
                         {msg.proposal.change_summary && (
@@ -974,6 +1004,14 @@ export default function InstructionProgramEdit() {
           </Card>
         </div>
       </div>
+
+      <BuyAiCreditsModal
+        open={showBuyCreditsModal}
+        onOpenChange={setShowBuyCreditsModal}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['ai-credits-balance'] });
+        }}
+      />
     </div>
   );
 }

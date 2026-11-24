@@ -433,6 +433,25 @@ class WebhookController extends Controller
         $eventId = (string) ($payload['id'] ?? '');
         Log::info('Processando webhook Asaas', ['event' => $event ?: 'unknown']);
 
+        $payment = $payload['payment'] ?? null;
+
+        // Se for compra de créditos de IA (externalReference saas_ai_credits_*)
+        $extRef = $payment['externalReference'] ?? '';
+        if (is_string($extRef) && str_starts_with($extRef, 'saas_ai_credits_')) {
+            $purchaseId = (int) str_replace('saas_ai_credits_', '', $extRef);
+            $purchase = \App\Models\SaasAiCreditPurchase::find($purchaseId);
+            if ($purchase && in_array($event, ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'])) {
+                app(\App\Services\Ai\Credits\AiCreditService::class)->markAsPaid($purchase, $payment['id'] ?? null);
+                return [
+                    'type' => 'asaas_ai_credits',
+                    'success' => true,
+                    'purchase_id' => $purchaseId,
+                    'event' => $event,
+                    'processed_at' => now()->toISOString(),
+                ];
+            }
+        }
+
         $asaas = new AsaasService();
         $expectedToken = $asaas->getWebhookToken();
         $providedToken = $headers['asaas-access-token'][0] ?? null;

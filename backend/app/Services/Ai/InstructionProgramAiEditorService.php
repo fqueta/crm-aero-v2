@@ -71,7 +71,19 @@ class InstructionProgramAiEditorService
             }
         }
 
-        throw new Exception('Não foi possível gerar a edição com IA: ' . ($lastError ? $lastError->getMessage() : 'erro desconhecido'));
+        $msg = $lastError ? $lastError->getMessage() : 'erro desconhecido';
+
+        if (
+            str_contains($msg, 'credit_balance_exhausted') ||
+            str_contains($msg, 'insufficient_quota') ||
+            str_contains($msg, 'RESOURCE_EXHAUSTED') ||
+            str_contains($msg, 'Quota exceeded') ||
+            str_contains($msg, 'rate-limits')
+        ) {
+            throw new Exception('Os créditos ou cotas de Inteligência Artificial estão esgotados no momento. Por favor, recarregue seus créditos para continuar utilizando o assistente.');
+        }
+
+        throw new Exception('Não foi possível gerar a edição com IA: ' . $msg);
     }
 
     /**
