@@ -53,6 +53,7 @@ class InstructionProgramAiEditorService
         $lastError = null;
         foreach ($providers as $provider) {
             try {
+                \Illuminate\Support\Facades\Log::info('InstructionProgramAiEditor: tentando provider ' . $provider->getProviderSlug());
                 $result = $provider->chat($instruction, $systemPrompt, $history, ['temperature' => 0.35]);
                 $parsed = $this->parseJsonResponse((string) ($result['reply'] ?? ''));
 
@@ -65,6 +66,7 @@ class InstructionProgramAiEditorService
                     'model' => $result['model'] ?? 'unknown',
                 ];
             } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('InstructionProgramAiEditor: provider ' . $provider->getProviderSlug() . ' falhou: ' . $e->getMessage());
                 $lastError = $e;
             }
         }
