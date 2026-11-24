@@ -20,6 +20,15 @@ class InstructionProgramEditorContextStrategy implements AiPromptContextStrategy
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
         $currentHtml = (string) ($context['content_html'] ?? '');
+        $sectionTitle = isset($context['section_title']) && is_string($context['section_title']) && trim($context['section_title']) !== ''
+            ? trim($context['section_title'])
+            : null;
+
+        $scopeBlock = $sectionTitle
+            ? "ESCOPO DESTA EDIÇÃO: Você está editando EXCLUSIVAMENTE a seção/capítulo \"{$sectionTitle}\".\n"
+              . "Retorne em `proposed_content_html` APENAS o HTML atualizado desta seção (sem incluir outras seções do documento), preservando as classes estruturais existentes (.pg, .pg-head, .pg-body, .pg-foot, table.pt, .callout, ol.chk, etc.) caso estejam presentes.\n\n"
+              . "CONTEÚDO HTML ATUAL DA SEÇÃO \"{$sectionTitle}\":"
+            : "CONTEÚDO HTML ATUAL DO PROGRAMA DE INSTRUÇÃO:";
 
         return <<<PROMPT
 Você é um especialista em documentação aeronáutica (RBAC/ANAC) e editor assistente do CRM Aeroclube.
@@ -28,7 +37,7 @@ Sua tarefa é ajudar o administrador a criar, revisar, estruturar ou atualizar o
 ESTADO ATUAL DO PROGRAMA DE INSTRUÇÃO (metadados):
 {$programJson}
 
-CONTEÚDO HTML ATUAL DO PROGRAMA DE INSTRUÇÃO:
+{$scopeBlock}
 ```html
 {$currentHtml}
 ```

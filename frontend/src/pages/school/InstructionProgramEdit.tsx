@@ -13,6 +13,12 @@ import {
   UploadCloud,
   Bot,
   Loader2,
+  Plus,
+  Trash2,
+  Code2,
+  Eye,
+  FileEdit,
+  Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,11 +40,19 @@ import { useToast } from '@/hooks/use-toast';
 import { coursesService } from '@/services/coursesService';
 import { instructionProgramService } from '@/services/instructionProgramService';
 import { AiEditProposal, InstructionProgramRevision } from '@/types/instructionProgram';
+import {
+  ParsedSection,
+  parseProgramSections,
+  rebuildProgramHtml,
+} from '@/lib/instructionProgramSections';
+import '@/styles/instruction-program-viewer.css';
 
 interface AiChatEntry {
   role: 'user' | 'assistant';
   content: string;
   proposal?: AiEditProposal;
+  targetSectionIdx?: number | null;
+  targetSectionLabel?: string | null;
 }
 
 const CONTRACT_DEFAULT_FIELDS: { key: string; label: string; placeholder: string }[] = [
@@ -80,6 +94,12 @@ export default function InstructionProgramEdit() {
   const [changeNotes, setChangeNotes] = useState('');
   const [editedByAi, setEditedByAi] = useState(false);
 
+  // Edição por seção/capítulo (manual + IA)
+  const [sections, setSections] = useState<ParsedSection[]>([]);
+  const [useSectionMode, setUseSectionMode] = useState(false);
+  const [activeSecIdx, setActiveSecIdx] = useState(0);
+  const [editorMode, setEditorMode] = useState<'visual' | 'html' | 'preview'>('visual');
+
   // Painel de Edição com IA
   const [aiInput, setAiInput] = useState('');
   const [aiMessages, setAiMessages] = useState<AiChatEntry[]>([]);
@@ -110,10 +130,71 @@ export default function InstructionProgramEdit() {
       setStatus(program.status || 'draft');
       setIsPublic(Boolean(program.is_public));
       setSummary(program.summary || '');
-      setContentHtml(program.content_html || '');
+      const rawHtml = program.content_html || '';
+      setContentHtml(rawHtml);
       setContractDefaults(program.contract_defaults || {});
+
+      const parsed = parseProgramSections(rawHtml, program.title || 'Conteúdo');
+      setSections(parsed);
+      setActiveSecIdx(0);
+      const multi = parsed.length > 1;
+      setUseSectionMode(multi);
+      if (multi && parsed[0]?.hasPg) {
+        setEditorMode('preview');
+      } else {
+        setEditorMode('visual');
+      }
     }
   }, [program]);
+
+  const activeSection = useSectionMode ? sections[activeSecIdx] ?? null : null;
+
+  const updateActiveSectionHtml = (newSectionHtml: string) => {
+    setSections((prev) => {
+      const next = prev.map((sec, idx) =>
+        idx === activeSecIdx
+          ? {
+              ...sec,
+              html: newSectionHtml,
+              hasPg: newSectionHtml.includes('class="pg"') || newSectionHtml.includes("class='pg'"),
+            }
+          : sec
+      );
+      setContentHtml(rebuildProgramHtml(next));
+      return next;
+    });
+  };
+
+  const handleAddSection = () => {
+    const newIndex = sections.length;
+    const newNum = String(newIndex + 1);
+    const newSec: ParsedSection = {
+      id: `sec-${Date.now()}`,
+      num: newNum,
+      title: `Nova Seção ${newNum}`,
+      html: `<h1>${newNum}. Nova Seção</h1>\n<p>Escreva o conteúdo desta seção aqui...</p>`,
+      plainText: `${newNum}. Nova Seção`,
+      hasPg: false,
+      subs: [],
+    };
+    const next = useSectionMode
+      ? [...sections, newSec]
+      : [...parseProgramSections(contentHtml, title || 'Conteúdo'), newSec];
+    setSections(next);
+    setUseSectionMode(true);
+    setActiveSecIdx(next.length - 1);
+    setEditorMode('visual');
+    setContentHtml(rebuildProgramHtml(next));
+  };
+
+  const handleRemoveActiveSection = () => {
+    if (sections.length <= 1) return;
+    const next = sections.filter((_, idx) => idx !== activeSecIdx);
+    setSections(next);
+    setActiveSecIdx(Math.max(0, activeSecIdx - 1));
+    setContentHtml(rebuildProgramHtml(next));
+    toast({ title: 'Seção removida do rascunho.' });
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -201,6 +282,10 @@ export default function InstructionProgramEdit() {
     const prompt = aiInput.trim();
     if (!prompt || !id) return;
 
+    const targetIdx = useSectionMode && activeSection ? activeSecIdx : null;
+    const targetLabel = activeSection ? `${activeSection.num}. ${activeSection.title}` : null;
+    const scopedHtml = activeSection ? activeSection.html : contentHtml;
+
     const history = aiMessages.map((m) => ({ role: m.role, content: m.content }));
     setAiMessages((prev) => [...prev, { role: 'user', content: prompt }]);
     setAiInput('');
@@ -218,7 +303,8 @@ export default function InstructionProgramEdit() {
           mgr_revision: mgrRevision,
           mgr_date: mgrDate,
           summary,
-          content_html: contentHtml,
+          content_html: scopedHtml,
+          section_title: targetLabel || undefined,
           contract_defaults: contractDefaults,
         },
       });
@@ -230,6 +316,8 @@ export default function InstructionProgramEdit() {
             role: 'assistant',
             content: resp.data.assistant_reply,
             proposal: resp.data,
+            targetSectionIdx: targetIdx,
+            targetSectionLabel: targetLabel,
           },
         ]);
       } else {
@@ -248,9 +336,33 @@ export default function InstructionProgramEdit() {
     }
   };
 
-  const applyAiProposal = (proposal: AiEditProposal) => {
+  const applyAiProposal = (proposal: AiEditProposal, targetSectionIdx?: number | null) => {
     if (proposal.proposed_content_html) {
-      setContentHtml(proposal.proposed_content_html);
+      if (targetSectionIdx !== null && targetSectionIdx !== undefined && useSectionMode && sections[targetSectionIdx]) {
+        const cleanSecHtml = proposal.proposed_content_html
+          .replace(/^\s*<section[^>]*>/i, '')
+          .replace(/<\/section>\s*$/i, '')
+          .trim();
+        setSections((prev) => {
+          const next = prev.map((sec, idx) =>
+            idx === targetSectionIdx
+              ? {
+                  ...sec,
+                  html: cleanSecHtml,
+                  hasPg: cleanSecHtml.includes('class="pg"') || cleanSecHtml.includes("class='pg'"),
+                }
+              : sec
+          );
+          setContentHtml(rebuildProgramHtml(next));
+          return next;
+        });
+        setActiveSecIdx(targetSectionIdx);
+      } else {
+        setContentHtml(proposal.proposed_content_html);
+        const parsed = parseProgramSections(proposal.proposed_content_html, title || 'Conteúdo');
+        setSections(parsed);
+        setUseSectionMode(parsed.length > 1);
+      }
     }
     if (proposal.proposed_metadata) {
       const m = proposal.proposed_metadata;
@@ -466,18 +578,143 @@ export default function InstructionProgramEdit() {
 
             <TabsContent value="content" className="mt-4">
               <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Texto Oficial do Programa de Instrução</CardTitle>
-                  <CardDescription>
-                    Use títulos (H2/H3) para separar seções — o motor RAG indexa automaticamente por seção para respostas precisas.
-                  </CardDescription>
+                <CardHeader className="pb-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-base">Texto Oficial do Programa de Instrução</CardTitle>
+                      <CardDescription>
+                        {useSectionMode
+                          ? `Modo por Seção/Capítulo (${sections.length} seções) — edite manualmente ou com a IA sem alterar os demais capítulos.`
+                          : 'Use títulos (H2/H3) para separar seções — o motor RAG indexa automaticamente por seção.'}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={handleAddSection}>
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Nova Seção
+                      </Button>
+                    </div>
+                  </div>
+
+                  {useSectionMode && sections.length > 0 && (
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2 border-t">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Select
+                          value={String(activeSecIdx)}
+                          onValueChange={(val) => setActiveSecIdx(Number(val))}
+                        >
+                          <SelectTrigger className="h-9 text-xs">
+                            <SelectValue placeholder="Selecione uma seção..." />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72">
+                            {sections.map((sec, idx) => (
+                              <SelectItem key={sec.id} value={String(idx)} className="text-xs">
+                                {sec.num}. {sec.title}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={editorMode === 'preview' ? 'default' : 'outline'}
+                          className="h-8 text-xs px-2.5"
+                          onClick={() => setEditorMode('preview')}
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1" />
+                          Prévia
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={editorMode === 'visual' ? 'default' : 'outline'}
+                          className="h-8 text-xs px-2.5"
+                          onClick={() => setEditorMode('visual')}
+                        >
+                          <FileEdit className="h-3.5 w-3.5 mr-1" />
+                          Visual
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={editorMode === 'html' ? 'default' : 'outline'}
+                          className="h-8 text-xs px-2.5"
+                          onClick={() => setEditorMode('html')}
+                        >
+                          <Code2 className="h-3.5 w-3.5 mr-1" />
+                          HTML
+                        </Button>
+                        {sections.length > 1 && (
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={handleRemoveActiveSection}
+                            title="Remover esta seção"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </CardHeader>
+
                 <CardContent className="space-y-4">
-                  <RichTextEditor
-                    value={contentHtml}
-                    onChange={setContentHtml}
-                    placeholder="Estruture aqui o Programa de Instrução (Objetivo, Pré-requisitos, Grade Prática, Escala, Critérios de Avaliação)..."
-                  />
+                  {useSectionMode && activeSection ? (
+                    <>
+                      {editorMode === 'preview' && (
+                        <div className="rounded-lg border bg-[#d9dee4] p-4 max-h-[620px] overflow-y-auto">
+                          <div className="pi-doc-container">
+                            {activeSection.hasPg ? (
+                              <div dangerouslySetInnerHTML={{ __html: activeSection.html }} />
+                            ) : (
+                              <div className="pi-doc-fallback-paper">
+                                <div className="pg-body" dangerouslySetInnerHTML={{ __html: activeSection.html }} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {editorMode === 'visual' && (
+                        <div className="space-y-2">
+                          {activeSection.hasPg && (
+                            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
+                              Dica: esta seção usa layout editorial avançado (.pg / tabelas). Para preservar 100% da diagramação original, prefira o modo <strong>HTML</strong> ou peça o ajuste ao <strong>Assistente IA</strong> ao lado.
+                            </p>
+                          )}
+                          <RichTextEditor
+                            key={activeSection.id}
+                            value={activeSection.html}
+                            onChange={updateActiveSectionHtml}
+                            placeholder="Edite o texto desta seção..."
+                          />
+                        </div>
+                      )}
+
+                      {editorMode === 'html' && (
+                        <Textarea
+                          value={activeSection.html}
+                          onChange={(e) => updateActiveSectionHtml(e.target.value)}
+                          rows={20}
+                          className="font-mono text-xs leading-relaxed"
+                          placeholder="<div class='pg'>...</div>"
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <RichTextEditor
+                      value={contentHtml}
+                      onChange={setContentHtml}
+                      placeholder="Estruture aqui o Programa de Instrução (Objetivo, Pré-requisitos, Grade Prática, Escala, Critérios de Avaliação)..."
+                    />
+                  )}
                   {isEditing && (
                     <div>
                       <Label>Nota da revisão (para o histórico ao publicar)</Label>
@@ -587,6 +824,13 @@ export default function InstructionProgramEdit() {
               <CardDescription className="text-xs">
                 Peça para estruturar seções, revisar regras, atualizar a revisão ou preencher padrões contratuais. Nada é aplicado sem sua confirmação.
               </CardDescription>
+              {useSectionMode && activeSection && (
+                <div className="pt-1.5">
+                  <Badge variant="secondary" className="text-[11px] font-medium max-w-full truncate">
+                    Escopo IA: {activeSection.num}. {activeSection.title}
+                  </Badge>
+                </div>
+              )}
             </CardHeader>
 
             <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[280px]">
@@ -638,10 +882,12 @@ export default function InstructionProgramEdit() {
                         <Button
                           size="sm"
                           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                          onClick={() => applyAiProposal(msg.proposal!)}
+                          onClick={() => applyAiProposal(msg.proposal!, msg.targetSectionIdx)}
                         >
                           <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-                          Aplicar alterações ao rascunho
+                          {msg.targetSectionLabel
+                            ? `Aplicar na seção "${msg.targetSectionLabel.slice(0, 26)}"`
+                            : 'Aplicar alterações ao rascunho'}
                         </Button>
                       </div>
                     )}

@@ -44,6 +44,7 @@ class InstructionProgramAiEditorService
             'mgr_date' => $draftOverrides['mgr_date'] ?? $program->mgr_date?->format('Y-m-d'),
             'summary' => $draftOverrides['summary'] ?? $program->summary,
             'content_html' => $draftOverrides['content_html'] ?? $program->content_html,
+            'section_title' => $draftOverrides['section_title'] ?? null,
             'contract_defaults' => $draftOverrides['contract_defaults'] ?? ($program->contract_defaults ?? []),
         ];
 
