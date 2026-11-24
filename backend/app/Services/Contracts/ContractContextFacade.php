@@ -24,6 +24,8 @@ class ContractContextFacade
         'identificacao_pi',
         'revisao_pi',
         'data_pi',
+        'clausula_aceite_pi',
+        'declaracao_aceite_pi',
         'revisao_mgr',
         'data_mgr',
         'identificacao_proposta',

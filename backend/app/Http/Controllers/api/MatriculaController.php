@@ -3170,8 +3170,29 @@ class MatriculaController extends Controller
                     }
 
                     //Aplicar shortcodes
-                    $cont->conteudo = Qlib::apply_shortcodes($cont->conteudo,$dm);
-                    $conteudo = $cont->conteudo??'';
+                    $conteudoProcessado = Qlib::apply_shortcodes($cont->conteudo, $dm);
+
+                    // Garante que termos de declaração de ciência e concordância incluam a declaração formal do PI
+                    if (!empty($dm['declaracao_aceite_pi'])) {
+                        // Se o documento tem a declaração geral numerada e ainda não possui a declaração formal de ciência do PI
+                        if (stripos($conteudoProcessado, 'Declaração de Ciência e Aceite do Programa de Instrução') === false) {
+                            if (stripos($conteudoProcessado, '<li>Por fim, reconheço') !== false) {
+                                $conteudoProcessado = str_ireplace(
+                                    '<li>Por fim, reconheço',
+                                    '<li><strong>Declaração de Ciência e Aceite do Programa de Instrução (P.I.):</strong> ' . $dm['declaracao_aceite_pi'] . '</li><li>Por fim, reconheço',
+                                    $conteudoProcessado
+                                );
+                            } elseif (stripos($conteudoProcessado, '</ol>') !== false && stripos($conteudoProcessado, 'declaro expressamente que:') !== false) {
+                                $conteudoProcessado = str_ireplace(
+                                    '</ol>',
+                                    '<li><strong>Declaração de Ciência e Aceite do Programa de Instrução (P.I.):</strong> ' . $dm['declaracao_aceite_pi'] . '</li></ol>',
+                                    $conteudoProcessado
+                                );
+                            }
+                        }
+                    }
+
+                    $conteudo = $conteudoProcessado ?? '';
                     $contratos[] = ['id'=>$id,'conteudo'=>$conteudo,'nome'=>$cont->nome,'slug'=>$cont->slug,'tipo'=>$cont->tipo??'geral'];
                 }
             }

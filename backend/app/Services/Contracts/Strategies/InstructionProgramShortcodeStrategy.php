@@ -35,6 +35,30 @@ class InstructionProgramShortcodeStrategy implements ContractShortcodeResolverIn
         if (!empty($revDate)) {
             $out['data_pi'] = $this->formatDate((string) $revDate);
         }
+
+        // Monta texto e cláusula jurídica de ciência e aceite do Programa de Instrução
+        $identificacaoPi = $out['identificacao_pi'] ?? '';
+        $revisaoPi = $out['revisao_pi'] ?? '';
+        $piRotulo = trim(($identificacaoPi !== '' ? $identificacaoPi . ' ' : '') . ($revisaoPi !== '' ? '(Revisão ' . $revisaoPi . ')' : ''));
+        if ($piRotulo === '') {
+            $piRotulo = 'Programa de Instrução do Curso';
+        }
+
+        $meta = is_array($dm['meta'] ?? null) ? $dm['meta'] : [];
+        $aceitoEm = $meta['pi_aceito_em'] ?? null;
+        $aceitoIp = $meta['pi_aceito_ip'] ?? null;
+        $detalhesAceite = '';
+        if ($aceitoEm) {
+            $ts = strtotime($aceitoEm);
+            $dataFormatada = $ts ? date('d/m/Y \à\s H:i', $ts) : $aceitoEm;
+            $detalhesAceite = " (Aceite digital registrado em {$dataFormatada}" . ($aceitoIp ? " - IP: {$aceitoIp}" : "") . ")";
+        }
+
+        $declaracaoTexto = "Declaro que tive acesso prévio, li, compreendi integralmente e concordo com todas as disposições, requisitos e critérios operacionais do {$piRotulo} do Aeroclube de Juiz de Fora, aprovado pela autoridade de aviação civil (ANAC), comprometendo-me a cumprir todas as suas diretrizes durante toda a realização do treinamento, sendo incabível a alegação de desconhecimento dos seus termos{$detalhesAceite}.";
+
+        $out['declaracao_aceite_pi'] = $declaracaoTexto;
+        $out['clausula_aceite_pi'] = "<p><strong>CIÊNCIA E ACEITE DO PROGRAMA DE INSTRUÇÃO (P.I.):</strong> {$declaracaoTexto}</p>";
+
         if (trim((string) $mgrRev) !== '') {
             $out['revisao_mgr'] = trim((string) $mgrRev);
         }

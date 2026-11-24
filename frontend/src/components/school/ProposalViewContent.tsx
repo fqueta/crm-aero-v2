@@ -13,6 +13,7 @@ import BudgetPreview from '@/components/school/BudgetPreview';
 import InstallmentPreviewCard from '@/components/school/InstallmentPreviewCard';
 import SignatureLinkCard from '@/components/school/SignatureLinkCard';
 import ProposalPdfLinkCard from '@/components/school/ProposalPdfLinkCard';
+import ProposalContractPdfCard from '@/components/school/ProposalContractPdfCard';
 import ResponsibleInfoCard from '@/components/school/ResponsibleInfoCard';
 import AsaasBillingCard from '@/components/school/AsaasBillingCard';
 import ProposalPiAcceptanceCard from '@/components/school/ProposalPiAcceptanceCard';
@@ -716,6 +717,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                   {/* Cards de Assinatura movidos da aba Admin */}
                   {linkAssinatura && <SignatureLinkCard link={linkAssinatura} />}
                   {meta?.proposta_pdf && <ProposalPdfLinkCard pdfUrl={meta.proposta_pdf} />}
+                  <ProposalContractPdfCard meta={meta} isSigned={isAssinado} />
                   {infoResponsavel && <ResponsibleInfoCard data={infoResponsavel} signatureLink={signatureLinkResp} />}
                   <ProposalPiAcceptanceCard meta={meta} instructionProgram={(enrollment as any)?.instruction_program} />
                   <AsaasBillingCard meta={meta} isSigned={isAssinado} />

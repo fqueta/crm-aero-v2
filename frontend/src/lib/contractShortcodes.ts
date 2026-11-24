@@ -95,8 +95,10 @@ export const CONTRACT_SHORTCODES: ContractShortcode[] = [
   { tag: "fim_vigencia", desc: "Vencimento ordinário / fim de vigência", grupo: "Turma & Vigência" },
   // Programa de Instrução & MGR
   { tag: "identificacao_pi", desc: "Identificação / código do Programa de Instrução (ex: PPAP)", grupo: "Programa de Instrução" },
-  { tag: "revisao_pi", desc: "Revisão vigente do Programa de Instrução (ex: 001F)", grupo: "Programa de Instrução" },
+  { tag: "revisao_pi", desc: "Revisão vigente do Programa de Instrução (ex: 001G)", grupo: "Programa de Instrução" },
   { tag: "data_pi", desc: "Data de emissão da revisão do Programa de Instrução", grupo: "Programa de Instrução" },
+  { tag: "declaracao_aceite_pi", desc: "Texto da declaração de ciência e aceite do PI", grupo: "Programa de Instrução" },
+  { tag: "clausula_aceite_pi", desc: "Cláusula formatada em HTML de ciência e aceite do PI", grupo: "Programa de Instrução" },
   { tag: "revisao_mgr", desc: "Revisão do MGR disponibilizado", grupo: "Programa de Instrução" },
   { tag: "data_mgr", desc: "Data de emissão do MGR disponibilizado", grupo: "Programa de Instrução" },
   // Proposta, Aeronave & Tarifas
