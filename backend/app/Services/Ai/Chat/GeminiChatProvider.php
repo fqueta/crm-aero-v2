@@ -26,11 +26,11 @@ class GeminiChatProvider extends BaseAiChatProvider
         }
 
         $models = array_values(array_unique(array_filter([
+            'gemini-3.5-flash-lite',
+            'gemini-flash-lite-latest',
             $this->model,
             'gemini-3.5-flash',
             'gemini-3.6-flash',
-            'gemini-3.5-flash-lite',
-            'gemini-flash-lite-latest',
             'gemini-3.8-flash',
             'gemini-3.7-flash',
             'gemini-flash-latest',
