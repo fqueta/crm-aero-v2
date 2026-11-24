@@ -68,6 +68,20 @@ class AiAssistantService extends BaseApiService {
   async getStatus(): Promise<AiStatusResponse> {
     return super.get<AiStatusResponse>('/ai/status');
   }
+
+  /** Testa a conexão com OpenAI e/ou Gemini sem consumir tokens */
+  async testConnection(payload: {
+    provider?: 'openai' | 'gemini' | 'all';
+    openai_key?: string;
+    gemini_key?: string;
+  }): Promise<{
+    success: boolean;
+    any_ok?: boolean;
+    message: string;
+    results: Record<string, { tested: boolean; ok: boolean; message: string }>;
+  }> {
+    return this.post('/ai/test-connection', payload);
+  }
 }
 
 export const aiAssistantService = new AiAssistantService();

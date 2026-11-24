@@ -23,6 +23,11 @@ abstract class BaseAiChatProvider implements AiChatProviderInterface
         return !empty($this->apiKey);
     }
 
+    public function getApiKey(): ?string
+    {
+        return $this->apiKey;
+    }
+
     /**
      * Resolve a API key em cascata: env → options → api_credentials.
      * pt-BR: Mesma ordem do padrão Help Desk, sem precedência por organização

@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { CreditCard, Save, RefreshCw, Eye, EyeOff, ShieldCheck, Copy, Check } from 'lucide-react';
+import { CreditCard, Save, RefreshCw, Eye, EyeOff, ShieldCheck, Copy, Check, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { asaasService } from '@/services/asaasService';
@@ -146,11 +146,23 @@ export function AsaasSettingsCard({ credential, onSave, isLoading }: AsaasSettin
       <CardContent className="p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="asaas_api_key" className="text-xs font-bold text-gray-500 uppercase tracking-wider">API Key</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="asaas_api_key" className="text-xs font-bold text-gray-500 uppercase tracking-wider">API Key</Label>
+              <a
+                href={params.environment === 'production' ? 'https://www.asaas.com/config/index' : 'https://sandbox.asaas.com/config/index'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-800 hover:underline"
+              >
+                <span>Obter API Key no Asaas ({params.environment === 'production' ? 'Produção' : 'Sandbox'})</span>
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
             <div className="relative">
               <Input
                 id="asaas_api_key"
                 type={showKey ? 'text' : 'password'}
+                autoComplete="new-password"
                 value={params.apiKey}
                 onChange={(e) => handleFieldChange('apiKey', e.target.value)}
                 placeholder="Ex: $aact_..."

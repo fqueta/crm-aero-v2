@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Bot, Save, RefreshCw, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { Bot, Save, RefreshCw, Eye, EyeOff, ShieldCheck, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { aiAssistantService } from '@/services/aiAssistantService';
@@ -35,6 +35,8 @@ export function AiSettingsCard({ openaiCredential, geminiCredential, onSave, isL
   });
   const [showOpenai, setShowOpenai] = useState(false);
   const [showGemini, setShowGemini] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string }>>({});
 
   // Status da configuração (presença das chaves)
   const [aiStatus, setAiStatus] = useState({
@@ -99,13 +101,67 @@ export function AiSettingsCard({ openaiCredential, geminiCredential, onSave, isL
     });
   };
 
-  const renderProviderBadge = (configured: boolean) => (
-    <Badge className={configured
-      ? 'bg-emerald-500 hover:bg-emerald-500 text-white border-none text-[10px] uppercase font-black tracking-wider py-0.5 px-2 rounded-full'
-      : 'bg-gray-400 hover:bg-gray-400 text-white border-none text-[10px] uppercase font-black tracking-wider py-0.5 px-2 rounded-full'}>
-      {configured ? 'Configurado' : 'Não configurado'}
-    </Badge>
-  );
+  const handleTestConnection = async () => {
+    if (!params.openaiKey && !params.geminiKey && !aiStatus.openai && !aiStatus.gemini) {
+      toast.error('Informe ao menos uma chave (OpenAI ou Gemini) para testar.');
+      return;
+    }
+    setTesting(true);
+    setTestResults({});
+    try {
+      const resp = await aiAssistantService.testConnection({
+        provider: 'all',
+        openai_key: params.openaiKey || undefined,
+        gemini_key: params.geminiKey || undefined,
+      });
+      const resMap: Record<string, { ok: boolean; message: string }> = {};
+      if (resp?.results) {
+        Object.entries(resp.results).forEach(([k, v]) => {
+          resMap[k] = { ok: !!v.ok, message: v.message };
+        });
+      }
+      setTestResults(resMap);
+      if (resp?.success) {
+        toast.success(resp.message || 'Conexão validada com sucesso!');
+      } else if (resp?.any_ok) {
+        toast.warning(resp.message || 'Conexão parcial: verifique o provedor com erro.');
+      } else {
+        toast.error(resp?.message || 'Falha ao validar conexão.');
+      }
+    } catch (err: any) {
+      const body = err?.body || err?.response?.data;
+      if (body?.results) {
+        const resMap: Record<string, { ok: boolean; message: string }> = {};
+        Object.entries(body.results).forEach(([k, v]: [string, any]) => {
+          resMap[k] = { ok: !!v.ok, message: v.message };
+        });
+        setTestResults(resMap);
+      }
+      toast.error(body?.message || err?.message || 'Falha ao testar conexão com a IA.');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const renderProviderBadge = (configured: boolean, providerKey: 'openai' | 'gemini') => {
+    const tested = testResults[providerKey];
+    if (tested) {
+      return (
+        <Badge className={tested.ok
+          ? 'bg-emerald-600 hover:bg-emerald-600 text-white border-none text-[10px] uppercase font-black tracking-wider py-0.5 px-2 rounded-full'
+          : 'bg-red-600 hover:bg-red-600 text-white border-none text-[10px] uppercase font-black tracking-wider py-0.5 px-2 rounded-full'}>
+          {tested.ok ? 'Conectado' : 'Chave inválida'}
+        </Badge>
+      );
+    }
+    return (
+      <Badge className={configured
+        ? 'bg-emerald-500 hover:bg-emerald-500 text-white border-none text-[10px] uppercase font-black tracking-wider py-0.5 px-2 rounded-full'
+        : 'bg-gray-400 hover:bg-gray-400 text-white border-none text-[10px] uppercase font-black tracking-wider py-0.5 px-2 rounded-full'}>
+        {configured ? 'Configurado' : 'Não configurado'}
+      </Badge>
+    );
+  };
 
   return (
     <Card className="border border-emerald-100 shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden bg-gradient-to-br from-white to-emerald-50/10">
@@ -124,14 +180,26 @@ export function AiSettingsCard({ openaiCredential, geminiCredential, onSave, isL
       <CardContent className="p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2 md:col-span-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="ai_openai_key" className="text-xs font-bold text-gray-500 uppercase tracking-wider">OpenAI API Key</Label>
-              {renderProviderBadge(aiStatus.openai)}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <Label htmlFor="ai_openai_key" className="text-xs font-bold text-gray-500 uppercase tracking-wider">OpenAI API Key</Label>
+                <a
+                  href="https://platform.openai.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                >
+                  <span>Obter chave na OpenAI</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              {renderProviderBadge(aiStatus.openai, 'openai')}
             </div>
             <div className="relative">
               <Input
                 id="ai_openai_key"
                 type={showOpenai ? 'text' : 'password'}
+                autoComplete="new-password"
                 value={params.openaiKey}
                 onChange={(e) => handleFieldChange('openaiKey', e.target.value)}
                 placeholder="Ex: sk-..."
@@ -147,17 +215,34 @@ export function AiSettingsCard({ openaiCredential, geminiCredential, onSave, isL
                 {showOpenai ? <EyeOff className="h-4 w-4 text-gray-400" /> : <Eye className="h-4 w-4 text-gray-400" />}
               </Button>
             </div>
+            {testResults.openai && (
+              <p className={`text-[11px] font-medium ${testResults.openai.ok ? 'text-emerald-700' : 'text-red-600'}`}>
+                {testResults.openai.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2 md:col-span-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="ai_gemini_key" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Gemini API Key</Label>
-              {renderProviderBadge(aiStatus.gemini)}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <Label htmlFor="ai_gemini_key" className="text-xs font-bold text-gray-500 uppercase tracking-wider">Gemini API Key</Label>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                >
+                  <span>Obter chave no Google AI Studio</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              {renderProviderBadge(aiStatus.gemini, 'gemini')}
             </div>
             <div className="relative">
               <Input
                 id="ai_gemini_key"
                 type={showGemini ? 'text' : 'password'}
+                autoComplete="new-password"
                 value={params.geminiKey}
                 onChange={(e) => handleFieldChange('geminiKey', e.target.value)}
                 placeholder="Ex: AIza..."
@@ -173,6 +258,11 @@ export function AiSettingsCard({ openaiCredential, geminiCredential, onSave, isL
                 {showGemini ? <EyeOff className="h-4 w-4 text-gray-400" /> : <Eye className="h-4 w-4 text-gray-400" />}
               </Button>
             </div>
+            {testResults.gemini && (
+              <p className={`text-[11px] font-medium ${testResults.gemini.ok ? 'text-emerald-700' : 'text-red-600'}`}>
+                {testResults.gemini.message}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -206,10 +296,20 @@ export function AiSettingsCard({ openaiCredential, geminiCredential, onSave, isL
           </div>
         </div>
 
-        <div className="flex justify-end pt-2">
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleTestConnection}
+            disabled={testing || isLoading}
+            className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-lg flex items-center space-x-2 px-4 py-2 font-semibold"
+          >
+            <RefreshCw className={`h-4 w-4 ${testing ? 'animate-spin' : ''}`} />
+            <span>{testing ? 'Testando...' : 'Testar Conexão'}</span>
+          </Button>
           <Button
             onClick={handleSaveClick}
-            disabled={isLoading}
+            disabled={isLoading || testing}
             className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center space-x-2 px-5 py-2 font-bold shadow-sm"
           >
             <Save className="h-4 w-4 text-white" />

@@ -522,6 +522,7 @@ Route::name('api.')->prefix('api/v1')->middleware([
         Route::post('ai/assistant', [\App\Http\Controllers\api\AiChatController::class, 'chat'])->name('ai.assistant.chat');
         Route::get('ai/assistant/suggestions', [\App\Http\Controllers\api\AiChatController::class, 'suggestions'])->name('ai.assistant.suggestions');
         Route::get('ai/status', [\App\Http\Controllers\api\AiChatController::class, 'status'])->name('ai.status');
+        Route::post('ai/test-connection', [\App\Http\Controllers\api\AiChatController::class, 'testConnection'])->name('ai.test-connection');
         Route::post('ai/rag/reindex', [\App\Http\Controllers\api\InstructionProgramController::class, 'reindexRag'])->name('ai.rag.reindex');
 
         // Programas de Instrução (PI, revisões e edição assistida por IA)
