@@ -613,18 +613,18 @@ export default function PublicInstructionProgram() {
       </main>
 
       {/* ==================== CHAT RAG PÚBLICO ==================== */}
-      <div className="fixed bottom-5 right-5 z-50 pi-no-print">
+      <div className="fixed bottom-3 right-3 sm:bottom-5 sm:right-5 z-50 pi-no-print max-w-[calc(100vw-1.5rem)]">
         {!chatOpen ? (
           <Button
             size="lg"
             onClick={() => setChatOpen(true)}
-            className="rounded-full shadow-lg bg-[#13202e] hover:bg-[#1b2b3c] text-[#e0a526] border border-[#2a3d52] h-13 px-5 gap-2"
+            className="rounded-full shadow-lg bg-[#13202e] hover:bg-[#1b2b3c] text-[#e0a526] border border-[#2a3d52] h-12 sm:h-13 px-4 sm:px-5 gap-2 text-xs sm:text-sm"
           >
-            <MessageSquare className="h-5 w-5" />
-            Perguntar sobre este Documento
+            <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span>Perguntar sobre este Documento</span>
           </Button>
         ) : (
-          <Card className="w-[360px] sm:w-[400px] h-[520px] flex flex-col shadow-2xl border-[#2a3d52]">
+          <Card className="w-[calc(100vw-1.5rem)] sm:w-[400px] h-[min(75dvh,520px)] flex flex-col shadow-2xl border-[#2a3d52]">
             <CardHeader className="py-3 px-4 bg-[#13202e] text-white rounded-t-lg flex flex-row items-center justify-between space-y-0">
               <div className="flex items-center gap-2">
                 <Bot className="h-5 w-5 text-[#e0a526]" />

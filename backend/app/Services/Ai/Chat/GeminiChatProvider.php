@@ -27,10 +27,12 @@ class GeminiChatProvider extends BaseAiChatProvider
 
         $models = array_values(array_unique(array_filter([
             $this->model,
-            'gemini-3.7-flash',
-            'gemini-3.8-flash',
             'gemini-3.5-flash',
-            'gemini-3.1-flash-lite',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash-lite',
+            'gemini-flash-lite-latest',
+            'gemini-3.8-flash',
+            'gemini-3.7-flash',
             'gemini-flash-latest',
         ])));
 
@@ -66,7 +68,7 @@ class GeminiChatProvider extends BaseAiChatProvider
                 $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$modelToTry}:generateContent";
 
                 $response = Http::withHeaders($headers)
-                    ->timeout(30)
+                    ->timeout(18)
                     ->post($endpoint, $payload);
 
                 if ($response->successful()) {
@@ -78,9 +80,6 @@ class GeminiChatProvider extends BaseAiChatProvider
                     ];
                 }
                 $lastError = $response->body();
-                if ($response->status() === 503) {
-                    usleep(1200000); // 1.2s de pausa se houver pico de demanda
-                }
             } catch (\Throwable $e) {
                 $lastError = $e->getMessage();
             }
@@ -96,6 +95,6 @@ class GeminiChatProvider extends BaseAiChatProvider
 
     public function getDefaultModel(): string
     {
-        return 'gemini-3.7-flash';
+        return 'gemini-3.5-flash';
     }
 }

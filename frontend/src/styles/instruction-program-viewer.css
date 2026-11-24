@@ -30,6 +30,9 @@
   --pi-font-ui: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
   background: var(--pi-desk);
   color: var(--pi-ink);
   font-family: var(--pi-font-ui);
@@ -738,10 +741,68 @@
 }
 
 @media (max-width: 640px) {
+  .pi-topbar {
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  .pi-tb-btn {
+    padding: 6px 8px;
+  }
+
+  .pi-main {
+    padding: calc(var(--pi-bar-h) + 10px) 8px 80px;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .pi-doc-container {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   .pi-doc-container .pg,
   .pi-doc-fallback-paper {
-    padding: 18px 16px 14px;
+    padding: 16px 14px 14px;
     min-height: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .pi-doc-container .pg-head {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .pi-doc-container .pg-head .ttl {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  .pi-doc-container h1 {
+    font-size: 18px;
+    overflow-wrap: anywhere;
+  }
+
+  .pi-doc-container h2,
+  .pi-doc-container h3,
+  .pi-doc-container p,
+  .pi-doc-container li {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .pi-doc-container table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 12px;
   }
 
   .pi-doc-container .callout,
