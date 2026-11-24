@@ -298,6 +298,8 @@ export function CourseForm({
         pdf_show_notes: z.boolean().optional(),
         pdf_show_payment: z.boolean().optional(),
         pdf_show_course_name: z.boolean().optional(),
+        signature_show_pi_link: z.boolean().optional(),
+        signature_require_pi_acceptance: z.boolean().optional(),
     }).optional(),
   });
 
@@ -338,6 +340,8 @@ export function CourseForm({
         pdf_show_notes: true,
         pdf_show_payment: true,
         pdf_show_course_name: true,
+        signature_show_pi_link: false,
+        signature_require_pi_acceptance: false,
       },
       inscricao: '0,00',
       valor: '0,00',
@@ -565,6 +569,8 @@ export function CourseForm({
         pdf_show_notes: c.config?.pdf_show_notes ?? true,
         pdf_show_payment: c.config?.pdf_show_payment ?? true,
         pdf_show_course_name: c.config?.pdf_show_course_name ?? true,
+        signature_show_pi_link: c.config?.signature_show_pi_link ?? false,
+        signature_require_pi_acceptance: c.config?.signature_require_pi_acceptance ?? false,
       },
       aeronaves: c.aeronaves ?? [],
       modulos: c.modulos ?? [],
@@ -1590,6 +1596,70 @@ export function CourseForm({
                       </div>
                     );
                   })}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Programa de Instrução (PI) na Assinatura Pública</CardTitle>
+                <CardDescription>
+                  Configure se o link público do Programa de Instrução vinculado a este curso aparece na página de assinatura da proposta e se o aluno precisa confirmar o acesso e aceite dos termos do PI.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-12 gap-2 items-center rounded-lg border px-3 py-3">
+                  <div className="col-span-9 space-y-0.5">
+                    <div className="text-sm font-medium">Exibir link público do PI na página de assinatura</div>
+                    <div className="text-xs text-muted-foreground">
+                      Mostra um card com o link para o aluno consultar o Programa de Instrução publicado deste curso durante a assinatura.
+                    </div>
+                  </div>
+                  <div className="col-span-3 flex items-center justify-center">
+                    <Checkbox
+                      checked={Boolean(form.watch('config.signature_show_pi_link' as any))}
+                      onCheckedChange={(checked) => {
+                        const val = Boolean(checked);
+                        form.setValue('config.signature_show_pi_link' as any, val, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        if (!val) {
+                          form.setValue('config.signature_require_pi_acceptance' as any, false, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 gap-2 items-center rounded-lg border px-3 py-3">
+                  <div className="col-span-9 space-y-0.5">
+                    <div className="text-sm font-medium">Exigir confirmação de acesso e aceite dos termos do PI</div>
+                    <div className="text-xs text-muted-foreground">
+                      Exibe um checkbox obrigatório na etapa de aceitação para o aluno confirmar que acessou e concorda com os termos do PI do curso (salva log com data, IP e revisão aceita).
+                    </div>
+                  </div>
+                  <div className="col-span-3 flex items-center justify-center">
+                    <Checkbox
+                      checked={Boolean(form.watch('config.signature_require_pi_acceptance' as any))}
+                      onCheckedChange={(checked) => {
+                        const val = Boolean(checked);
+                        form.setValue('config.signature_require_pi_acceptance' as any, val, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                        if (val) {
+                          form.setValue('config.signature_show_pi_link' as any, true, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>

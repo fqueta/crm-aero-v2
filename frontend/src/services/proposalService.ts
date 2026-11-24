@@ -1,5 +1,16 @@
 import { BaseApiService } from '@/services/BaseApiService';
 
+export interface ProposalInstructionProgramInfo {
+  id: number;
+  title: string;
+  code?: string | null;
+  slug: string;
+  current_revision: string;
+  revision_date?: string | null;
+  show_in_signature: boolean;
+  require_acceptance: boolean;
+}
+
 export interface ProposalData {
   id: number;
   id_cliente: string;
@@ -13,6 +24,7 @@ export interface ProposalData {
   expiration_message?: string | null;
   validity_days?: number;
   config?: any; // Matricula config
+  instruction_program?: ProposalInstructionProgramInfo | null;
   meta?: {
       contrato_pdf?: Array<{
           nome_arquivo: string;
@@ -69,6 +81,8 @@ export interface SignProposalData {
   aluno_ciente_limite_c150?: boolean;
   aluno_ciente_documentacao_ground_school?: boolean;
   aluno_ciente_uniforme?: boolean;
+  pi_link_acessado?: boolean;
+  pi_termos_aceitos?: boolean;
 }
 
 class ProposalService extends BaseApiService {

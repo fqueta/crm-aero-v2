@@ -2658,6 +2658,56 @@ class MatriculaController extends Controller
     /**
      * Public endpoint to show proposal details for signature.
      */
+    /**
+     * Resolve o Programa de Instrução (PI) publicado vinculado ao curso da matrícula
+     * e as flags de exibição/aceite configuradas no curso para a página pública de assinatura.
+     */
+    private function resolvePublicInstructionProgramForMatricula(Matricula $matricula): ?array
+    {
+        try {
+            $cursoId = (int) ($matricula->id_curso ?? 0);
+            if ($cursoId <= 0) {
+                return null;
+            }
+
+            $curso = \App\Models\Curso::find($cursoId);
+            $cursoConfig = is_array($curso?->config)
+                ? $curso->config
+                : (is_string($curso?->config) ? (json_decode($curso->config, true) ?? []) : []);
+
+            $showInSignature = !empty($cursoConfig['signature_show_pi_link']);
+            $requireAcceptance = !empty($cursoConfig['signature_require_pi_acceptance']);
+
+            if (!$showInSignature && !$requireAcceptance) {
+                return null;
+            }
+
+            $pi = \App\Models\InstructionProgram::query()
+                ->where('curso_id', $cursoId)
+                ->where('status', 'published')
+                ->where('is_public', true)
+                ->orderByDesc('id')
+                ->first();
+
+            if (!$pi) {
+                return null;
+            }
+
+            return [
+                'id' => (int) $pi->id,
+                'title' => (string) $pi->title,
+                'code' => $pi->code ? (string) $pi->code : null,
+                'slug' => (string) $pi->slug,
+                'current_revision' => (string) ($pi->current_revision ?: '001'),
+                'revision_date' => $pi->revision_date?->format('Y-m-d'),
+                'show_in_signature' => $showInSignature || $requireAcceptance,
+                'require_acceptance' => $requireAcceptance,
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function publicShow($client_id, $matricula_id)
     {
         try {
@@ -2669,6 +2719,7 @@ class MatriculaController extends Controller
             $data = $this->dm($matricula_id, $client_id);
             $expirationContext = $this->getPublicProposalExpirationContext($matricula);
             $data = array_merge($data, $expirationContext);
+            $data['instruction_program'] = $this->resolvePublicInstructionProgramForMatricula($matricula);
             //Verificar se a assinatura ja foi registrada
             $status_assintura_atual = Qlib::get_matriculameta($matricula_id,$this->campos_status_assinatura);
             $is_assinado = Escola::contrato_assinado($matricula_id);
@@ -2775,12 +2826,25 @@ class MatriculaController extends Controller
                 'aluno_ciente_limite_c150' => 'nullable|boolean',
                 'aluno_ciente_documentacao_ground_school' => 'nullable|boolean',
                 'aluno_ciente_uniforme' => 'nullable|boolean',
+                'pi_link_acessado' => 'nullable|boolean',
+                'pi_termos_aceitos' => 'nullable|boolean',
             ];
 
             $validator = Validator::make($request->all(), $rules);
 
             if ($validator->fails()) {
                 return response()->json(['error' => 'Erro de validação', 'messages' => $validator->errors()], 422);
+            }
+
+            $piContext = $this->resolvePublicInstructionProgramForMatricula($matricula);
+            if ($piContext && !empty($piContext['require_acceptance']) && !$request->boolean('pi_termos_aceitos')) {
+                return response()->json([
+                    'error' => 'Erro de validação',
+                    'message' => 'É obrigatório confirmar que acessou e aceita os termos do Programa de Instrução (PI) do curso.',
+                    'messages' => [
+                        'pi_termos_aceitos' => ['Confirme que acessou e aceita os termos do Programa de Instrução (PI).'],
+                    ],
+                ], 422);
             }
 
             $data = $request->except(['config']);
@@ -2872,6 +2936,45 @@ class MatriculaController extends Controller
                 $matricula->save();
 
                 $this->persistMatriculaMeta($matricula->id, $this->extractPublicAdministrationMeta($request));
+
+                if ($piContext && ($request->has('pi_termos_aceitos') || $request->has('pi_link_acessado'))) {
+                    $piAccepted = $request->boolean('pi_termos_aceitos');
+                    $piAccessed = $request->boolean('pi_link_acessado');
+                    $piMeta = [
+                        'pi_link_acessado' => $piAccessed ? 's' : 'n',
+                        'pi_termos_aceitos' => $piAccepted ? 's' : 'n',
+                        'pi_aceito_codigo' => (string) ($piContext['code'] ?? ''),
+                        'pi_aceito_revisao' => (string) ($piContext['current_revision'] ?? ''),
+                        'pi_aceito_slug' => (string) ($piContext['slug'] ?? ''),
+                    ];
+                    if ($piAccepted) {
+                        $piMeta['pi_aceito_em'] = now()->toDateTimeString();
+                        $piMeta['pi_aceito_ip'] = (string) $request->ip();
+                    }
+                    $this->persistMatriculaMeta($matricula->id, $piMeta);
+
+                    if ($piAccepted) {
+                        try {
+                            EventLog::create([
+                                'entity_type' => 'matricula',
+                                'entity_id' => (string) $matricula->id,
+                                'action' => 'pi_terms_accepted',
+                                'description' => 'Aluno confirmou acesso e aceite dos termos do Programa de Instrução (PI)',
+                                'payload' => [
+                                    'pi_id' => $piContext['id'] ?? null,
+                                    'pi_code' => $piContext['code'] ?? null,
+                                    'pi_revision' => $piContext['current_revision'] ?? null,
+                                    'pi_slug' => $piContext['slug'] ?? null,
+                                    'pi_link_acessado' => $piAccessed,
+                                    'accepted_at' => $piMeta['pi_aceito_em'],
+                                ],
+                                'actor_id' => (string) $client_id,
+                                'ip_address' => $request->ip(),
+                            ]);
+                        } catch (\Throwable $e) {
+                        }
+                    }
+                }
 
                 $this->applyMatriculaStage($matricula, $this->getMatriculaStageId('sign'), (string)$client_id, $request->ip(), 'Etapa alterada via publicSign');
                 $clientUser = User::find($client_id);

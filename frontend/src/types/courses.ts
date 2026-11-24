@@ -101,6 +101,13 @@ export interface CourseConfig {
    * pt-BR: Controla se o nome do curso aparece no cabeçalho do PDF.
    */
   pdf_show_course_name?: boolean;
+  /**
+   * signature_show_pi_link / signature_require_pi_acceptance
+   * pt-BR: Controla a exibição do link público do Programa de Instrução (PI)
+   *        e a exigência de confirmação/aceite na página pública de assinatura.
+   */
+  signature_show_pi_link?: boolean;
+  signature_require_pi_acceptance?: boolean;
 }
 
 /**
