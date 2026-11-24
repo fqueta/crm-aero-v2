@@ -1920,6 +1920,7 @@ class MatriculaController extends Controller
         $link = '/aluno/matricula/'.$matricula['id_cliente'].'_'.Qlib::zerofill($matricula['id'],5).'/1';
         $data['link_orcamento'] = Qlib::joinUrl(Qlib::qoption('front_url'), $link);
         $data['link_assinatura'] = Qlib::joinUrl(Qlib::qoption('front_url'), str_replace('matricula','assinatura',$link));
+        $data['instruction_program'] = $this->resolvePublicInstructionProgramForMatricula($matricula);
         $data['administration_text'] = $this->buildAdministrationText($data);
         $data['administration_text_available'] = !empty($data['administration_text']);
         return $data;
@@ -2005,6 +2006,16 @@ class MatriculaController extends Controller
             'Aluno ciente e concorda que para início do Ground School e das horas de voo estão condicionados à entrega prévia de todos os documentos pessoais exigidos pela instituição. Para alunos transferidos, será obrigatória, além da documentação de praxe, a apresentação da carta de transferência e dos documentos de títulos correspondentes. O não cumprimento desta exigência impedirá o início das atividades acadêmicas e práticas até que a documentação seja devidamente regularizada.' => ['aluno_ciente_documentacao_ground_school', 'ciente_documentacao_ground_school', 'documentacao_ground_school'],
             'Aluno ciente que é obrigatório o uso de uniforme para realizar as horas práticas de voo (Link para adquirir o uniforme: https://www.reserva.ink/acjf/collections/uniformes).' => ['aluno_ciente_uniforme', 'ciente_uniforme', 'uniforme'],
         ];
+
+        // Se houver Programa de Instrução (PI) registrado no meta ou curso
+        $piAceito = $this->resolveAdministrationField([$meta, $clientConfig], ['pi_termos_aceitos']);
+        $piCodigo = (string) $this->resolveAdministrationField([$meta, $clientConfig], ['pi_aceito_codigo']);
+        $piRevisao = (string) $this->resolveAdministrationField([$meta, $clientConfig], ['pi_aceito_revisao']);
+        $piIdentificacao = trim(($piCodigo !== '' ? $piCodigo . ' ' : '') . ($piRevisao !== '' ? 'Rev. ' . $piRevisao : ''));
+        if ($piIdentificacao === '') {
+            $piIdentificacao = 'PI do Curso';
+        }
+        $informacoesPassadas["Programa de Instrução ({$piIdentificacao}) acessado e termos aceitos."] = ['pi_termos_aceitos'];
 
         $lines = [
             'Informações da proposta',
