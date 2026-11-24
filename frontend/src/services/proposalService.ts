@@ -9,6 +9,9 @@ export interface ProposalInstructionProgramInfo {
   revision_date?: string | null;
   show_in_signature: boolean;
   require_acceptance: boolean;
+  period_id?: number | null;
+  period_name?: string | null;
+  reused_from_course_id?: number | null;
 }
 
 export interface ProposalData {

@@ -77,9 +77,15 @@ export default function InstructionProgramEdit() {
 
   const initialCursoId = !isEditing ? searchParams.get('curso_id') || 'none' : 'none';
   const initialCursoNome = !isEditing ? searchParams.get('curso_nome') || '' : '';
+  const periodoIdParam = searchParams.get('periodo_id');
+  const initialPeriodoNome = searchParams.get('periodo_nome') || '';
 
   const [title, setTitle] = useState(
-    initialCursoNome ? `Programa de Instrução — ${initialCursoNome}` : ''
+    initialCursoNome
+      ? `Programa de Instrução — ${initialCursoNome}${initialPeriodoNome ? ` — ${initialPeriodoNome}` : ''}`
+      : initialPeriodoNome
+        ? `Programa de Instrução — ${initialPeriodoNome}`
+        : ''
   );
   const [slug, setSlug] = useState('');
   const [code, setCode] = useState('');
@@ -117,8 +123,8 @@ export default function InstructionProgramEdit() {
   const courses = coursesResp?.data || [];
 
   const { data: program, isLoading } = useQuery({
-    queryKey: ['instruction-program', id],
-    queryFn: () => instructionProgramService.getById(id!),
+    queryKey: ['instruction-program', id, periodoIdParam || null],
+    queryFn: () => instructionProgramService.getById(id!, periodoIdParam),
     enabled: isEditing,
   });
 
@@ -207,6 +213,7 @@ export default function InstructionProgramEdit() {
     mutationFn: async () => {
       const payload = {
         curso_id: cursoId !== 'none' ? Number(cursoId) : null,
+        periodo_id: periodoIdParam ? Number(periodoIdParam) : undefined,
         title: title.trim(),
         slug: slug.trim() || undefined,
         code: code.trim() || undefined,
@@ -231,9 +238,12 @@ export default function InstructionProgramEdit() {
     onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: ['instruction-programs'] });
       queryClient.invalidateQueries({ queryKey: ['instruction-program', String(saved.id)] });
+      queryClient.invalidateQueries({ queryKey: ['periodos'] });
+      queryClient.invalidateQueries({ queryKey: ['periods'] });
       toast({ title: 'Programa de Instrução salvo com sucesso.' });
       if (!isEditing) {
-        navigate(`/admin/school/instruction-programs/${saved.id}/edit`, { replace: true });
+        const suffix = periodoIdParam ? `?periodo_id=${encodeURIComponent(periodoIdParam)}` : '';
+        navigate(`/admin/school/instruction-programs/${saved.id}/edit${suffix}`, { replace: true });
       }
     },
     onError: (err: any) => {
@@ -575,18 +585,26 @@ export default function InstructionProgramEdit() {
                 <Switch checked={isPublic} onCheckedChange={setIsPublic} />
               </div>
 
+              {(periodoIdParam || program?.periodo) && (
+                <div className="md:col-span-2 rounded-md border border-sky-200 bg-sky-50/70 dark:bg-sky-950/20 px-3 py-2 text-xs text-sky-900 dark:text-sky-200">
+                  Vinculado ao período <strong>{program?.periodo?.nome || initialPeriodoNome || `#${periodoIdParam}`}</strong>. As opções de exibição e aceite na assinatura abaixo serão salvas especificamente para este período.
+                </div>
+              )}
+
               <div className="md:col-span-2 flex items-center justify-between border rounded-md p-3">
                 <div className="pr-4">
                   <div className="text-sm font-medium">Exibir link deste PI na página de assinatura das propostas</div>
                   <div className="text-xs text-muted-foreground">
-                    {cursoId !== 'none'
-                      ? 'Mostra o botão de acesso ao PI durante a assinatura pública da proposta deste curso (sincronizado com o cadastro do curso).'
+                    {cursoId !== 'none' || periodoIdParam
+                      ? periodoIdParam
+                        ? 'Mostra o botão de acesso ao PI durante a assinatura pública das propostas deste período.'
+                        : 'Mostra o botão de acesso ao PI durante a assinatura pública da proposta deste curso (sincronizado com o cadastro do curso).'
                       : 'Vincule um curso acima para habilitar a exibição na assinatura pública das propostas.'}
                   </div>
                 </div>
                 <Switch
-                  disabled={cursoId === 'none'}
-                  checked={cursoId !== 'none' && signatureShowPiLink}
+                  disabled={cursoId === 'none' && !periodoIdParam}
+                  checked={(cursoId !== 'none' || Boolean(periodoIdParam)) && signatureShowPiLink}
                   onCheckedChange={(val) => {
                     setSignatureShowPiLink(val);
                     if (!val) setSignatureRequirePiAcceptance(false);
@@ -598,14 +616,14 @@ export default function InstructionProgramEdit() {
                 <div className="pr-4">
                   <div className="text-sm font-medium">Exigir confirmação de acesso e aceite dos termos do PI na assinatura</div>
                   <div className="text-xs text-muted-foreground">
-                    {cursoId !== 'none'
+                    {cursoId !== 'none' || periodoIdParam
                       ? 'Exibe um checkbox obrigatório na etapa de aceitação para o aluno declarar que acessou e aceita este PI (grava data, IP e revisão).'
                       : 'Vincule um curso acima para exigir o aceite na assinatura pública.'}
                   </div>
                 </div>
                 <Switch
-                  disabled={cursoId === 'none'}
-                  checked={cursoId !== 'none' && signatureRequirePiAcceptance}
+                  disabled={cursoId === 'none' && !periodoIdParam}
+                  checked={(cursoId !== 'none' || Boolean(periodoIdParam)) && signatureRequirePiAcceptance}
                   onCheckedChange={(val) => {
                     setSignatureRequirePiAcceptance(val);
                     if (val) setSignatureShowPiLink(true);

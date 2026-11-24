@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Models\InstructionProgram;
 use App\Models\Post;
+use App\Services\Contracts\InstructionProgramResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 class PeriodoController extends Controller
@@ -44,26 +47,13 @@ class PeriodoController extends Controller
         $query->orderBy('menu_order')->orderByDesc('ID');
 
         $paginator = $query->paginate($perPage);
-        $paginator->getCollection()->transform(function ($item) {
-            return [
-                'id' => $item->ID,
-                'nome' => $item->post_title,
-                'slug' => $item->post_name,
-                'id_curso' => $item->config['id_curso'] ?? ($item->post_parent ?: null),
-                // id_contratos: retorna array de IDs armazenados em config (se houver)
-                'id_contratos' => $item->config['id_contratos'] ?? [],
-                // valor: retorna o valor do período se presente em config
-                'valor' => $item->config['valor'] ?? null,
-                // tipo_modulo: 1 Teórico, 2 Prático, 3 Teórico/Prático
-                'tipo_modulo' => $item->config['tipo_modulo'] ?? null,
-                // cursos_incluidos: IDs de cursos vinculados
-                'cursos_incluidos' => $item->config['cursos_incluidos'] ?? [],
-                // novos campos opcionais
-                'h_praticas' => $item->config['h_praticas'] ?? null,
-                'h_teoricas' => $item->config['h_teoricas'] ?? null,
-                'aeronaves' => $item->config['aeronaves'] ?? [],
-                'status' => $item->post_status,
-            ];
+        $piIds = $paginator->getCollection()
+            ->map(fn ($p) => is_array($p->config) ? ($p->config['instruction_program_id'] ?? null) : null)
+            ->all();
+        $programsMap = $this->loadInstructionProgramsMap($piIds);
+
+        $paginator->getCollection()->transform(function ($item) use ($programsMap) {
+            return $this->formatPeriodResponse($item, $programsMap);
         });
 
         return response()->json($paginator);
@@ -99,6 +89,9 @@ class PeriodoController extends Controller
             'h_teoricas' => 'nullable|numeric',
             'aeronaves' => 'nullable|array',
             'aeronaves.*' => 'nullable',
+            'instruction_program_id' => 'nullable|integer',
+            'signature_show_pi_link' => 'nullable|boolean',
+            'signature_require_pi_acceptance' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -118,6 +111,13 @@ class PeriodoController extends Controller
         if (!empty($data['id_curso'])) {
             $post->post_parent = (int)$data['id_curso'];
         }
+
+        $requirePiAcceptance = !empty($data['signature_require_pi_acceptance']);
+        $showPiLink = $requirePiAcceptance || !empty($data['signature_show_pi_link']);
+        $piId = !empty($data['instruction_program_id']) && is_numeric($data['instruction_program_id'])
+            ? (int) $data['instruction_program_id']
+            : null;
+
         // Config: armazena dados complementares do período
         $post->config = [
             'id_curso' => $data['id_curso'] ?? null,
@@ -128,24 +128,16 @@ class PeriodoController extends Controller
             'h_praticas' => $data['h_praticas'] ?? null,
             'h_teoricas' => $data['h_teoricas'] ?? null,
             'aeronaves' => isset($data['aeronaves']) && is_array($data['aeronaves']) ? $data['aeronaves'] : [],
+            'instruction_program_id' => ($piId && $piId > 0) ? $piId : null,
+            'signature_show_pi_link' => $showPiLink,
+            'signature_require_pi_acceptance' => $requirePiAcceptance,
         ];
 
         $post->save();
 
-        return response()->json([
-            'id' => $post->ID,
-            'nome' => $post->post_title,
-            'slug' => $post->post_name,
-            'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
-            'id_contratos' => $post->config['id_contratos'] ?? [],
-            'valor' => $post->config['valor'] ?? null,
-            'tipo_modulo' => $post->config['tipo_modulo'] ?? null,
-            'cursos_incluidos' => $post->config['cursos_incluidos'] ?? [],
-            'h_praticas' => $post->config['h_praticas'] ?? null,
-            'h_teoricas' => $post->config['h_teoricas'] ?? null,
-            'aeronaves' => $post->config['aeronaves'] ?? [],
-            'status' => $post->post_status,
-        ], 201);
+        $programsMap = $this->loadInstructionProgramsMap([$post->config['instruction_program_id'] ?? null]);
+
+        return response()->json($this->formatPeriodResponse($post, $programsMap), 201);
     }
 
     /**
@@ -156,20 +148,10 @@ class PeriodoController extends Controller
     public function show($id)
     {
         $post = Post::ofType('periodos')->findOrFail($id);
-        return response()->json([
-            'id' => $post->ID,
-            'nome' => $post->post_title,
-            'slug' => $post->post_name,
-            'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
-            'id_contratos' => $post->config['id_contratos'] ?? [],
-            'valor' => $post->config['valor'] ?? null,
-            'tipo_modulo' => $post->config['tipo_modulo'] ?? null,
-            'cursos_incluidos' => $post->config['cursos_incluidos'] ?? [],
-            'h_praticas' => $post->config['h_praticas'] ?? null,
-            'h_teoricas' => $post->config['h_teoricas'] ?? null,
-            'aeronaves' => $post->config['aeronaves'] ?? [],
-            'status' => $post->post_status,
-        ]);
+        $piId = is_array($post->config) ? ($post->config['instruction_program_id'] ?? null) : null;
+        $programsMap = $this->loadInstructionProgramsMap([$piId]);
+
+        return response()->json($this->formatPeriodResponse($post, $programsMap));
     }
 
     /**
@@ -202,6 +184,9 @@ class PeriodoController extends Controller
             'h_teoricas' => 'nullable|numeric',
             'aeronaves' => 'nullable|array',
             'aeronaves.*' => 'nullable',
+            'instruction_program_id' => 'nullable|integer',
+            'signature_show_pi_link' => 'nullable|boolean',
+            'signature_require_pi_acceptance' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -247,24 +232,30 @@ class PeriodoController extends Controller
         if (array_key_exists('aeronaves', $data)) {
             $config['aeronaves'] = is_array($data['aeronaves']) ? $data['aeronaves'] : [];
         }
+        if (array_key_exists('instruction_program_id', $data)) {
+            $rawPiId = $data['instruction_program_id'];
+            $config['instruction_program_id'] = (is_numeric($rawPiId) && (int) $rawPiId > 0) ? (int) $rawPiId : null;
+        }
+        if (array_key_exists('signature_show_pi_link', $data)) {
+            $config['signature_show_pi_link'] = (bool) filter_var($data['signature_show_pi_link'], FILTER_VALIDATE_BOOLEAN);
+            if (!$config['signature_show_pi_link']) {
+                $config['signature_require_pi_acceptance'] = false;
+            }
+        }
+        if (array_key_exists('signature_require_pi_acceptance', $data)) {
+            $reqPi = (bool) filter_var($data['signature_require_pi_acceptance'], FILTER_VALIDATE_BOOLEAN);
+            $config['signature_require_pi_acceptance'] = $reqPi;
+            if ($reqPi) {
+                $config['signature_show_pi_link'] = true;
+            }
+        }
         $post->config = $config;
 
         $post->save();
 
-        return response()->json([
-            'id' => $post->ID,
-            'nome' => $post->post_title,
-            'slug' => $post->post_name,
-            'id_curso' => $post->config['id_curso'] ?? ($post->post_parent ?: null),
-            'id_contratos' => $post->config['id_contratos'] ?? [],
-            'valor' => $post->config['valor'] ?? null,
-            'tipo_modulo' => $post->config['tipo_modulo'] ?? null,
-            'cursos_incluidos' => $post->config['cursos_incluidos'] ?? [],
-            'h_praticas' => $post->config['h_praticas'] ?? null,
-            'h_teoricas' => $post->config['h_teoricas'] ?? null,
-            'aeronaves' => $post->config['aeronaves'] ?? [],
-            'status' => $post->post_status,
-        ]);
+        $programsMap = $this->loadInstructionProgramsMap([$config['instruction_program_id'] ?? null]);
+
+        return response()->json($this->formatPeriodResponse($post, $programsMap));
     }
 
     /**
@@ -514,5 +505,77 @@ class PeriodoController extends Controller
             ->where('menu_order', '>', (int)$periodo->menu_order)
             ->orderBy('menu_order')
             ->first();
+    }
+
+    /**
+     * Carrega em lote os resumos dos Programas de Instrução vinculados aos períodos.
+     *
+     * @param  array<int, mixed> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    private function loadInstructionProgramsMap(array $ids): array
+    {
+        $cleanIds = array_values(array_unique(array_filter(
+            array_map(fn ($id) => is_numeric($id) ? (int) $id : 0, $ids),
+            fn ($id) => $id > 0
+        )));
+
+        if (empty($cleanIds)) {
+            return [];
+        }
+
+        try {
+            if (!Schema::hasTable('instruction_programs')) {
+                return [];
+            }
+
+            $resolver = new InstructionProgramResolver();
+
+            return InstructionProgram::query()
+                ->with('curso:id,nome')
+                ->whereIn('id', $cleanIds)
+                ->get()
+                ->keyBy('id')
+                ->map(fn ($pi) => $resolver->hydrateSummary($pi))
+                ->filter()
+                ->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Formata a resposta padronizada de um período incluindo PI e flags de assinatura.
+     *
+     * @param  array<int, array<string, mixed>> $programsMap
+     * @return array<string, mixed>
+     */
+    private function formatPeriodResponse(Post $item, array $programsMap = []): array
+    {
+        $cfg = is_array($item->config) ? $item->config : [];
+        $piId = !empty($cfg['instruction_program_id']) && is_numeric($cfg['instruction_program_id'])
+            ? (int) $cfg['instruction_program_id']
+            : null;
+        $requireAcceptance = !empty($cfg['signature_require_pi_acceptance']);
+        $showPiLink = $requireAcceptance || !empty($cfg['signature_show_pi_link']);
+
+        return [
+            'id' => $item->ID,
+            'nome' => $item->post_title,
+            'slug' => $item->post_name,
+            'id_curso' => $cfg['id_curso'] ?? ($item->post_parent ?: null),
+            'id_contratos' => $cfg['id_contratos'] ?? [],
+            'valor' => $cfg['valor'] ?? null,
+            'tipo_modulo' => $cfg['tipo_modulo'] ?? null,
+            'cursos_incluidos' => $cfg['cursos_incluidos'] ?? [],
+            'h_praticas' => $cfg['h_praticas'] ?? null,
+            'h_teoricas' => $cfg['h_teoricas'] ?? null,
+            'aeronaves' => $cfg['aeronaves'] ?? [],
+            'instruction_program_id' => $piId,
+            'signature_show_pi_link' => $showPiLink,
+            'signature_require_pi_acceptance' => $requireAcceptance,
+            'instruction_program' => ($piId && isset($programsMap[$piId])) ? $programsMap[$piId] : null,
+            'status' => $item->post_status,
+        ];
     }
 }

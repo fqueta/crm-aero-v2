@@ -42,6 +42,7 @@ import { cepApplyMask } from '@/lib/masks/cep-apply-mask';
 import { responsaveisService } from '@/services/responsaveisService';
 import QuickResponsibleModal, { createEmptyQuickResponsibleData } from '@/components/proposals/QuickResponsibleModal';
 import QuickTurmaModal from '@/components/school/QuickTurmaModal';
+import ProposalPiSignatureControl from '@/components/proposals/ProposalPiSignatureControl';
 
 import { useAircraftList } from '@/hooks/aircraft';
 import CourseModulesSelector from '@/components/school/CourseModulesSelector';
@@ -90,6 +91,7 @@ const proposalEditSchema = z.object({
   // New form field backing meta.texto_desconto
   meta_texto_desconto: z.string().optional().nullable(),
   meta_texto_combustivel: z.string().optional().nullable(),
+  pi_signature_override: z.string().optional().nullable(),
   // Campo para desconto específico da Etapa 1 (não persistido diretamente no model, mas via meta/orc)
   etapa1_desconto: z.any().optional().nullable(),
   id: z.string().optional().nullable(),
@@ -401,6 +403,7 @@ export default function ProposalsEdit() {
       // Default empty value for meta.texto_desconto
       meta_texto_desconto: '',
       meta_texto_combustivel: '',
+      pi_signature_override: 'default',
       id: id || '',
     },
   });
@@ -1552,6 +1555,7 @@ export default function ProposalsEdit() {
         // pt-BR: Persiste o desconto da Etapa 1
         // en-US: Persists Etapa 1 discount
         etapa1_desconto: values.etapa1_desconto || 0,
+        pi_signature_override: values.pi_signature_override || 'default',
       },
       id: values.id || '',
     };
@@ -1704,6 +1708,7 @@ export default function ProposalsEdit() {
       // en-US: Restores meta.texto_desconto to populate the new form field
       meta_texto_desconto: metaSafe('texto_desconto', orcParcelamento.texto_desconto || ''),
       meta_texto_combustivel: metaSafe('texto_combustivel', ''),
+      pi_signature_override: metaSafe('pi_signature_override', 'default') || 'default',
       etapa1_desconto: Number(metaSafe('etapa1_desconto', '0')),
       parcelamento_id: String(safe('parcelamento_id', orcParcelamento.tabela_id || form.getValues('parcelamento_id'))),
       parcela_selecionada: String(orcParcelamento.parcela_selecionada || form.getValues('parcela_selecionada') || ''),
@@ -2583,6 +2588,14 @@ export default function ProposalsEdit() {
                         )}
                       />
                     )}
+
+                    <div className="mt-4">
+                      <ProposalPiSignatureControl
+                        control={form.control}
+                        selectedCourse={selectedCourseNormalized || selectedCourse}
+                        selectedModule={selectedModule || moduleFromEnrollment}
+                      />
+                    </div>
                     {/* Reprodução dos Ajustes Financeiros na Aba 2 */}
                     <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
                       <div className="flex items-center gap-2">

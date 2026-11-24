@@ -17,8 +17,9 @@ class InstructionProgramService extends BaseApiService {
     return this.normalizePaginatedResponse<InstructionProgram>(response);
   }
 
-  async getById(id: string | number): Promise<InstructionProgram> {
-    const response = await this.get<{ data: InstructionProgram }>(`${this.endpoint}/${id}`);
+  async getById(id: string | number, periodoId?: string | number | null): Promise<InstructionProgram> {
+    const params = periodoId ? { periodo_id: periodoId } : undefined;
+    const response = await this.get<{ data: InstructionProgram }>(`${this.endpoint}/${id}`, params);
     return response.data;
   }
 

@@ -17,6 +17,7 @@ export interface InstructionProgram {
   id: number;
   curso_id?: number | null;
   curso?: { id: number; nome: string } | null;
+  periodo?: { id: number; nome: string } | null;
   title: string;
   slug: string;
   code?: string | null;
@@ -38,6 +39,7 @@ export interface InstructionProgram {
 
 export interface InstructionProgramPayload {
   curso_id?: number | null;
+  periodo_id?: number | null;
   title: string;
   slug?: string;
   code?: string;

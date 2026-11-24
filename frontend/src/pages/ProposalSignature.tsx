@@ -1003,7 +1003,11 @@ export default function ProposalSignature() {
                                 )}
                               </div>
                               <p className="text-xs text-slate-600 dark:text-muted-foreground">
-                                Consulte as regras oficiais, pré-requisitos, grade e diretrizes do curso <strong>{proposal.curso_nome}</strong>.
+                                Consulte as regras oficiais, pré-requisitos, grade e diretrizes do curso <strong>{proposal.curso_nome}</strong>
+                                {proposal.instruction_program.period_name ? (
+                                  <> ({proposal.instruction_program.period_name})</>
+                                ) : null}
+                                .
                               </p>
                             </div>
                           </div>
@@ -1692,7 +1696,11 @@ export default function ProposalSignature() {
                                     {proposal.instruction_program.code ? `(${proposal.instruction_program.code} — ` : '('}
                                     Rev. {proposal.instruction_program.current_revision})
                                   </strong>{' '}
-                                  referente ao curso <strong>{proposal.curso_nome}</strong> e estou ciente e de acordo com todos os seus termos, normas e diretrizes operacionais. <span className="text-red-600">*</span>
+                                  referente ao curso <strong>{proposal.curso_nome}</strong>
+                                  {proposal.instruction_program.period_name ? (
+                                    <> ({proposal.instruction_program.period_name})</>
+                                  ) : null}{' '}
+                                  e estou ciente e de acordo com todos os seus termos, normas e diretrizes operacionais. <span className="text-red-600">*</span>
                                 </span>
                               </label>
                               {piAcceptanceError && (

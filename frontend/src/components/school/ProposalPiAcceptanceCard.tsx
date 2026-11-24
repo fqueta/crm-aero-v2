@@ -14,6 +14,7 @@ interface ProposalPiAcceptanceCardProps {
     slug?: string;
     current_revision?: string;
     revision_date?: string;
+    period_name?: string | null;
   } | null;
 }
 
@@ -64,13 +65,18 @@ export default function ProposalPiAcceptanceCard({ meta, instructionProgram }: P
       <CardContent className="pt-4 space-y-3">
         <div className="rounded-xl border border-border/50 bg-background p-3.5 space-y-2 text-xs">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-foreground">
                 {piCode ? `PI ${piCode}` : 'Programa de Instrução'}
               </span>
               {piRevision && (
                 <Badge variant="secondary" className="font-mono text-[10px] py-0 px-1.5 h-5">
                   Rev. {piRevision}
+                </Badge>
+              )}
+              {instructionProgram?.period_name && (
+                <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-5">
+                  {instructionProgram.period_name}
                 </Badge>
               )}
             </div>

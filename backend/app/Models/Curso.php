@@ -348,36 +348,69 @@ class Curso extends Model
                 return $this->decodeModulosRaw($value);
             }
 
+            // Pré-carrega PIs vinculados aos períodos para evitar N+1
+            $piMap = [];
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('instruction_programs')) {
+                    $piIds = $periods->map(fn ($p) => is_array($p->config) ? ($p->config['instruction_program_id'] ?? null) : null)
+                        ->filter(fn ($id) => is_numeric($id) && (int) $id > 0)
+                        ->map(fn ($id) => (int) $id)
+                        ->unique()
+                        ->values()
+                        ->all();
+
+                    if (!empty($piIds)) {
+                        $resolver = new \App\Services\Contracts\InstructionProgramResolver();
+                        $piMap = \App\Models\InstructionProgram::query()
+                            ->with('curso:id,nome')
+                            ->whereIn('id', $piIds)
+                            ->get()
+                            ->keyBy('id')
+                            ->map(fn ($pi) => $resolver->hydrateSummary($pi))
+                            ->all();
+                    }
+                }
+            } catch (\Throwable $e) {
+                $piMap = [];
+            }
+
             // Monta a estrutura dos períodos para substituir 'modulos'
-            $items = $periods->map(function ($item) {
+            $items = $periods->map(function ($item) use ($piMap) {
+                $cfg = is_array($item->config) ? $item->config : [];
+                $piId = !empty($cfg['instruction_program_id']) ? (int) $cfg['instruction_program_id'] : null;
+
                 return [
                     'id' => $item->ID,
                     'nome' => $item->post_title,
                     'slug' => $item->post_name,
-                    'id_curso' => is_array($item->config) && array_key_exists('id_curso', $item->config)
-                        ? $item->config['id_curso']
+                    'id_curso' => array_key_exists('id_curso', $cfg)
+                        ? $cfg['id_curso']
                         : ($item->post_parent ?: null),
-                    'id_contratos' => is_array($item->config) && array_key_exists('id_contratos', $item->config)
-                        ? $item->config['id_contratos']
+                    'id_contratos' => array_key_exists('id_contratos', $cfg)
+                        ? $cfg['id_contratos']
                         : [],
-                    'valor' => is_array($item->config) && array_key_exists('valor', $item->config)
-                        ? $item->config['valor']
+                    'valor' => array_key_exists('valor', $cfg)
+                        ? $cfg['valor']
                         : null,
-                    'tipo_modulo' => is_array($item->config) && array_key_exists('tipo_modulo', $item->config)
-                        ? $item->config['tipo_modulo']
+                    'tipo_modulo' => array_key_exists('tipo_modulo', $cfg)
+                        ? $cfg['tipo_modulo']
                         : null,
-                    'cursos_incluidos' => is_array($item->config) && array_key_exists('cursos_incluidos', $item->config)
-                        ? $item->config['cursos_incluidos']
+                    'cursos_incluidos' => array_key_exists('cursos_incluidos', $cfg)
+                        ? $cfg['cursos_incluidos']
                         : [],
-                    'h_praticas' => is_array($item->config) && array_key_exists('h_praticas', $item->config)
-                        ? $item->config['h_praticas']
+                    'h_praticas' => array_key_exists('h_praticas', $cfg)
+                        ? $cfg['h_praticas']
                         : null,
-                    'h_teoricas' => is_array($item->config) && array_key_exists('h_teoricas', $item->config)
-                        ? $item->config['h_teoricas']
+                    'h_teoricas' => array_key_exists('h_teoricas', $cfg)
+                        ? $cfg['h_teoricas']
                         : null,
-                    'aeronaves' => is_array($item->config) && array_key_exists('aeronaves', $item->config)
-                        ? $item->config['aeronaves']
+                    'aeronaves' => array_key_exists('aeronaves', $cfg)
+                        ? $cfg['aeronaves']
                         : [],
+                    'instruction_program_id' => $piId,
+                    'signature_show_pi_link' => !empty($cfg['signature_show_pi_link']),
+                    'signature_require_pi_acceptance' => !empty($cfg['signature_require_pi_acceptance']),
+                    'instruction_program' => ($piId && isset($piMap[$piId])) ? $piMap[$piId] : null,
                     'status' => $item->post_status,
                 ];
             })->values()->toArray();

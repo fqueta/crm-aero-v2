@@ -11,12 +11,14 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Plus, X, Trash2, GripVertical, ArrowUp, ArrowDown, PencilLine } from 'lucide-react';
+import { Plus, X, Trash2, GripVertical, ArrowUp, ArrowDown, PencilLine, BookOpen, ExternalLink } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { aircraftSettingsService } from '@/services/aircraftSettingsService';
 import { contractsService } from '@/services/contractsService';
 import { periodsService } from '@/services/periodsService';
+import { instructionProgramService } from '@/services/instructionProgramService';
 import { CoursePayload, CourseRecord, CourseModule } from '@/types/courses';
+import { PeriodInstructionProgramSummary } from '@/types/periods';
 import {
   PUBLIC_PROPOSAL_QUESTIONS,
   PUBLIC_PROPOSAL_QUESTION_KEYS,
@@ -123,6 +125,10 @@ type CoursePeriodListItem = {
   nome: string;
   valor?: number | string;
   id_contratos: (number | string)[];
+  instruction_program_id?: number | null;
+  signature_show_pi_link?: boolean;
+  signature_require_pi_acceptance?: boolean;
+  instruction_program?: PeriodInstructionProgramSummary | null;
 };
 
 /**
@@ -637,8 +643,20 @@ export function CourseForm({
       nome: String(p?.nome || p?.title || p.id),
       valor: p?.valor,
       id_contratos: Array.isArray(p?.id_contratos) ? p.id_contratos : [],
+      instruction_program_id: p?.instruction_program_id ?? null,
+      signature_show_pi_link: Boolean(p?.signature_show_pi_link),
+      signature_require_pi_acceptance: Boolean(p?.signature_require_pi_acceptance),
+      instruction_program: p?.instruction_program ?? null,
     })) as CoursePeriodListItem[];
   }, [periodsQuery.data]);
+  const allInstructionProgramsQuery = useQuery({
+    queryKey: ['instruction-programs', 'all-for-periods'],
+    queryFn: () => instructionProgramService.list({ per_page: 200 }),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const allInstructionProgramItems = allInstructionProgramsQuery.data?.data || [];
   const [orderedPeriodItems, setOrderedPeriodItems] = useState<CoursePeriodListItem[]>([]);
   const [isSavingPeriodOrder, setIsSavingPeriodOrder] = useState(false);
   const [highlightedPeriodId, setHighlightedPeriodId] = useState<string | null>(null);
@@ -770,6 +788,48 @@ export function CourseForm({
     queryClient.invalidateQueries({ queryKey: ['periodos'] });
     queryClient.invalidateQueries({ queryKey: ['periods'] });
     await periodsQuery.refetch();
+  }
+
+  async function handleUpdatePeriodPi(
+    periodId: string | number,
+    payload: {
+      instruction_program_id: number | null;
+      signature_show_pi_link: boolean;
+      signature_require_pi_acceptance: boolean;
+    }
+  ) {
+    const updated = await periodsService.updatePeriod(periodId, payload);
+    setOrderedPeriodItems((current) =>
+      current.map((item) =>
+        String(item.id) === String(periodId)
+          ? {
+              ...item,
+              instruction_program_id: updated?.instruction_program_id ?? payload.instruction_program_id,
+              signature_show_pi_link: updated?.signature_show_pi_link ?? payload.signature_show_pi_link,
+              signature_require_pi_acceptance:
+                updated?.signature_require_pi_acceptance ?? payload.signature_require_pi_acceptance,
+              instruction_program: updated?.instruction_program ?? item.instruction_program ?? null,
+            }
+          : item
+      )
+    );
+    queryClient.invalidateQueries({ queryKey: ['periodos'] });
+    queryClient.invalidateQueries({ queryKey: ['periods'] });
+    queryClient.invalidateQueries({ queryKey: ['courses'] });
+    await periodsQuery.refetch();
+  }
+
+  function handleCreatePiForPeriod(period: CoursePeriodListItem) {
+    if (!courseId) return;
+    const courseName = String(form.getValues('nome') || '');
+    const params = new URLSearchParams();
+    params.set('curso_id', String(courseId));
+    params.set('periodo_id', String(period.id));
+    params.set('periodo_nome', period.nome);
+    if (courseName) {
+      params.set('curso_nome', courseName);
+    }
+    navigate(`/admin/school/instruction-programs/create?${params.toString()}`);
   }
 
   async function handleRemoveContractFromPeriod(periodId: string | number, contractId: string | number, currentContracts: (string | number)[]) {
@@ -988,10 +1048,96 @@ export function CourseForm({
                 <p className="text-xs text-muted-foreground italic">Nenhum contrato vinculado a este período.</p>
               )}
             </div>
+
+            {/* Bloco de Programa de Instrução (PI) vinculado ao período */}
+            <div className="pt-2 border-t border-dashed border-border/70">
+              {period.instruction_program ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border border-emerald-200/80 bg-emerald-50/40 dark:bg-emerald-950/10 px-3 py-2">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <BookOpen className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <span className="text-xs font-semibold text-foreground truncate">
+                        {period.instruction_program.title}
+                      </span>
+                      {period.instruction_program.code && (
+                        <Badge variant="secondary" className="text-[10px] font-mono">
+                          {period.instruction_program.code}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[10px]">
+                        Rev. {period.instruction_program.current_revision}
+                      </Badge>
+                      {period.instruction_program.curso_id &&
+                        courseId &&
+                        Number(period.instruction_program.curso_id) !== Number(courseId) && (
+                          <Badge variant="secondary" className="text-[10px] bg-sky-100 text-sky-800 border-sky-200">
+                            Reaproveitado{period.instruction_program.curso_nome ? `: ${period.instruction_program.curso_nome}` : ''}
+                          </Badge>
+                        )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-2">
+                      <span>
+                        {period.signature_require_pi_acceptance
+                          ? 'Assinatura: exibe link + aceite obrigatório'
+                          : period.signature_show_pi_link
+                            ? 'Assinatura: exibe link (opcional)'
+                            : 'Assinatura: oculto'}
+                      </span>
+                      {(period.instruction_program.status !== 'published' || !period.instruction_program.is_public) && (
+                        <span className="text-amber-600 font-medium">
+                          • {period.instruction_program.status !== 'published' ? 'Rascunho (não aparece na assinatura)' : 'Privado'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {period.instruction_program.status === 'published' && period.instruction_program.is_public && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => window.open(`${window.location.origin}/programa-instrucao/${period.instruction_program!.slug}`, '_blank')}
+                        title="Abrir página pública do PI"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => navigate(`/admin/school/instruction-programs/${period.instruction_program!.id}/edit?periodo_id=${period.id}`)}
+                    >
+                      <PencilLine className="mr-1 h-3.5 w-3.5" />
+                      Editar PI
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                  <BookOpen className="h-3.5 w-3.5 text-muted-foreground/70" />
+                  <span>Nenhum PI específico neste período (usa o PI geral do curso, se houver).</span>
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end md:self-center ml-10 md:ml-0">
+        <div className="flex flex-wrap items-center gap-2 self-end md:self-center ml-10 md:ml-0">
+          <PeriodPiSelector period={period} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => handleCreatePiForPeriod(period)}
+            className="h-8"
+            title="Cadastrar um novo PI dedicado para este período"
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            PI
+          </Button>
           <PeriodContractsSelector period={period} />
           <Button
             type="button"
@@ -1158,6 +1304,167 @@ export function CourseForm({
                   {isSaving ? 'Salvando...' : 'Salvar'}
                 </Button>
               </div>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  /**
+   * PeriodPiSelector
+   * pt-BR: Popover para vincular/reaproveitar qualquer Programa de Instrução (inclusive de outros cursos)
+   *        e definir se o PI aparece e exige aceite na assinatura deste período.
+   */
+  function PeriodPiSelector({ period }: { period: CoursePeriodListItem }) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const [draftPiId, setDraftPiId] = useState<number | null>(period.instruction_program_id ?? null);
+    const [draftShowLink, setDraftShowLink] = useState<boolean>(Boolean(period.signature_show_pi_link));
+    const [draftRequireAcc, setDraftRequireAcc] = useState<boolean>(Boolean(period.signature_require_pi_acceptance));
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+      setDraftPiId(period.instruction_program_id ?? null);
+      setDraftShowLink(Boolean(period.signature_show_pi_link));
+      setDraftRequireAcc(Boolean(period.signature_require_pi_acceptance));
+    }, [period.instruction_program_id, period.signature_show_pi_link, period.signature_require_pi_acceptance]);
+
+    const filteredPis = useMemo(() => {
+      const term = query.trim().toLowerCase();
+      if (!term) return allInstructionProgramItems;
+      return allInstructionProgramItems.filter((pi) =>
+        `${pi.title} ${pi.code || ''} ${pi.curso?.nome || ''}`.toLowerCase().includes(term)
+      );
+    }, [query, allInstructionProgramItems]);
+
+    async function handleSavePi() {
+      const currentScrollTop = typeof window !== 'undefined' ? window.scrollY : undefined;
+      setIsSaving(true);
+      try {
+        await handleUpdatePeriodPi(period.id, {
+          instruction_program_id: draftPiId,
+          signature_show_pi_link: draftRequireAcc ? true : draftShowLink,
+          signature_require_pi_acceptance: draftRequireAcc,
+        });
+        toast({
+          title: 'PI do período atualizado',
+          description: 'O vínculo e as regras de assinatura do período foram salvos.',
+        });
+        setOpen(false);
+        restorePeriodViewport(period.id, currentScrollTop);
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao atualizar PI do período',
+          description: String(error?.response?.data?.message || error?.body?.message || error?.message || 'Não foi possível salvar o PI do período.'),
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    }
+
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" size="sm" className="h-8">
+            <BookOpen className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+            {period.instruction_program_id ? 'Alterar PI' : 'Vincular PI'}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[440px] p-3" align="end">
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="text-xs font-semibold">Programa de Instrução (PI) — {period.nome}</div>
+              <div className="text-[11px] text-muted-foreground">
+                Selecione um PI deste curso ou reaproveite um PI já cadastrado em outro curso.
+              </div>
+            </div>
+
+            <Input
+              placeholder="Buscar PI por nome, código ou curso..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+
+            <ScrollArea className="h-52 pr-2 border rounded-md p-1">
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setDraftPiId(null)}
+                  className={`w-full text-left rounded-md px-2.5 py-2 text-xs transition-colors ${
+                    draftPiId === null ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-muted/60 text-muted-foreground'
+                  }`}
+                >
+                  Nenhum PI vinculado (usar padrão do curso, se houver)
+                </button>
+                {filteredPis.map((pi) => {
+                  const selected = Number(draftPiId) === Number(pi.id);
+                  const isOtherCourse = Boolean(pi.curso_id && courseId && Number(pi.curso_id) !== Number(courseId));
+                  return (
+                    <button
+                      key={pi.id}
+                      type="button"
+                      onClick={() => setDraftPiId(pi.id)}
+                      className={`w-full text-left rounded-md px-2.5 py-2 transition-colors border ${
+                        selected
+                          ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-500/50'
+                          : 'border-transparent hover:bg-muted/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium truncate">{pi.title}</span>
+                        {pi.code && (
+                          <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
+                            {pi.code}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                        <span>Rev. {pi.current_revision}</span>
+                        <span>• {pi.status === 'published' ? 'Publicado' : pi.status === 'draft' ? 'Rascunho' : 'Arquivado'}</span>
+                        {pi.curso?.nome && (
+                          <span className={isOtherCourse ? 'text-sky-700 dark:text-sky-400 font-medium' : ''}>
+                            • {isOtherCourse ? `Reaproveitar de: ${pi.curso.nome}` : `Curso: ${pi.curso.nome}`}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+
+            <div className="space-y-2 border-t pt-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">Exibir link do PI na assinatura</span>
+                <Switch
+                  checked={draftShowLink}
+                  onCheckedChange={(val) => {
+                    setDraftShowLink(val);
+                    if (!val) setDraftRequireAcc(false);
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">Exigir aceite obrigatório do PI</span>
+                <Switch
+                  checked={draftRequireAcc}
+                  onCheckedChange={(val) => {
+                    setDraftRequireAcc(val);
+                    if (val) setDraftShowLink(true);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)} disabled={isSaving}>
+                Fechar
+              </Button>
+              <Button type="button" size="sm" onClick={handleSavePi} disabled={isSaving}>
+                {isSaving ? 'Salvando...' : 'Salvar PI'}
+              </Button>
             </div>
           </div>
         </PopoverContent>
@@ -1606,6 +1913,11 @@ export function CourseForm({
                 <CardDescription>
                   Configure se o link público do Programa de Instrução vinculado a este curso aparece na página de assinatura da proposta e se o aluno precisa confirmar o acesso e aceite dos termos do PI.
                 </CardDescription>
+                {form.watch('tipo') === '4' && (
+                  <div className="mt-2 rounded-md border border-sky-200 bg-sky-50/60 dark:bg-sky-950/20 px-3 py-2 text-xs text-sky-800 dark:text-sky-300">
+                    Para cursos do <strong>tipo 4 (por períodos)</strong>, estas chaves funcionam como padrão geral (fallback). Você pode vincular e controlar a exibição individualmente por período na aba <strong>Períodos</strong> e também sobrescrever por proposta.
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-12 gap-2 items-center rounded-lg border px-3 py-3">

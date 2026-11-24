@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { contractsService } from '@/services/contractsService';
 import { aircraftService } from '@/services/aircraftService';
+import { instructionProgramService } from '@/services/instructionProgramService';
 import { Badge } from '@/components/ui/badge';
 import { 
   BookOpen, 
@@ -27,7 +28,9 @@ import {
   Award, 
   Check, 
   X, 
-  ShieldCheck 
+  ShieldCheck,
+  ExternalLink,
+  AlertCircle
 } from 'lucide-react';
 
 /**
@@ -66,6 +69,9 @@ export function PeriodForm({
       status: 'draft',
       id_contratos: [],
       cursos_incluidos: [],
+      instruction_program_id: null,
+      signature_show_pi_link: false,
+      signature_require_pi_acceptance: false,
     },
   });
 
@@ -122,6 +128,9 @@ export function PeriodForm({
       h_praticas: (data as any).h_praticas ?? undefined,
       h_teoricas: (data as any).h_teoricas ?? undefined,
       aeronaves: Array.isArray((data as any).aeronaves) ? (data as any).aeronaves : [],
+      instruction_program_id: (data as any).instruction_program_id ?? null,
+      signature_show_pi_link: Boolean((data as any).signature_show_pi_link),
+      signature_require_pi_acceptance: Boolean((data as any).signature_require_pi_acceptance),
       status: normalizeStatus((data as any).status),
     });
     setSlugEdited(Boolean((data as any).slug));
@@ -190,6 +199,29 @@ export function PeriodForm({
     refetchOnReconnect: false,
   });
   const aircraftItems = (aircraftQuery.data?.data || aircraftQuery.data?.items || []) as any[];
+
+  const instructionProgramsQuery = useQuery({
+    queryKey: ['instruction-programs', 'all-for-period-form'],
+    queryFn: () => instructionProgramService.list({ per_page: 200 }),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const instructionPrograms = instructionProgramsQuery.data?.data || [];
+  const selectedPiId = form.watch('instruction_program_id');
+  const selectedPiItem = instructionPrograms.find((p) => Number(p.id) === Number(selectedPiId));
+  const editingPeriodId = (initialData as any)?.id;
+
+  function handleCreatePiForPeriod() {
+    if (!selectedCourseId || !editingPeriodId) return;
+    const courseObj = courseItems.find((c) => String(c.id) === String(selectedCourseId));
+    const params = new URLSearchParams();
+    params.set('curso_id', String(selectedCourseId));
+    params.set('periodo_id', String(editingPeriodId));
+    if (form.getValues('nome')) params.set('periodo_nome', String(form.getValues('nome')));
+    if (courseObj?.nome) params.set('curso_nome', String(courseObj.nome));
+    navigate(`/admin/school/instruction-programs/create?${params.toString()}`);
+  }
 
   function formatCurrencyBRL(value: any): string {
     const n = Number(value);
@@ -425,11 +457,127 @@ export function PeriodForm({
         </div>
       </div>
 
-      {/* Seção 4: Publicação & Status */}
+      {/* Seção 4: Programa de Instrução (PI) & Assinatura */}
+      <div className="space-y-4 pt-2">
+        <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-2">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            <span>4. Programa de Instrução (PI) &amp; Assinatura</span>
+          </div>
+          {editingPeriodId && selectedCourseId && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCreatePiForPeriod}
+              className="h-7 px-2.5 text-xs font-semibold normal-case"
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Criar novo PI para este período
+            </Button>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 p-5 space-y-4 bg-zinc-50/30 dark:bg-zinc-900/10">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold text-zinc-700 dark:text-zinc-350">
+              Programa de Instrução vinculado (próprio ou reaproveitado de outro curso)
+            </Label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Select
+                value={selectedPiId ? String(selectedPiId) : 'none'}
+                onValueChange={(val) =>
+                  form.setValue('instruction_program_id', val === 'none' ? null : Number(val), { shouldDirty: true })
+                }
+              >
+                <SelectTrigger className="h-10 rounded-xl bg-white dark:bg-zinc-950 flex-1">
+                  <SelectValue placeholder="Selecione um PI ou deixe padrão do curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum PI específico (usar fallback do curso)</SelectItem>
+                  {instructionPrograms.map((pi) => (
+                    <SelectItem key={pi.id} value={String(pi.id)}>
+                      {pi.title}
+                      {pi.code ? ` [${pi.code}]` : ''} — Rev. {pi.current_revision}
+                      {pi.curso?.nome ? ` (${pi.curso.nome})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedPiItem && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-xl shrink-0"
+                  onClick={() =>
+                    navigate(
+                      `/admin/school/instruction-programs/${selectedPiItem.id}/edit${
+                        editingPeriodId ? `?periodo_id=${editingPeriodId}` : ''
+                      }`
+                    )
+                  }
+                >
+                  <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                  Abrir PI
+                </Button>
+              )}
+            </div>
+            {selectedPiItem && (selectedPiItem.status !== 'published' || !selectedPiItem.is_public) && (
+              <p className="text-xs text-amber-600 flex items-center gap-1.5 pt-1">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Atenção: este PI está com status <strong>{selectedPiItem.status}</strong>
+                  {!selectedPiItem.is_public ? ' e página pública desativada' : ''}. Publique-o e ative a página pública para que apareça na assinatura dos alunos.
+                </span>
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-zinc-200/60 dark:border-zinc-800/60">
+            <div className="flex items-center justify-between gap-3 rounded-xl border bg-white dark:bg-zinc-950 p-3.5">
+              <div className="space-y-0.5">
+                <div className="text-xs font-semibold">Exibir link do PI na assinatura pública</div>
+                <div className="text-[11px] text-muted-foreground">
+                  Mostra o card para o aluno acessar o PI ao assinar proposta deste período.
+                </div>
+              </div>
+              <Switch
+                checked={Boolean(form.watch('signature_show_pi_link'))}
+                onCheckedChange={(val) => {
+                  form.setValue('signature_show_pi_link', val, { shouldDirty: true });
+                  if (!val) {
+                    form.setValue('signature_require_pi_acceptance', false, { shouldDirty: true });
+                  }
+                }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3 rounded-xl border bg-white dark:bg-zinc-950 p-3.5">
+              <div className="space-y-0.5">
+                <div className="text-xs font-semibold">Exigir aceite obrigatório do PI</div>
+                <div className="text-[11px] text-muted-foreground">
+                  Exige checkbox confirmado + registra cláusula no PDF do contrato.
+                </div>
+              </div>
+              <Switch
+                checked={Boolean(form.watch('signature_require_pi_acceptance'))}
+                onCheckedChange={(val) => {
+                  form.setValue('signature_require_pi_acceptance', val, { shouldDirty: true });
+                  if (val) {
+                    form.setValue('signature_show_pi_link', true, { shouldDirty: true });
+                  }
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Seção 5: Publicação & Status */}
       <div className="space-y-4 pt-2">
         <div className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-900 pb-2">
           <ShieldCheck className="w-4 h-4" />
-          <span>4. Visibilidade & Publicação</span>
+          <span>5. Visibilidade & Publicação</span>
         </div>
 
         <div className={`p-5 rounded-2xl border transition-all duration-300 ${

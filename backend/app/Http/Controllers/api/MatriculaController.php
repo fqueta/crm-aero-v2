@@ -2007,15 +2007,23 @@ class MatriculaController extends Controller
             'Aluno ciente que é obrigatório o uso de uniforme para realizar as horas práticas de voo (Link para adquirir o uniforme: https://www.reserva.ink/acjf/collections/uniformes).' => ['aluno_ciente_uniforme', 'ciente_uniforme', 'uniforme'],
         ];
 
-        // Se houver Programa de Instrução (PI) registrado no meta ou curso
+        // Se houver Programa de Instrução (PI) registrado no meta ou habilitado no curso/período
         $piAceito = $this->resolveAdministrationField([$meta, $clientConfig], ['pi_termos_aceitos']);
-        $piCodigo = (string) $this->resolveAdministrationField([$meta, $clientConfig], ['pi_aceito_codigo']);
-        $piRevisao = (string) $this->resolveAdministrationField([$meta, $clientConfig], ['pi_aceito_revisao']);
-        $piIdentificacao = trim(($piCodigo !== '' ? $piCodigo . ' ' : '') . ($piRevisao !== '' ? 'Rev. ' . $piRevisao : ''));
-        if ($piIdentificacao === '') {
-            $piIdentificacao = 'PI do Curso';
+        if ($piAceito !== '' || !empty($data['instruction_program'])) {
+            $piCodigo = (string) $this->resolveAdministrationField([$meta, $clientConfig], ['pi_aceito_codigo']);
+            if ($piCodigo === '' && !empty($data['instruction_program']['code'])) {
+                $piCodigo = (string) $data['instruction_program']['code'];
+            }
+            $piRevisao = (string) $this->resolveAdministrationField([$meta, $clientConfig], ['pi_aceito_revisao']);
+            if ($piRevisao === '' && !empty($data['instruction_program']['current_revision'])) {
+                $piRevisao = (string) $data['instruction_program']['current_revision'];
+            }
+            $piIdentificacao = trim(($piCodigo !== '' ? $piCodigo . ' ' : '') . ($piRevisao !== '' ? 'Rev. ' . $piRevisao : ''));
+            if ($piIdentificacao === '') {
+                $piIdentificacao = 'PI do Curso';
+            }
+            $informacoesPassadas["Programa de Instrução ({$piIdentificacao}) acessado e termos aceitos."] = ['pi_termos_aceitos'];
         }
-        $informacoesPassadas["Programa de Instrução ({$piIdentificacao}) acessado e termos aceitos."] = ['pi_termos_aceitos'];
 
         $lines = [
             'Informações da proposta',
@@ -2688,53 +2696,12 @@ class MatriculaController extends Controller
      * Public endpoint to show proposal details for signature.
      */
     /**
-     * Resolve o Programa de Instrução (PI) publicado vinculado ao curso da matrícula
-     * e as flags de exibição/aceite configuradas no curso para a página pública de assinatura.
+     * Resolve o Programa de Instrução (PI) publicado vinculado ao curso/período da matrícula
+     * e as flags de exibição/aceite configuradas para a página pública de assinatura.
      */
     private function resolvePublicInstructionProgramForMatricula(Matricula $matricula): ?array
     {
-        try {
-            $cursoId = (int) ($matricula->id_curso ?? 0);
-            if ($cursoId <= 0) {
-                return null;
-            }
-
-            $curso = \App\Models\Curso::find($cursoId);
-            $cursoConfig = is_array($curso?->config)
-                ? $curso->config
-                : (is_string($curso?->config) ? (json_decode($curso->config, true) ?? []) : []);
-
-            $showInSignature = !empty($cursoConfig['signature_show_pi_link']);
-            $requireAcceptance = !empty($cursoConfig['signature_require_pi_acceptance']);
-
-            if (!$showInSignature && !$requireAcceptance) {
-                return null;
-            }
-
-            $pi = \App\Models\InstructionProgram::query()
-                ->where('curso_id', $cursoId)
-                ->where('status', 'published')
-                ->where('is_public', true)
-                ->orderByDesc('id')
-                ->first();
-
-            if (!$pi) {
-                return null;
-            }
-
-            return [
-                'id' => (int) $pi->id,
-                'title' => (string) $pi->title,
-                'code' => $pi->code ? (string) $pi->code : null,
-                'slug' => (string) $pi->slug,
-                'current_revision' => (string) ($pi->current_revision ?: '001'),
-                'revision_date' => $pi->revision_date?->format('Y-m-d'),
-                'show_in_signature' => $showInSignature || $requireAcceptance,
-                'require_acceptance' => $requireAcceptance,
-            ];
-        } catch (\Throwable $e) {
-            return null;
-        }
+        return (new \App\Services\Contracts\InstructionProgramResolver())->resolveForMatricula($matricula, true);
     }
 
     public function publicShow($client_id, $matricula_id)
@@ -2976,6 +2943,9 @@ class MatriculaController extends Controller
                         'pi_aceito_revisao' => (string) ($piContext['current_revision'] ?? ''),
                         'pi_aceito_slug' => (string) ($piContext['slug'] ?? ''),
                     ];
+                    if (!empty($piContext['period_id'])) {
+                        $piMeta['pi_aceito_periodo_id'] = (string) $piContext['period_id'];
+                    }
                     if ($piAccepted) {
                         $piMeta['pi_aceito_em'] = now()->toDateTimeString();
                         $piMeta['pi_aceito_ip'] = (string) $request->ip();
@@ -2994,6 +2964,7 @@ class MatriculaController extends Controller
                                     'pi_code' => $piContext['code'] ?? null,
                                     'pi_revision' => $piContext['current_revision'] ?? null,
                                     'pi_slug' => $piContext['slug'] ?? null,
+                                    'pi_period_id' => $piContext['period_id'] ?? null,
                                     'pi_link_acessado' => $piAccessed,
                                     'accepted_at' => $piMeta['pi_aceito_em'],
                                 ],
@@ -3080,8 +3051,9 @@ class MatriculaController extends Controller
         if(!$id){
             return response()->json(['error' => 'ID da matrícula é necessário'], 400);
         }
+        $matriculaId = $id;
         if(!$dm){
-            $dm = $this->dm($id);
+            $dm = $this->dm($matriculaId);
         }
         $contratos = [];
         if($dm){
@@ -3156,6 +3128,15 @@ class MatriculaController extends Controller
                 if(is_array($assinar) && count($assinar)){
                     $dm = array_merge($dm,$assinar);
                 }
+                // Verificar se deve injetar cláusula automática do PI (somente se PI estiver habilitado na assinatura para esta matrícula/período ou já aceito)
+                $shouldInjectPiClause = (($dm['meta']['pi_termos_aceitos'] ?? '') === 's');
+                if (!$shouldInjectPiClause && $matriculaId) {
+                    $matObj = Matricula::find($matriculaId);
+                    if ($matObj && $this->resolvePublicInstructionProgramForMatricula($matObj) !== null) {
+                        $shouldInjectPiClause = true;
+                    }
+                }
+
                 // dd($assinar,$dm);
                 foreach($ids as $id){
                     try {
@@ -3172,8 +3153,8 @@ class MatriculaController extends Controller
                     //Aplicar shortcodes
                     $conteudoProcessado = Qlib::apply_shortcodes($cont->conteudo, $dm);
 
-                    // Garante que termos de declaração de ciência e concordância incluam a declaração formal do PI
-                    if (!empty($dm['declaracao_aceite_pi'])) {
+                    // Garante que termos de declaração de ciência e concordância incluam a declaração formal do PI quando aplicável
+                    if ($shouldInjectPiClause && !empty($dm['declaracao_aceite_pi'])) {
                         // Se o documento tem a declaração geral numerada e ainda não possui a declaração formal de ciência do PI
                         if (stripos($conteudoProcessado, 'Declaração de Ciência e Aceite do Programa de Instrução') === false) {
                             if (stripos($conteudoProcessado, '<li>Por fim, reconheço') !== false) {

@@ -6,6 +6,19 @@
 
 export type PeriodStatus = 'publish' | 'draft';
 
+export interface PeriodInstructionProgramSummary {
+  id: number;
+  title: string;
+  code?: string | null;
+  slug: string;
+  current_revision: string;
+  revision_date?: string | null;
+  status: 'draft' | 'published' | 'archived';
+  is_public: boolean;
+  curso_id?: number | null;
+  curso_nome?: string | null;
+}
+
 /**
  * PeriodRecord
  * pt-BR: Registro retornado pela API de períodos.
@@ -58,6 +71,10 @@ export interface PeriodRecord {
    * en-US: Linked aircraft IDs (multi-select).
    */
   aeronaves?: (number | string)[];
+  instruction_program_id?: number | null;
+  signature_show_pi_link?: boolean;
+  signature_require_pi_acceptance?: boolean;
+  instruction_program?: PeriodInstructionProgramSummary | null;
   status: PeriodStatus;
 }
 
@@ -112,6 +129,9 @@ export interface CreatePeriodInput {
    * en-US: Aircraft IDs linked when creating a period.
    */
   aeronaves?: (number | string)[];
+  instruction_program_id?: number | null;
+  signature_show_pi_link?: boolean;
+  signature_require_pi_acceptance?: boolean;
   status?: PeriodStatus;
 }
 
@@ -166,6 +186,9 @@ export interface UpdatePeriodInput {
    * en-US: Aircraft IDs linked when updating a period.
    */
   aeronaves?: (number | string)[];
+  instruction_program_id?: number | null;
+  signature_show_pi_link?: boolean;
+  signature_require_pi_acceptance?: boolean;
   status?: PeriodStatus;
 }
 

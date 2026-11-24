@@ -131,21 +131,7 @@ class ContractContextFacade
         } catch (\Throwable $e) {
         }
 
-        $program = null;
-        $cursoId = $dm['id_curso'] ?? null;
-        if ($cursoId) {
-            try {
-                if (Schema::hasTable('instruction_programs')) {
-                    $program = InstructionProgram::query()
-                        ->where('curso_id', (int) $cursoId)
-                        ->where('status', 'published')
-                        ->orderByDesc('revision_date')
-                        ->orderByDesc('id')
-                        ->first();
-                }
-            } catch (\Throwable $e) {
-            }
-        }
+        $program = (new InstructionProgramResolver())->resolveProgramForContractContext($dm);
 
         $turma = null;
         $turmaId = $dm['id_turma'] ?? null;

@@ -35,25 +35,29 @@ class InstructionProgramController extends Controller
             $query->where('curso_id', (int) $request->input('curso_id'));
         }
 
-        $perPage = min(100, max(5, (int) $request->input('per_page', 15)));
+        $perPage = min(200, max(5, (int) $request->input('per_page', 15)));
         $items = $query->orderByDesc('updated_at')->paginate($perPage);
 
         return response()->json($items);
     }
 
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
         $program = InstructionProgram::with(['curso:id,nome,config', 'revisions' => fn ($q) => $q->limit(25)])
             ->findOrFail($id);
 
+        $periodoId = $request->filled('periodo_id') ? (int) $request->input('periodo_id') : null;
+
         return response()->json([
-            'data' => $this->appendSignatureFlags($program),
+            'data' => $this->appendSignatureFlags($program, $periodoId),
         ]);
     }
 
     public function store(Request $request, RagIndexerService $indexer): JsonResponse
     {
         $validated = $this->validatePayload($request);
+        $periodoId = !empty($validated['periodo_id']) ? (int) $validated['periodo_id'] : null;
+        unset($validated['periodo_id']);
         $userId = $request->user()?->id ? (string) $request->user()->id : null;
 
         $slug = $this->resolveUniqueSlug($validated['slug'] ?? $validated['title']);
@@ -67,7 +71,7 @@ class InstructionProgramController extends Controller
             'updated_by' => $userId,
         ]));
 
-        $this->syncCourseSignatureFlags($program, $request);
+        $this->syncTargetSignatureFlags($program, $request, $periodoId);
 
         if ($program->status === 'published') {
             $program->createRevisionSnapshot('Publicação inicial', false, $userId);
@@ -76,7 +80,7 @@ class InstructionProgramController extends Controller
 
         return response()->json([
             'message' => 'Programa de Instrução criado com sucesso.',
-            'data' => $this->appendSignatureFlags($program->load('curso:id,nome,config')),
+            'data' => $this->appendSignatureFlags($program->load('curso:id,nome,config'), $periodoId),
         ], 201);
     }
 
@@ -84,6 +88,8 @@ class InstructionProgramController extends Controller
     {
         $program = InstructionProgram::findOrFail($id);
         $validated = $this->validatePayload($request, $program->id);
+        $periodoId = !empty($validated['periodo_id']) ? (int) $validated['periodo_id'] : null;
+        unset($validated['periodo_id']);
         $userId = $request->user()?->id ? (string) $request->user()->id : null;
 
         if (!empty($validated['slug']) && $validated['slug'] !== $program->slug) {
@@ -95,7 +101,7 @@ class InstructionProgramController extends Controller
         ]));
         $program->save();
 
-        $this->syncCourseSignatureFlags($program, $request);
+        $this->syncTargetSignatureFlags($program, $request, $periodoId);
 
         if (!empty($request->boolean('create_revision'))) {
             $program->createRevisionSnapshot(
@@ -116,7 +122,7 @@ class InstructionProgramController extends Controller
 
         return response()->json([
             'message' => 'Programa de Instrução atualizado com sucesso.',
-            'data' => $this->appendSignatureFlags($program->fresh(['curso:id,nome,config', 'revisions'])),
+            'data' => $this->appendSignatureFlags($program->fresh(['curso:id,nome,config', 'revisions']), $periodoId),
         ]);
     }
 
@@ -382,6 +388,7 @@ class InstructionProgramController extends Controller
     {
         return $request->validate([
             'curso_id' => 'nullable|integer',
+            'periodo_id' => 'nullable|integer',
             'title' => 'required|string|max:255',
             'slug' => 'nullable|string|max:255',
             'code' => 'nullable|string|max:60',
@@ -426,11 +433,30 @@ class InstructionProgramController extends Controller
     }
 
     /**
-     * Anexa ao JSON do PI as flags de exibição/aceite configuradas no curso vinculado.
+     * Anexa ao JSON do PI as flags de exibição/aceite configuradas no período (quando informado) ou no curso vinculado.
      */
-    protected function appendSignatureFlags(InstructionProgram $program): array
+    protected function appendSignatureFlags(InstructionProgram $program, ?int $periodoId = null): array
     {
         $arr = $program->toArray();
+
+        if ($periodoId && $periodoId > 0) {
+            $period = \App\Models\Post::query()->ofType('periodos')->find($periodoId);
+            if ($period) {
+                $pCfg = is_array($period->config) ? $period->config : [];
+                $arr['periodo'] = [
+                    'id' => (int) $period->ID,
+                    'nome' => (string) $period->post_title,
+                ];
+                $arr['signature_show_pi_link'] = !empty($pCfg['signature_show_pi_link']);
+                $arr['signature_require_pi_acceptance'] = !empty($pCfg['signature_require_pi_acceptance']);
+                if (isset($arr['curso']) && is_array($arr['curso'])) {
+                    unset($arr['curso']['config']);
+                }
+
+                return $arr;
+            }
+        }
+
         $cursoConfig = $program->curso?->config ?? [];
         if (is_string($cursoConfig)) {
             $cursoConfig = json_decode($cursoConfig, true) ?? [];
@@ -442,6 +468,43 @@ class InstructionProgramController extends Controller
         }
 
         return $arr;
+    }
+
+    /**
+     * Sincroniza os switches de exibição/aceite no período (quando periodo_id for informado) ou no curso vinculado.
+     */
+    protected function syncTargetSignatureFlags(InstructionProgram $program, Request $request, ?int $periodoId = null): void
+    {
+        if ($periodoId && $periodoId > 0) {
+            try {
+                $period = \App\Models\Post::query()->ofType('periodos')->find($periodoId);
+                if ($period) {
+                    $cfg = is_array($period->config) ? $period->config : [];
+                    $cfg['instruction_program_id'] = (int) $program->id;
+
+                    if ($request->has('signature_show_pi_link')) {
+                        $cfg['signature_show_pi_link'] = $request->boolean('signature_show_pi_link');
+                    }
+                    if ($request->has('signature_require_pi_acceptance')) {
+                        $reqAcc = $request->boolean('signature_require_pi_acceptance');
+                        $cfg['signature_require_pi_acceptance'] = $reqAcc;
+                        if ($reqAcc) {
+                            $cfg['signature_show_pi_link'] = true;
+                        }
+                    }
+                    if (empty($cfg['signature_show_pi_link'])) {
+                        $cfg['signature_require_pi_acceptance'] = false;
+                    }
+
+                    $period->config = $cfg;
+                    $period->save();
+                    return;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        $this->syncCourseSignatureFlags($program, $request);
     }
 
     /**

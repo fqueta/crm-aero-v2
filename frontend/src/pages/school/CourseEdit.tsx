@@ -82,7 +82,7 @@ export default function CourseEdit() {
           <Button variant="outline" onClick={() => navigate('/admin/school/courses')}>Voltar</Button>
         </div>
       </div>
-      <CourseInstructionProgramCard courseId={id} courseName={course?.nome} />
+      <CourseInstructionProgramCard courseId={id} courseName={course?.nome} courseType={course?.tipo} />
       <Card>
         <CardHeader>
           <CardTitle>Atualização de Curso</CardTitle>

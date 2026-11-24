@@ -41,6 +41,7 @@ import PaymentScheduleSection from '@/components/school/PaymentScheduleSection';
 import { getParcelamentoProgramacao } from '@/lib/paymentSchedule';
 import QuickResponsibleModal, { createEmptyQuickResponsibleData } from '@/components/proposals/QuickResponsibleModal';
 import QuickTurmaModal from '@/components/school/QuickTurmaModal';
+import ProposalPiSignatureControl from '@/components/proposals/ProposalPiSignatureControl';
 
 import { useAircraftList } from '@/hooks/aircraft';
 import CourseModulesSelector from '@/components/school/CourseModulesSelector';
@@ -93,6 +94,7 @@ const proposalSchema = z.object({
   // New form field backing meta.texto_desconto
   meta_texto_desconto: z.string().optional().nullable(),
   meta_texto_combustivel: z.string().optional().nullable(),
+  pi_signature_override: z.string().optional().nullable(),
   id: z.string().optional().nullable(),
 });
 
@@ -448,6 +450,7 @@ export default function ProposalsCreate() {
     // Default empty value for meta.texto_desconto
     meta_texto_desconto: '',
     meta_texto_combustivel: '',
+    pi_signature_override: 'default',
     id: '',
   },
   });
@@ -1396,6 +1399,7 @@ export default function ProposalsCreate() {
         // pt-BR: Persiste o desconto da Etapa 1
         // en-US: Persists Etapa 1 discount
         etapa1_desconto: values.etapa1_desconto || 0,
+        pi_signature_override: values.pi_signature_override || 'default',
       },
       id: values.id || '',
     };
@@ -2096,6 +2100,12 @@ export default function ProposalsCreate() {
                             )}
                           />
                         )}
+
+                        <ProposalPiSignatureControl
+                          control={form.control}
+                          selectedCourse={selectedCourseNormalized}
+                          selectedModule={selectedModule}
+                        />
                         
                         {/* Reprodução dos Ajustes Financeiros na Aba 2 */}
                         <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800 space-y-4">
