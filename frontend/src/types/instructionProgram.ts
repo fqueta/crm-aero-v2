@@ -26,6 +26,8 @@ export interface InstructionProgram {
   mgr_date?: string | null;
   status: 'draft' | 'published' | 'archived';
   is_public: boolean;
+  signature_show_pi_link?: boolean;
+  signature_require_pi_acceptance?: boolean;
   summary?: string | null;
   content_html?: string | null;
   contract_defaults?: Record<string, string> | null;
@@ -45,6 +47,8 @@ export interface InstructionProgramPayload {
   mgr_date?: string | null;
   status?: 'draft' | 'published' | 'archived';
   is_public?: boolean;
+  signature_show_pi_link?: boolean;
+  signature_require_pi_acceptance?: boolean;
   summary?: string;
   content_html?: string;
   contract_defaults?: Record<string, string>;

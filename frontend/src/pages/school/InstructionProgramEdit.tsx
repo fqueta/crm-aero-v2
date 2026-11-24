@@ -88,6 +88,8 @@ export default function InstructionProgramEdit() {
   const [mgrDate, setMgrDate] = useState('');
   const [status, setStatus] = useState<'draft' | 'published' | 'archived'>('draft');
   const [isPublic, setIsPublic] = useState(true);
+  const [signatureShowPiLink, setSignatureShowPiLink] = useState(false);
+  const [signatureRequirePiAcceptance, setSignatureRequirePiAcceptance] = useState(false);
   const [summary, setSummary] = useState('');
   const [contentHtml, setContentHtml] = useState('');
   const [contractDefaults, setContractDefaults] = useState<Record<string, string>>({});
@@ -129,6 +131,8 @@ export default function InstructionProgramEdit() {
       setMgrDate(program.mgr_date || '');
       setStatus(program.status || 'draft');
       setIsPublic(Boolean(program.is_public));
+      setSignatureShowPiLink(Boolean(program.signature_show_pi_link));
+      setSignatureRequirePiAcceptance(Boolean(program.signature_require_pi_acceptance));
       setSummary(program.summary || '');
       const rawHtml = program.content_html || '';
       setContentHtml(rawHtml);
@@ -209,6 +213,8 @@ export default function InstructionProgramEdit() {
         mgr_date: mgrDate || null,
         status,
         is_public: isPublic,
+        signature_show_pi_link: signatureShowPiLink,
+        signature_require_pi_acceptance: signatureRequirePiAcceptance,
         summary: summary.trim() || undefined,
         content_html: contentHtml,
         contract_defaults: contractDefaults,
@@ -550,6 +556,44 @@ export default function InstructionProgramEdit() {
                   </div>
                 </div>
                 <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+              </div>
+
+              <div className="md:col-span-2 flex items-center justify-between border rounded-md p-3">
+                <div className="pr-4">
+                  <div className="text-sm font-medium">Exibir link deste PI na página de assinatura das propostas</div>
+                  <div className="text-xs text-muted-foreground">
+                    {cursoId !== 'none'
+                      ? 'Mostra o botão de acesso ao PI durante a assinatura pública da proposta deste curso (sincronizado com o cadastro do curso).'
+                      : 'Vincule um curso acima para habilitar a exibição na assinatura pública das propostas.'}
+                  </div>
+                </div>
+                <Switch
+                  disabled={cursoId === 'none'}
+                  checked={cursoId !== 'none' && signatureShowPiLink}
+                  onCheckedChange={(val) => {
+                    setSignatureShowPiLink(val);
+                    if (!val) setSignatureRequirePiAcceptance(false);
+                  }}
+                />
+              </div>
+
+              <div className="md:col-span-2 flex items-center justify-between border rounded-md p-3">
+                <div className="pr-4">
+                  <div className="text-sm font-medium">Exigir confirmação de acesso e aceite dos termos do PI na assinatura</div>
+                  <div className="text-xs text-muted-foreground">
+                    {cursoId !== 'none'
+                      ? 'Exibe um checkbox obrigatório na etapa de aceitação para o aluno declarar que acessou e aceita este PI (grava data, IP e revisão).'
+                      : 'Vincule um curso acima para exigir o aceite na assinatura pública.'}
+                  </div>
+                </div>
+                <Switch
+                  disabled={cursoId === 'none'}
+                  checked={cursoId !== 'none' && signatureRequirePiAcceptance}
+                  onCheckedChange={(val) => {
+                    setSignatureRequirePiAcceptance(val);
+                    if (val) setSignatureShowPiLink(true);
+                  }}
+                />
               </div>
 
               <div className="md:col-span-2">

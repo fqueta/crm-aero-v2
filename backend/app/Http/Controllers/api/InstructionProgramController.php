@@ -43,11 +43,11 @@ class InstructionProgramController extends Controller
 
     public function show(int $id): JsonResponse
     {
-        $program = InstructionProgram::with(['curso:id,nome', 'revisions' => fn ($q) => $q->limit(25)])
+        $program = InstructionProgram::with(['curso:id,nome,config', 'revisions' => fn ($q) => $q->limit(25)])
             ->findOrFail($id);
 
         return response()->json([
-            'data' => $program,
+            'data' => $this->appendSignatureFlags($program),
         ]);
     }
 
@@ -67,6 +67,8 @@ class InstructionProgramController extends Controller
             'updated_by' => $userId,
         ]));
 
+        $this->syncCourseSignatureFlags($program, $request);
+
         if ($program->status === 'published') {
             $program->createRevisionSnapshot('Publicação inicial', false, $userId);
             $this->safeIndexProgram($indexer, $program->id);
@@ -74,7 +76,7 @@ class InstructionProgramController extends Controller
 
         return response()->json([
             'message' => 'Programa de Instrução criado com sucesso.',
-            'data' => $program->load('curso:id,nome'),
+            'data' => $this->appendSignatureFlags($program->load('curso:id,nome,config')),
         ], 201);
     }
 
@@ -92,6 +94,8 @@ class InstructionProgramController extends Controller
             'updated_by' => $userId,
         ]));
         $program->save();
+
+        $this->syncCourseSignatureFlags($program, $request);
 
         if (!empty($request->boolean('create_revision'))) {
             $program->createRevisionSnapshot(
@@ -112,7 +116,7 @@ class InstructionProgramController extends Controller
 
         return response()->json([
             'message' => 'Programa de Instrução atualizado com sucesso.',
-            'data' => $program->fresh(['curso:id,nome', 'revisions']),
+            'data' => $this->appendSignatureFlags($program->fresh(['curso:id,nome,config', 'revisions'])),
         ]);
     }
 
@@ -418,6 +422,66 @@ class InstructionProgramController extends Controller
             return $indexer->indexSource('instruction_program', $programId);
         } catch (\Throwable $e) {
             return null;
+        }
+    }
+
+    /**
+     * Anexa ao JSON do PI as flags de exibição/aceite configuradas no curso vinculado.
+     */
+    protected function appendSignatureFlags(InstructionProgram $program): array
+    {
+        $arr = $program->toArray();
+        $cursoConfig = $program->curso?->config ?? [];
+        if (is_string($cursoConfig)) {
+            $cursoConfig = json_decode($cursoConfig, true) ?? [];
+        }
+        $arr['signature_show_pi_link'] = !empty($cursoConfig['signature_show_pi_link']);
+        $arr['signature_require_pi_acceptance'] = !empty($cursoConfig['signature_require_pi_acceptance']);
+        if (isset($arr['curso']) && is_array($arr['curso'])) {
+            unset($arr['curso']['config']);
+        }
+
+        return $arr;
+    }
+
+    /**
+     * Sincroniza os switches de exibição/aceite na assinatura diretamente no config do curso vinculado.
+     */
+    protected function syncCourseSignatureFlags(InstructionProgram $program, Request $request): void
+    {
+        if (!$program->curso_id) {
+            return;
+        }
+        if (!$request->has('signature_show_pi_link') && !$request->has('signature_require_pi_acceptance')) {
+            return;
+        }
+
+        try {
+            $curso = \App\Models\Curso::find((int) $program->curso_id);
+            if (!$curso) {
+                return;
+            }
+            $cfg = is_array($curso->config)
+                ? $curso->config
+                : (is_string($curso->config) ? (json_decode($curso->config, true) ?? []) : []);
+
+            if ($request->has('signature_show_pi_link')) {
+                $cfg['signature_show_pi_link'] = $request->boolean('signature_show_pi_link');
+            }
+            if ($request->has('signature_require_pi_acceptance')) {
+                $reqAcc = $request->boolean('signature_require_pi_acceptance');
+                $cfg['signature_require_pi_acceptance'] = $reqAcc;
+                if ($reqAcc) {
+                    $cfg['signature_show_pi_link'] = true;
+                }
+            }
+            if (empty($cfg['signature_show_pi_link'])) {
+                $cfg['signature_require_pi_acceptance'] = false;
+            }
+
+            $curso->config = $cfg;
+            $curso->save();
+        } catch (\Throwable $e) {
         }
     }
 }
