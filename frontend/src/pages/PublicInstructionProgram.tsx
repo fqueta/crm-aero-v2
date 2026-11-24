@@ -1,10 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   BookOpen,
-  Calendar,
-  FileText,
   Printer,
   Sparkles,
   Send,
@@ -13,6 +11,13 @@ import {
   X,
   Loader2,
   ArrowRight,
+  ArrowLeft,
+  ChevronRight,
+  ChevronLeft,
+  Menu,
+  Search,
+  History,
+  FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,11 +25,162 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { instructionProgramService } from '@/services/instructionProgramService';
 import { RagSourceCitation } from '@/types/instructionProgram';
+import '@/styles/instruction-program-viewer.css';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   sources?: RagSourceCitation[];
+}
+
+interface ParsedSubsection {
+  anchorId: string;
+  title: string;
+  level: 2 | 3;
+}
+
+interface ParsedSection {
+  id: string;
+  num: string;
+  title: string;
+  html: string;
+  plainText: string;
+  hasPg: boolean;
+  subs: ParsedSubsection[];
+}
+
+interface SearchHit {
+  sectionIndex: number;
+  sectionNum: string;
+  sectionTitle: string;
+  before: string;
+  match: string;
+  after: string;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function parseProgramSections(rawHtml: string | null | undefined, fallbackTitle: string): ParsedSection[] {
+  const html = (rawHtml || '').trim();
+  if (!html) {
+    return [
+      {
+        id: 'sec-0',
+        num: '1',
+        title: fallbackTitle,
+        html: '<p>Conteúdo em atualização.</p>',
+        plainText: 'Conteúdo em atualização.',
+        hasPg: false,
+        subs: [],
+      },
+    ];
+  }
+
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div id="__root">${html}</div>`, 'text/html');
+    const root = doc.getElementById('__root');
+    if (!root) return [];
+
+    const directSections = Array.from(root.children).filter(
+      (el) => el.tagName.toLowerCase() === 'section' || el.tagName.toLowerCase() === 'article'
+    );
+
+    const blocks: Element[] = [];
+    if (directSections.length > 0) {
+      blocks.push(...directSections);
+    } else {
+      // Documento livre (ex.: criado pelo RichTextEditor): divide por <h1> se houver mais de um
+      const h1Count = root.querySelectorAll('h1').length;
+      if (h1Count > 1) {
+        let wrapper = doc.createElement('section');
+        Array.from(root.childNodes).forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName.toLowerCase() === 'h1' && wrapper.childNodes.length > 0) {
+            blocks.push(wrapper);
+            wrapper = doc.createElement('section');
+          }
+          wrapper.appendChild(node.cloneNode(true));
+        });
+        if (wrapper.childNodes.length > 0) blocks.push(wrapper);
+      } else {
+        blocks.push(root);
+      }
+    }
+
+    return blocks.map((block, idx) => {
+      const secId = `sec-${idx}`;
+      const firstH = block.querySelector('h1, h2, h3');
+      const rawHeading = (firstH?.textContent || '').replace(/\s+/g, ' ').trim();
+
+      let num = String(idx + 1);
+      let title = rawHeading || `Seção ${idx + 1}`;
+
+      const numMatch = title.match(/^(\d+(?:\.\d+)?)\s*[.\-–—:]\s*(.+)$/);
+      if (numMatch) {
+        num = numMatch[1];
+        title = numMatch[2].trim();
+      } else if (idx === 0 && /folha de rosto|preliminar|sum[áa]rio|controle de revis/i.test(title)) {
+        num = 'P';
+        if (/folha de rosto/i.test(title)) title = 'Preliminares';
+      } else if (/^complemento/i.test(title)) {
+        num = 'C';
+      } else if (/^anexo/i.test(title)) {
+        num = 'A';
+      }
+
+      const subs: ParsedSubsection[] = [];
+      const seenHeadings = new Set<string>();
+      const headingEls = Array.from(block.querySelectorAll('h1, h2, h3'));
+      headingEls.forEach((hEl, hIdx) => {
+        const text = (hEl.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        const anchorId = `${secId}-h-${hIdx}`;
+        hEl.setAttribute('id', anchorId);
+
+        const tag = hEl.tagName.toLowerCase();
+        // Inclui h2 e h3 (ou h1 se for o primeiro bloco Preliminares) no sub-índice
+        const key = `${tag}:${text.toLowerCase()}`;
+        if ((tag === 'h2' || tag === 'h3') && !seenHeadings.has(key) && subs.length < 35) {
+          seenHeadings.add(key);
+          subs.push({
+            anchorId,
+            title: text,
+            level: tag === 'h2' ? 2 : 3,
+          });
+        }
+      });
+
+      const plainText = (block.textContent || '').replace(/\s+/g, ' ').trim();
+      const hasPg = Boolean(block.querySelector('.pg'));
+
+      return {
+        id: secId,
+        num,
+        title,
+        html: block.innerHTML,
+        plainText,
+        hasPg,
+        subs,
+      };
+    });
+  } catch {
+    return [
+      {
+        id: 'sec-0',
+        num: '1',
+        title: fallbackTitle,
+        html,
+        plainText: html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+        hasPg: html.includes('class="pg"'),
+        subs: [],
+      },
+    ];
+  }
 }
 
 export default function PublicInstructionProgram() {
@@ -35,6 +191,14 @@ export default function PublicInstructionProgram() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Estados do leitor interativo
+  const [activeSecIdx, setActiveSecIdx] = useState(0);
+  const [openSecs, setOpenSecs] = useState<Record<number, boolean>>({ 0: true });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAllSections, setShowAllSections] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [showRevisionsModal, setShowRevisionsModal] = useState(false);
 
   const { data: listPrograms, isLoading: loadingList } = useQuery({
     queryKey: ['public-instruction-programs'],
@@ -51,6 +215,99 @@ export default function PublicInstructionProgram() {
     queryFn: () => instructionProgramService.getPublicBySlug(slug!),
     enabled: Boolean(slug),
   });
+
+  // Resetar estado ao trocar de documento
+  useEffect(() => {
+    setActiveSecIdx(0);
+    setOpenSecs({ 0: true });
+    setSearchQuery('');
+    setShowAllSections(false);
+    setMobileNavOpen(false);
+    setChatMessages([]);
+  }, [slug]);
+
+  const sections = useMemo(
+    () => (program ? parseProgramSections(program.content_html, program.title) : []),
+    [program]
+  );
+
+  // Filtro do índice + busca full-text nas seções
+  const { filteredSectionIndices, searchHits } = useMemo(() => {
+    const q = normalizeText(searchQuery.trim());
+    if (!q || q.length < 2) {
+      return {
+        filteredSectionIndices: sections.map((_, i) => i),
+        searchHits: [] as SearchHit[],
+      };
+    }
+
+    const indices: number[] = [];
+    const hits: SearchHit[] = [];
+
+    sections.forEach((sec, idx) => {
+      const titleHit =
+        normalizeText(sec.title).includes(q) ||
+        sec.subs.some((sub) => normalizeText(sub.title).includes(q));
+      const normBody = normalizeText(sec.plainText);
+      const pos = normBody.indexOf(q);
+
+      if (titleHit || pos >= 0) {
+        indices.push(idx);
+      }
+
+      if (pos >= 0 && hits.length < 30) {
+        const start = Math.max(0, pos - 45);
+        const end = Math.min(sec.plainText.length, pos + q.length + 75);
+        const before = (start > 0 ? '…' : '') + sec.plainText.slice(start, pos);
+        const match = sec.plainText.slice(pos, pos + q.length);
+        const after = sec.plainText.slice(pos + q.length, end) + (end < sec.plainText.length ? '…' : '');
+        hits.push({
+          sectionIndex: idx,
+          sectionNum: sec.num,
+          sectionTitle: sec.title,
+          before,
+          match,
+          after,
+        });
+      }
+    });
+
+    return { filteredSectionIndices: indices, searchHits: hits };
+  }, [sections, searchQuery]);
+
+  const selectSection = (idx: number, anchorId?: string) => {
+    setActiveSecIdx(idx);
+    setOpenSecs((prev) => ({ ...prev, [idx]: true }));
+    setMobileNavOpen(false);
+
+    setTimeout(() => {
+      if (anchorId) {
+        const target = document.getElementById(anchorId);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 40);
+  };
+
+  const toggleSectionAccordion = (idx: number) => {
+    const isAlreadyActive = activeSecIdx === idx;
+    setActiveSecIdx(idx);
+    setOpenSecs((prev) => ({
+      ...prev,
+      [idx]: isAlreadyActive ? !prev[idx] : true,
+    }));
+    setMobileNavOpen(false);
+    if (!showAllSections) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      setTimeout(() => {
+        document.getElementById(`sec-wrap-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 30);
+    }
+  };
 
   const handleSendChat = async (customText?: string) => {
     const text = (customText ?? chatInput).trim();
@@ -89,23 +346,27 @@ export default function PublicInstructionProgram() {
     }
   };
 
-  // Modo Catálogo (/programas-instrucao)
+  // =========================================================================
+  // MODO CATÁLOGO (/programas-instrucao)
+  // =========================================================================
   if (!slug) {
     return (
-      <div className="min-h-screen bg-slate-50 py-10 px-4">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <div className="text-center space-y-2">
-            <Badge variant="outline" className="bg-white">
-              Documentação Oficial de Ensino
-            </Badge>
-            <h1 className="text-3xl font-bold text-slate-900">Programas de Instrução</h1>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              Consulte as revisões vigentes dos Programas de Instrução e tire dúvidas com nosso assistente de IA.
+      <div className="min-h-screen bg-[#d9dee4]">
+        <header className="bg-[#13202e] text-[#e6edf4] border-b border-[#2a3d52] py-8 px-4">
+          <div className="max-w-5xl mx-auto text-center space-y-2">
+            <span className="inline-block text-[11px] font-semibold uppercase tracking-widest px-3 py-1 rounded-full bg-[#1b2b3c] border border-[#2a3d52] text-[#e0a526]">
+              Documentação Oficial de Ensino e Operações
+            </span>
+            <h1 className="text-3xl font-bold tracking-tight">Programas de Instrução & Manuais</h1>
+            <p className="text-sm text-[#93a6ba] max-w-2xl mx-auto">
+              Consulte as revisões vigentes dos Programas de Instrução, POHs e SOPs com navegação interativa e assistente de IA.
             </p>
           </div>
+        </header>
 
+        <div className="max-w-5xl mx-auto py-8 px-4">
           {loadingList ? (
-            <div className="text-center py-12 text-slate-500">Carregando programas...</div>
+            <div className="text-center py-12 text-slate-600">Carregando documentos...</div>
           ) : (listPrograms || []).length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-slate-500">
@@ -115,21 +376,27 @@ export default function PublicInstructionProgram() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(listPrograms || []).map((item) => (
-                <Card key={item.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader>
+                <Card key={item.id} className="bg-white hover:shadow-md transition-shadow border-slate-300/80">
+                  <CardHeader className="pb-2">
                     <div className="flex items-center justify-between gap-2">
-                      {item.code && <Badge>{item.code}</Badge>}
-                      <Badge variant="outline">Rev. {item.current_revision}</Badge>
+                      {item.code && (
+                        <Badge className="bg-[#13202e] text-[#e0a526] hover:bg-[#1b2b3c]">
+                          {item.code}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-xs">
+                        Rev. {item.current_revision}
+                      </Badge>
                     </div>
-                    <CardTitle className="text-lg mt-2">{item.title}</CardTitle>
+                    <CardTitle className="text-lg mt-2 text-slate-900">{item.title}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {item.summary && <p className="text-sm text-slate-600 line-clamp-3">{item.summary}</p>}
                     <Link
                       to={`/programa-instrucao/${item.slug}`}
-                      className="inline-flex items-center text-sm font-medium text-primary hover:underline"
+                      className="inline-flex items-center text-sm font-semibold text-[#13202e] hover:text-[#b47f0e]"
                     >
-                      Acessar Programa Completo
+                      Acessar Documento Interativo
                       <ArrowRight className="h-4 w-4 ml-1" />
                     </Link>
                   </CardContent>
@@ -142,141 +409,369 @@ export default function PublicInstructionProgram() {
     );
   }
 
+  // =========================================================================
+  // LOADING / NOT FOUND
+  // =========================================================================
   if (loadingProgram) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">
-        Carregando Programa de Instrução...
+      <div className="min-h-screen flex items-center justify-center bg-[#d9dee4] text-slate-700 gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        Carregando documento...
       </div>
     );
   }
 
   if (isError || !program) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center space-y-3">
-        <BookOpen className="h-10 w-10 text-slate-400" />
-        <h1 className="text-xl font-semibold text-slate-800">Programa de Instrução não encontrado</h1>
-        <p className="text-sm text-slate-500">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#d9dee4] p-6 text-center space-y-3">
+        <BookOpen className="h-10 w-10 text-slate-500" />
+        <h1 className="text-xl font-semibold text-slate-800">Documento não encontrado</h1>
+        <p className="text-sm text-slate-600">
           O link pode estar desatualizado ou o documento ainda não foi publicado.
         </p>
         <Link to="/programas-instrucao">
-          <Button variant="outline">Ver Programas Disponíveis</Button>
+          <Button variant="outline" className="bg-white">Ver Documentos Disponíveis</Button>
         </Link>
       </div>
     );
   }
 
   const fmtDate = (iso?: string | null) =>
-    iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).split('-').reverse().join('/') : '—';
+    iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).split('-').reverse().join('/') : null;
+
+  const revDateFormatted = fmtDate(program.revision_date);
+  const subtitleParts = [
+    program.code || null,
+    program.curso?.nome || null,
+    program.current_revision ? `Rev. ${program.current_revision}` : null,
+    revDateFormatted,
+    program.mgr_revision ? `MGR ${program.mgr_revision}` : null,
+  ].filter(Boolean);
+
+  const visibleSections = showAllSections
+    ? sections
+    : sections[activeSecIdx]
+    ? [sections[activeSecIdx]]
+    : [];
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
-      {/* Cabeçalho Institucional */}
-      <header className="bg-white border-b print:border-none">
-        <div className="max-w-5xl mx-auto px-4 py-8 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              {program.code && <Badge className="text-xs">{program.code}</Badge>}
-              <Badge variant="outline" className="text-xs">
-                Revisão {program.current_revision}
-              </Badge>
-              {program.curso?.nome && (
-                <Badge variant="secondary" className="text-xs">
-                  {program.curso.nome}
-                </Badge>
-              )}
-            </div>
+    <div className={`pi-viewer ${mobileNavOpen ? 'nav-open' : ''}`}>
+      {/* ==================== TOP BAR ESCURA ==================== */}
+      <header className="pi-topbar">
+        <button
+          type="button"
+          className="pi-tb-btn pi-menu-btn"
+          onClick={() => setMobileNavOpen((v) => !v)}
+          aria-label="Abrir índice"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
 
-            <div className="flex items-center gap-2 print:hidden">
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
-                <Printer className="h-4 w-4 mr-1.5" />
-                Imprimir / PDF
-              </Button>
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setChatOpen(true)}>
-                <Sparkles className="h-4 w-4 mr-1.5" />
-                Tirar Dúvidas com IA
-              </Button>
-            </div>
-          </div>
+        <Link
+          to="/programas-instrucao"
+          className="pi-tb-btn"
+          title="Voltar para o catálogo de programas e manuais"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="pi-lbl">Catálogo</span>
+        </Link>
 
-          <h1 className="text-3xl font-bold text-slate-900">{program.title}</h1>
-          {program.summary && <p className="text-slate-600 leading-relaxed">{program.summary}</p>}
-
-          <div className="flex flex-wrap gap-6 pt-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" />
-              Emissão PI: <strong className="text-slate-700">{fmtDate(program.revision_date)}</strong>
-            </span>
-            {program.mgr_revision && (
-              <span className="inline-flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5" />
-                MGR: <strong className="text-slate-700">Rev. {program.mgr_revision}</strong>
-                {program.mgr_date ? ` (${fmtDate(program.mgr_date)})` : ''}
-              </span>
-            )}
-          </div>
+        <div className="pi-topbar-brand">
+          <b>{program.title}</b>
+          <span>{subtitleParts.join(' · ')}</span>
         </div>
-      </header>
-
-      {/* Conteúdo Oficial */}
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-        <Card className="bg-white shadow-sm print:shadow-none print:border-none">
-          <CardContent className="p-6 sm:p-10">
-            <article
-              className="prose prose-slate max-w-none prose-headings:text-slate-900 prose-a:text-primary"
-              dangerouslySetInnerHTML={{
-                __html: program.content_html || '<p>Conteúdo em atualização.</p>',
-              }}
-            />
-          </CardContent>
-        </Card>
 
         {program.revisions && program.revisions.length > 0 && (
-          <Card className="print:hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Histórico de Revisões</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+          <button
+            type="button"
+            className="pi-tb-btn"
+            onClick={() => setShowRevisionsModal((v) => !v)}
+            title="Ver histórico de revisões"
+          >
+            <History className="h-4 w-4" />
+            <span className="pi-lbl">Revisões</span>
+          </button>
+        )}
+
+        <button
+          type="button"
+          className="pi-tb-btn"
+          onClick={() => window.print()}
+          title="Imprimir / Salvar PDF"
+        >
+          <Printer className="h-4 w-4" />
+          <span className="pi-lbl">Imprimir</span>
+        </button>
+
+        <button
+          type="button"
+          className="pi-tb-btn accent"
+          onClick={() => setChatOpen(true)}
+          title="Tirar dúvidas com o Assistente de IA"
+        >
+          <Sparkles className="h-4 w-4" />
+          <span className="pi-lbl">Tirar Dúvidas com IA</span>
+        </button>
+      </header>
+
+      {/* Backdrop mobile */}
+      <div
+        className="pi-sidebar-backdrop"
+        onClick={() => setMobileNavOpen(false)}
+      />
+
+      {/* ==================== SIDEBAR DE NAVEGAÇÃO ==================== */}
+      <aside className="pi-sidebar">
+        <div className="pi-search-wrap">
+          <div className="relative">
+            <input
+              type="text"
+              className="pi-search-input"
+              placeholder="Buscar (ex.: matrícula, FASE 5, SBJF)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#93a6ba] hover:text-white"
+                aria-label="Limpar busca"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : (
+              <Search className="h-3.5 w-3.5 text-[#93a6ba] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            )}
+          </div>
+          <div className="pi-search-hint">
+            Filtra o índice e pesquisa o texto de todas as seções.
+          </div>
+        </div>
+
+        {/* Resultados da busca full-text */}
+        {searchQuery.trim().length >= 2 && (
+          <div className="pi-search-results">
+            <h4>
+              {searchHits.length > 0
+                ? `${searchHits.length} ocorrência(s) no texto`
+                : 'Nenhuma ocorrência encontrada'}
+            </h4>
+            {searchHits.map((hit, i) => (
+              <button
+                key={i}
+                type="button"
+                className="pi-search-result-item"
+                onClick={() => selectSection(hit.sectionIndex)}
+              >
+                <div>
+                  <b>{hit.sectionNum}</b>
+                  <span>{hit.sectionTitle}</span>
+                </div>
+                <div className="text-[11px] text-[#b8c7d8] mt-0.5">
+                  {hit.before}
+                  <mark>{hit.match}</mark>
+                  {hit.after}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Índice Hierárquico (Acordeão) */}
+        <nav className="pi-toc" aria-label="Índice do documento">
+          <ul>
+            {filteredSectionIndices.map((idx) => {
+              const sec = sections[idx];
+              const isActive = !showAllSections && activeSecIdx === idx;
+              const isOpen = Boolean(openSecs[idx]);
+              return (
+                <li
+                  key={sec.id}
+                  className={`pi-toc-sec ${isActive ? 'active' : ''}`}
+                >
+                  <button
+                    type="button"
+                    className="pi-toc-sec-btn"
+                    onClick={() => toggleSectionAccordion(idx)}
+                  >
+                    <ChevronRight
+                      className={`h-3.5 w-3.5 mt-0.5 text-[#93a6ba] shrink-0 transition-transform ${
+                        isOpen && sec.subs.length > 0 ? 'rotate-90' : ''
+                      }`}
+                    />
+                    <span className="pi-toc-num">{sec.num}</span>
+                    <span className="flex-1">{sec.title}</span>
+                  </button>
+
+                  {isOpen && sec.subs.length > 0 && (
+                    <ul className="pb-1">
+                      {sec.subs.map((sub) => (
+                        <li key={sub.anchorId}>
+                          <button
+                            type="button"
+                            className={`pi-toc-sub-btn ${sub.level === 3 ? 'lvl3' : ''}`}
+                            onClick={() => selectSection(idx, sub.anchorId)}
+                          >
+                            {sub.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* Rodapé da Sidebar: modo de leitura */}
+        <div className="pi-sidebar-footer">
+          <span>{sections.length} seções</span>
+          <button
+            type="button"
+            onClick={() => setShowAllSections((v) => !v)}
+            className="text-[#e0a526] hover:underline font-medium inline-flex items-center gap-1"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            {showAllSections ? 'Ver por seção' : 'Ver tudo contínuo'}
+          </button>
+        </div>
+      </aside>
+
+      {/* ==================== ÁREA PRINCIPAL ==================== */}
+      <main className="pi-main">
+        {/* Banner de resumo / aviso oficial */}
+        {program.summary && (
+          <div className="pi-disclaimer">
+            <strong>Versão digital interativa.</strong> {program.summary}
+          </div>
+        )}
+
+        {/* Painel opcional de Histórico de Revisões */}
+        {showRevisionsModal && program.revisions && program.revisions.length > 0 && (
+          <div className="max-w-[840px] mx-auto mb-5 bg-white rounded-md border border-slate-300 shadow-sm p-4 pi-no-print">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
+                <History className="h-4 w-4 text-[#13202e]" />
+                Histórico de Revisões ({program.revisions.length})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowRevisionsModal(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
               {program.revisions.map((rev) => (
-                <div key={rev.id} className="flex items-start justify-between gap-4 text-sm border-b last:border-none pb-2">
+                <div
+                  key={rev.id}
+                  className="flex items-start justify-between gap-4 text-xs border-b last:border-none pb-2"
+                >
                   <div>
-                    <span className="font-medium">Revisão {rev.revision_code}</span>
-                    {rev.change_notes && <p className="text-xs text-slate-500">{rev.change_notes}</p>}
+                    <span className="font-semibold text-slate-800">Revisão {rev.revision_code}</span>
+                    {rev.change_notes && <p className="text-slate-500 mt-0.5">{rev.change_notes}</p>}
                   </div>
-                  <span className="text-xs text-slate-500 shrink-0">{fmtDate(rev.revision_date)}</span>
+                  <span className="text-slate-500 shrink-0">{fmtDate(rev.revision_date) || '—'}</span>
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
+
+        {/* Folhas de Conteúdo */}
+        <div className="pi-doc-container">
+          {visibleSections.map((sec) => {
+            const actualIdx = sections.findIndex((s) => s.id === sec.id);
+            return (
+              <div key={sec.id} id={`sec-wrap-${actualIdx}`}>
+                {sec.hasPg ? (
+                  <div dangerouslySetInnerHTML={{ __html: sec.html }} />
+                ) : (
+                  <div className="pi-doc-fallback-paper">
+                    <div className="pg-head">
+                      <div className="ttl">
+                        <small>{subtitleParts.join(' · ')}</small>
+                        {sec.title}
+                      </div>
+                      <div className="no">Seção {sec.num}</div>
+                    </div>
+                    <div
+                      className="pg-body"
+                      dangerouslySetInnerHTML={{ __html: sec.html }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Navegação Anterior / Próxima seção */}
+          {!showAllSections && sections.length > 1 && (
+            <div className="flex items-center justify-between gap-3 pt-2 pb-4 pi-no-print">
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-white border-slate-300 text-slate-800 hover:bg-slate-50"
+                disabled={activeSecIdx <= 0}
+                onClick={() => selectSection(activeSecIdx - 1)}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                {activeSecIdx > 0
+                  ? `${sections[activeSecIdx - 1].num}. ${sections[activeSecIdx - 1].title.slice(0, 32)}`
+                  : 'Seção anterior'}
+              </Button>
+
+              <span className="text-xs text-slate-600 font-medium">
+                {activeSecIdx + 1} / {sections.length}
+              </span>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-white border-slate-300 text-slate-800 hover:bg-slate-50"
+                disabled={activeSecIdx >= sections.length - 1}
+                onClick={() => selectSection(activeSecIdx + 1)}
+              >
+                {activeSecIdx < sections.length - 1
+                  ? `${sections[activeSecIdx + 1].num}. ${sections[activeSecIdx + 1].title.slice(0, 32)}`
+                  : 'Próxima seção'}
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </div>
       </main>
 
-      {/* Botão Flutuante + Drawer do Chat RAG Público */}
-      <div className="fixed bottom-5 right-5 z-50 print:hidden">
+      {/* ==================== CHAT RAG PÚBLICO ==================== */}
+      <div className="fixed bottom-5 right-5 z-50 pi-no-print">
         {!chatOpen ? (
           <Button
             size="lg"
             onClick={() => setChatOpen(true)}
-            className="rounded-full shadow-lg bg-emerald-600 hover:bg-emerald-700 text-white h-14 px-5 gap-2"
+            className="rounded-full shadow-lg bg-[#13202e] hover:bg-[#1b2b3c] text-[#e0a526] border border-[#2a3d52] h-13 px-5 gap-2"
           >
             <MessageSquare className="h-5 w-5" />
-            Perguntar sobre o Programa
+            Perguntar sobre este Documento
           </Button>
         ) : (
-          <Card className="w-[360px] sm:w-[400px] h-[520px] flex flex-col shadow-2xl border-emerald-200">
-            <CardHeader className="py-3 px-4 bg-emerald-600 text-white rounded-t-lg flex flex-row items-center justify-between space-y-0">
+          <Card className="w-[360px] sm:w-[400px] h-[520px] flex flex-col shadow-2xl border-[#2a3d52]">
+            <CardHeader className="py-3 px-4 bg-[#13202e] text-white rounded-t-lg flex flex-row items-center justify-between space-y-0">
               <div className="flex items-center gap-2">
-                <Bot className="h-5 w-5" />
+                <Bot className="h-5 w-5 text-[#e0a526]" />
                 <div>
-                  <div className="text-sm font-semibold">Assistente do Programa</div>
-                  <div className="text-[11px] opacity-90">
-                    Baseado na Rev. {program.current_revision} (RAG)
+                  <div className="text-sm font-semibold">Assistente IA</div>
+                  <div className="text-[11px] text-[#93a6ba]">
+                    Baseado em {program.code || program.title} (Rev. {program.current_revision})
                   </div>
                 </div>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-white hover:bg-emerald-700 h-8 w-8"
+                className="text-white hover:bg-[#1b2b3c] h-8 w-8"
                 onClick={() => setChatOpen(false)}
               >
                 <X className="h-4 w-4" />
@@ -287,18 +782,18 @@ export default function PublicInstructionProgram() {
               {chatMessages.length === 0 ? (
                 <div className="space-y-2.5 text-xs">
                   <div className="bg-white border rounded-lg p-3 text-slate-700">
-                    Olá! Posso responder dúvidas sobre o <strong>{program.title}</strong>, pré-requisitos, revisão vigente e regras oficiais.
+                    Olá! Posso responder dúvidas sobre <strong>{program.title}</strong>, procedimentos, revisão vigente e regras oficiais.
                   </div>
                   {[
-                    'Qual é a revisão vigente deste Programa de Instrução?',
-                    'Quais são os principais requisitos e etapas do curso?',
-                    'Como funciona a regra de faltas e escala?',
+                    'Qual é a revisão vigente deste documento?',
+                    'Quais são os principais requisitos e procedimentos?',
+                    'Resuma as regras mais importantes deste documento.',
                   ].map((q, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => handleSendChat(q)}
-                      className="w-full text-left bg-white hover:bg-emerald-50 border rounded-md p-2 text-slate-700 transition-colors"
+                      className="w-full text-left bg-white hover:bg-amber-50 border rounded-md p-2 text-slate-700 transition-colors"
                     >
                       {q}
                     </button>
@@ -310,7 +805,7 @@ export default function PublicInstructionProgram() {
                     key={idx}
                     className={`rounded-lg p-3 text-xs leading-relaxed ${
                       msg.role === 'user'
-                        ? 'bg-emerald-600 text-white ml-8'
+                        ? 'bg-[#13202e] text-white ml-8'
                         : 'bg-white border text-slate-800 mr-4 space-y-2'
                     }`}
                   >
@@ -331,7 +826,7 @@ export default function PublicInstructionProgram() {
               {chatLoading && (
                 <div className="flex items-center gap-2 text-xs text-slate-500 p-2">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Consultando o Programa de Instrução...
+                  Consultando o documento...
                 </div>
               )}
               <div ref={chatEndRef} />
@@ -355,7 +850,7 @@ export default function PublicInstructionProgram() {
                 type="submit"
                 size="icon"
                 disabled={chatLoading || !chatInput.trim()}
-                className="h-9 w-9 bg-emerald-600 hover:bg-emerald-700 shrink-0"
+                className="h-9 w-9 bg-[#13202e] hover:bg-[#1b2b3c] text-[#e0a526] shrink-0"
               >
                 <Send className="h-4 w-4" />
               </Button>
