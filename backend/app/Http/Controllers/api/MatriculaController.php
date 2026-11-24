@@ -953,7 +953,9 @@ class MatriculaController extends Controller
     {
         $meta = $this->getAllMatriculaMeta($matricula->id);
         $validityDays = (int) ($meta['validade'] ?? 14);
-        $baseDateRaw = $matricula->{Matricula::CREATED_AT} ?? null;
+        $baseDateRaw = !empty($meta['validade_base_data'])
+            ? $meta['validade_base_data']
+            : ($matricula->{Matricula::CREATED_AT} ?? null);
         $timezone = env('APP_TIMEZONE', config('app.timezone', 'America/Sao_Paulo'));
 
         if (!$baseDateRaw || $validityDays <= 0) {
@@ -1795,6 +1797,14 @@ class MatriculaController extends Controller
         $matricula->fill($validated);
         $matricula->save();
 
+        // Renova a data-base de validade da proposta ao gravar a edição (comportamento do legado)
+        try {
+            $timezone = env('APP_TIMEZONE', config('app.timezone', 'America/Sao_Paulo'));
+            $this->persistMatriculaMeta($matricula->id, [
+                'validade_base_data' => now($timezone)->format('Y-m-d'),
+            ]);
+        } catch (\Throwable $e) {}
+
         if (!empty($validated['id_cliente'])) {
             $this->ensureClientDefaultPipelineForProposal((string) $validated['id_cliente'], (string) $user->id, $request->ip());
         }
@@ -2521,6 +2531,14 @@ class MatriculaController extends Controller
 
         $matricula->fill($validated);
         $matricula->save();
+
+        // Renova a data-base de validade da proposta ao gravar a edição (comportamento do legado)
+        try {
+            $timezone = env('APP_TIMEZONE', config('app.timezone', 'America/Sao_Paulo'));
+            $this->persistMatriculaMeta($matricula->id, [
+                'validade_base_data' => now($timezone)->format('Y-m-d'),
+            ]);
+        } catch (\Throwable $e) {}
 
         try {
             EventLog::create([

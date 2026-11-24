@@ -292,6 +292,10 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
   const inscricaoMasked = useMemo(() => maskMonetaryDisplay((enrollment as any)?.inscricao), [enrollment]);
   const validadeDias = useMemo(() => String((enrollment as any)?.meta?.validade || (enrollment as any)?.validade || '14'), [enrollment]);
   const emissionDate = useMemo(() => (enrollment as any)?.data || (enrollment as any)?.created_at, [enrollment]);
+  const validityBaseDate = useMemo(
+    () => (enrollment as any)?.meta?.validade_base_data || emissionDate,
+    [enrollment, emissionDate]
+  );
   const clientName = client?.name || (client as any)?.nome || (enrollment as any)?.cliente_nome || (enrollment as any)?.cliente?.name || '';
   const clientPhone = client?.config?.celular || client?.config?.telefone_residencial || (enrollment as any)?.cliente?.celular || (enrollment as any)?.cliente?.config?.celular || '';
   const clientEmail = client?.email || (enrollment as any)?.cliente?.email || '';
@@ -640,7 +644,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
               />
               <StatCard 
                 label="Validade" 
-                value={computeValidityDate(validadeDias, emissionDate) || 'Expirada'} 
+                value={computeValidityDate(validadeDias, validityBaseDate) || 'Expirada'} 
                 icon={Calendar} 
                 colorClass="text-blue-600" 
                 bgClass="bg-blue-50" 
@@ -687,7 +691,7 @@ export default function ProposalViewContent({ id }: ProposalViewContentProps) {
                       discountAmountMasked={descontoMasked}
                       subtotalMasked={subtotalMasked}
                       totalMasked={totalMasked}
-                      validityDate={computeValidityDate(validadeDias, emissionDate)}
+                      validityDate={computeValidityDate(validadeDias, validityBaseDate)}
                       validityDays={validadeDias}
                       inscricaoMasked={inscricaoMasked}
                       etapa1Discount={etapa1Discount}
